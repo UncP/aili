@@ -12,10 +12,10 @@
 #include "../src/node.h"
 
 #define key_buf(k, l)                \
-	uint32_t len = l;                  \
-	char k[len];                       \
-	for (uint32_t i = 0; i < len; ++i) \
-		k[i] = '0';                      \
+  uint32_t len = l;                  \
+  char k[len];                       \
+  for (uint32_t i = 0; i < len; ++i) \
+    k[i] = '0';                      \
 
 void test_set_node_size()
 {
@@ -61,7 +61,7 @@ void test_node_insert()
 		key[len - i - 1] = '0';
 	}
 
-	assert(node_get_key_count(n) == 10);
+	assert(n->keys == 10);
 	node_validate(n);
 
 	free_node(n);
@@ -86,16 +86,18 @@ void test_node_insert_no_space()
 
 	node *n = new_node(0, 0);
 
-	// each key occupies 89 + 1 + 2 + 8 = 100 bytes
-	// so the 41st key will not fit in a 4096 bytes size node
-	key_buf(key, 89);
-	for (uint32_t i = 0; i < 40; ++i) {
+	// each key occupies `unit` bytes space
+	uint32_t unit = 100 + key_byte + index_byte + value_bytes;
+	// max keys a node can hold
+	uint32_t max = (get_node_size() - (n->data - (char *)n)) / unit;
+	key_buf(key, 100);
+	for (uint32_t i = 0; i < max; ++i) {
 		key[len - i - 1] = '1';
 		assert(node_insert(n, key, len, (void *)(uint64_t)i) == 1);
 		key[len - i - 1] = '0';
 	}
 
-	key[0] = '1';
+	key[0] = '2';
 	assert(node_insert(n, key, len, (void *)0) == -1);
 
 	free_node(n);
@@ -151,6 +153,80 @@ void test_node_descend()
 	free_node(n);
 }
 
+void test_node_split_level_0()
+{
+	printf("test node split level 0\n");
+
+	node *old = new_node(Leaf, 0); // level 0
+
+	key_buf(key, 10);
+
+	for (uint32_t i = 0; i < len; ++i) {
+		key[len - i - 1] = '1';
+		assert(node_insert(old, key, len, (void *)(uint64_t)(i+1)));
+		key[len - i - 1] = '0';
+	}
+
+	node *new = new_node(Leaf, 0);
+
+	char buf[len];
+	uint32_t buf_len;
+	node_split(old, new, buf, &buf_len);
+
+	assert(old->keys == len / 2);
+	assert(new->keys == len / 2);
+
+	assert(old->next == new);
+	assert(new->next == 0);
+
+	node_validate(old);
+	node_validate(new);
+
+	print_node(old, 1);
+	print_node(new, 1);
+
+	free_node(old);
+	free_node(new);
+}
+
+void test_node_split_level_1()
+{
+	printf("test node split level 1\n");
+
+	node *old = new_node(Branch, 1); // level 1
+
+	key_buf(key, 11);
+
+	for (uint32_t i = 0; i < len; ++i) {
+		key[len - i - 1] = '1';
+		assert(node_insert(old, key, len, (void *)(uint64_t)(i+1)));
+		key[len - i - 1] = '0';
+	}
+
+	node *new = new_node(Branch, 1);
+
+	char buf[len];
+	uint32_t buf_len;
+	node_split(old, new, buf, &buf_len);
+
+	assert(old->keys == len / 2);
+	assert(new->keys == len / 2);
+
+	assert(old->next == new);
+	assert(new->next == 0);
+
+	assert((uint64_t)new->first == (len / 2 + 1));
+
+	node_validate(old);
+	node_validate(new);
+
+	print_node(old, 1);
+	print_node(new, 1);
+
+	free_node(old);
+	free_node(new);
+}
+
 void test_print_node()
 {
 	printf("test print node\n");
@@ -182,6 +258,8 @@ int main()
 	test_node_insert_no_space();
 	test_node_search();
 	test_node_descend();
+	test_node_split_level_0();
+	test_node_split_level_1();
 	test_print_node();
 
 	return 0;
