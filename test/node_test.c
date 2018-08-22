@@ -70,8 +70,8 @@ void test_node_insert()
 
 	// test random insert
 	srand(time(NULL));
-	for (uint32_t i = 0; i < len; ++i) {
-		key[rand() % len] = 'a' + (rand() % len);
+	for (uint32_t i = 0; i < 50; ++i) {
+		key[rand() % len] = 'a' + (rand() % 26);
 		assert(node_insert(n, key, len, (void *)(uint64_t)i) >= 0);
 	}
 
@@ -87,17 +87,22 @@ void test_node_insert_no_space()
 	node *n = new_node(0, 0);
 
 	// each key occupies `unit` bytes space
-	uint32_t unit = 100 + key_byte + index_byte + value_bytes;
+	uint32_t unit = 50 + key_byte + index_byte + value_bytes;
 	// max keys a node can hold
 	uint32_t max = (get_node_size() - (n->data - (char *)n)) / unit;
-	key_buf(key, 100);
-	for (uint32_t i = 0; i < max; ++i) {
-		key[len - i - 1] = '1';
+	key_buf(key, 50);
+	char c = '0';
+	for (uint32_t i = 0, j = len - 1; i < max; ++i) {
+		if (c++ > '9') {
+			c = '1';
+			--j;
+		}
+		key[j] = c;
 		assert(node_insert(n, key, len, (void *)(uint64_t)i) == 1);
-		key[len - i - 1] = '0';
+		key[j] = '0';
 	}
 
-	key[0] = '2';
+	key[0] = 'a';
 	assert(node_insert(n, key, len, (void *)0) == -1);
 
 	free_node(n);
@@ -109,20 +114,19 @@ void test_node_search()
 
 	node *n = new_node(Leaf, 0);
 
-	key_buf(key, 10);
+	key_buf(key, 50);
 
-	for (uint32_t i = 0; i < len; ++i) {
-		key[len - i - 1] = '1';
-		assert(node_insert(n, key, len, (void *)(uint64_t)i));
-		key[len - i - 1] = '0';
+	srand(time(NULL));
+	for (uint32_t i = 0; i < 50; ++i) {
+		key[rand() % len] = '0' + (rand() % 10);
+		int r = node_insert(n, key, len, (void *)(uint64_t)i);
+		if (r == 1)
+			assert((uint64_t)node_search(n, key, len) == i);
+		else if (r == -1)
+			assert(0);
 	}
 
-	for (uint32_t i = 0; i < len; ++i) {
-		key[len - i - 1] = '1';
-		void *v = node_search(n, key, len);
-		assert((uint64_t)v == i);
-		key[len - i - 1] = '0';
-	}
+	node_validate(n);
 
 	free_node(n);
 }

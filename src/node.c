@@ -22,8 +22,8 @@ void set_node_size(uint32_t size)
 
 #define get_len(n, off) ((uint32_t)(*(len_t *)((char *)n->data + off)))
 #define get_key(n, off) ((char *)n->data + off + key_byte)
-#define get_val(n, off) ((void *)(*(uint64_t *)(get_key(n, off) + get_len(n, off))))
-#define node_index(n)   ((index_t *)((char *)n + (node_size - n->keys * index_byte)))
+#define get_val(n, off) ((void *)(*(val_t *)(get_key(n, off) + get_len(n, off))))
+#define node_index(n)   ((index_t *)((char *)n + (node_size - (n->keys * index_byte))))
 #define get_key_info(n, off, key, len) \
   const void *key = get_key(n, off);   \
   uint32_t len = get_len(n, off);
@@ -133,19 +133,22 @@ void* node_search(node *n, const void *key, uint32_t len)
 
 static void node_insert_kv(node *n, const void *key, uint32_t len, const void *val)
 {
-	*((len_t *)n->data + n->off) = (len_t)len;
+	*((len_t *)(n->data + n->off)) = (len_t)len;
 	n->off += key_byte;
 	memcpy(n->data + n->off, key, len);
 	n->off += len;
 	if (val)
-		*((uint64_t *)(n->data + n->off)) = *(uint64_t *)(&val);
+		*((val_t *)(n->data + n->off)) = *(val_t *)(&val);
 	else
-		*((uint64_t *)(n->data + n->off)) = 0;
+		*((val_t *)(n->data + n->off)) = 0;
 	n->off += value_bytes;
 
 	++n->keys;
 }
 
+// insert a kv into node, if key already exists, return 0
+// if there is not enough space, return -1
+// if succeed, return 1
 int node_insert(node *n, const void *key, uint32_t len, const void *val)
 {
 	int pos = -1;
@@ -171,14 +174,12 @@ int node_insert(node *n, const void *key, uint32_t len, const void *val)
 			get_key_info(n, index[mid], key2, len2);
 
 			int r = compare_key(key2, len2, key1, len1);
-			if (r == 0) {
-				// key already exists
+			if (r == 0)
 				return 0;
-			} else if (r < 0) {
+			else if (r < 0)
 				low  = mid + 1;
-			} else {
+			else
 				high = mid - 1;
-			}
 		}
 		pos = low;
 	}
@@ -224,18 +225,24 @@ void node_split(node *old, node *new, char *pkey, uint32_t *plen)
 	if (old->level) { // assign first child if it's not a level 0 node
 		new->first = fval;
 		--right;        // one key will be promoted to upper level
+		flen += key_byte + value_bytes;
+	} else {
+		flen = 0;
 	}
 
 	// we first copy all the keys to `new` in sequential order,
 	// then move the first half back to `old` and adjust the other half in `new`
+	// the loop has some optimization, some it does not have good readability
 	uint32_t length = 0;
 	r_idx -= old->keys;
-	for (uint32_t i = 0; i < old->keys; ++i) {
+	for (uint32_t i = 0, j = old->keys - right; i < old->keys; ++i) {
 		r_idx[i] = new->off;
 		get_kv_info(old, l_idx[i], okey, olen, oval);
 		node_insert_kv(new, okey, olen, oval);
 		if (i == left - 1)
 			length = new->off - new->pre;
+		if (i >= j)
+			r_idx[i] -= length + flen;
 	}
 
 	// copy the first half data, including prefix
@@ -247,18 +254,12 @@ void node_split(node *old, node *new, char *pkey, uint32_t *plen)
 	r_idx = node_index(new);
 	memcpy(l_idx, r_idx, left * index_byte);
 
-	// ignore the fence key if level > 0 since it will be promoted
-	if (old->level)
-		length += key_byte + flen + value_bytes;
-
+	// update `length` with fence key length
+	length += flen;
 	// adjust `new` layout
 	new->keys = right;
 	new->off -= length;
 	memmove(new->data + new->pre, new->data + new->pre + length, new->off - new->pre);
-	r_idx = node_index(new);
-	// adjust `new` index
-	for (uint32_t i = 0; i < new->keys; ++i)
-		r_idx[i] -= length;
 
 	// update node link
 	new->next = old->next;
@@ -292,23 +293,24 @@ void print_node(node *n, int detail)
 	index_t *index = node_index(n);
 	if (detail) {
 		for (uint32_t i = 0; i < n->keys; ++i) {
+			ptr += snprintf(ptr, end - ptr, " %u  ", index[i]);
 			uint32_t len = get_len(n, index[i]);
 			snprintf(ptr, len + 1, "%s", get_key(n, index[i]));
 			ptr += len;
-			ptr += snprintf(ptr, end - ptr, " %llu\n", (uint64_t)get_val(n, index[i]));
+			ptr += snprintf(ptr, end - ptr, " %llu\n", (val_t)get_val(n, index[i]));
 		}
 	} else {
 		if (n->keys > 0) {
 			uint32_t len = get_len(n, index[0]);
 			snprintf(ptr, len + 1, "%s", get_key(n, index[0]));
 			ptr += len;
-			ptr += snprintf(ptr, end - ptr, " %llu\n", (uint64_t)get_val(n, index[0]));
+			ptr += snprintf(ptr, end - ptr, " %llu\n", (val_t)get_val(n, index[0]));
 		}
 		if (n->keys > 1) {
 			uint32_t len = get_len(n, index[n->keys - 1]);
 			snprintf(ptr, len + 1, "%s", get_key(n, index[n->keys - 1]));
 			ptr += len;
-			ptr += snprintf(ptr, end - ptr, " %llu\n", (uint64_t)get_val(n, index[n->keys - 1]));
+			ptr += snprintf(ptr, end - ptr, " %llu\n", (val_t)get_val(n, index[n->keys - 1]));
 		}
 	}
 

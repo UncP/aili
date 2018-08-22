@@ -34,14 +34,16 @@
 #define Branch 1
 #define Leaf   2
 
-#define value_bytes sizeof(uint64_t *)
+// do not fucking change it
+typedef uint64_t val_t;
+#define value_bytes sizeof(val_t)
 
-// you can change uint8_t to uint16_t or uint32_t so that bigger keys are supported,
+// you can change uint8_t to uint16_t so that bigger keys are supported,
 // but key length byte will take more space
 typedef uint8_t  len_t;
-#define key_byte   sizeof(len_t)
+#define key_byte sizeof(len_t)
 
-// you can change uint16_t to uint32_t or uint64_t so that bigger nodes are supported,
+// you can change uint16_t to uint32_t so that bigger nodes are supported,
 // but index will take more space
 typedef uint16_t index_t;
 #define index_byte sizeof(index_t)
@@ -49,19 +51,18 @@ typedef uint16_t index_t;
 #define node_min_size  (((uint32_t)1) << 12) //  4kb
 #define node_max_size  (((uint32_t)1) << 16) // 64kb,
                                              // if you set `index_t` to uint32_t,
-                                             // the node_max_size can be much larger, like 1gb or more
+                                             // the node_max_size can be up to 4gb
 
 typedef struct node
 {
-	uint32_t    type:8; // Root or Branch or Leaf
+	uint32_t    type:8;   // Root or Branch or Leaf
 	uint32_t   level:8;
-	uint32_t     pre:8; // prefix length
-	uint32_t        :8; // for alignment
+	uint32_t     pre:16;  // prefix length
 	uint32_t     id;
-	uint32_t     keys;  // number of keys
-	uint32_t     off;   // current data offset
-	struct node *next;  // pointer to the right child
-	struct node *first; // pointer to the first child if it's level > 0
+	uint32_t     keys;    // number of keys
+	uint32_t     off;     // current data offset
+	struct node *next;    // pointer to the right child
+	struct node *first;   // pointer to the first child if it's level > 0
 	char         data[0];
 }node;
 
