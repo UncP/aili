@@ -10,12 +10,11 @@
 
 #include "node.h"
 
-#define node_size_mask ((uint64_t)~0xfff)
-
 static uint32_t node_size = node_min_size;
 
 void set_node_size(uint32_t size)
 {
+	const uint64_t node_size_mask = (uint64_t)~0xfff;
 	node_size = size < node_min_size ? node_min_size : size > node_max_size ? node_max_size : size;
 	node_size &= node_size_mask;
 }
@@ -232,7 +231,7 @@ void node_split(node *old, node *new, char *pkey, uint32_t *plen)
 
 	// we first copy all the keys to `new` in sequential order,
 	// then move the first half back to `old` and adjust the other half in `new`
-	// the loop has some optimization, some it does not have good readability
+	// the loop has some optimization, it does not have good readability
 	uint32_t length = 0;
 	r_idx -= old->keys;
 	for (uint32_t i = 0, j = old->keys - right; i < old->keys; ++i) {
