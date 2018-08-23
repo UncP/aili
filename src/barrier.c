@@ -4,13 +4,10 @@
  *    license:    BSD-3
 **/
 
-#include <string.h>
-
 #include "barrier.h"
 
 void init_barrier(barrier *b, uint32_t member)
 {
-	memset(b, 0, sizeof(barrier));
 	b->member = member;
 	b->left = member;
 	b->current = 0;

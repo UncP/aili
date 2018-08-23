@@ -19,7 +19,8 @@ void set_node_size(uint32_t size)
 	node_size &= node_size_mask;
 }
 
-#define get_len(n, off) ((uint32_t)(*(len_t *)((char *)n->data + off)))
+#define get_ptr(n, off) ((char *)n->data + off)
+#define get_len(n, off) ((uint32_t)(*(len_t *)get_ptr(n, off))
 #define get_key(n, off) ((char *)n->data + off + key_byte)
 #define get_val(n, off) ((void *)(*(val_t *)(get_key(n, off) + get_len(n, off))))
 #define node_index(n)   ((index_t *)((char *)n + (node_size - (n->keys * index_byte))))
@@ -30,6 +31,8 @@ void set_node_size(uint32_t size)
   const void *key = get_key(n, off);       \
   uint32_t len = get_len(n, off);          \
   void *val = get_val(n, off);
+
+#define get_op(n, off) (*(uint8_t *)(get_ptr(n, off) - sizeof(uint8_t)))
 
 static int compare_key(const void *key1, uint32_t len1, const void *key2, uint32_t len2)
 {
@@ -197,6 +200,42 @@ int node_insert(node *n, const void *key, uint32_t len, const void *val)
 	index[pos] = n->off;
 
 	node_insert_kv(n, key + n->pre, klen, val);
+
+	return 1;
+}
+
+// insert a kv into node, this function allows duplicate key
+int node_put(node *n, uint8_t op, const void *key1, uint32_t len1, const void *val)
+{
+	int low = 0, high = (int)n->keys - 1, mid;
+	index_t *index = node_index(n);
+
+	while (low <= high) {
+		int mid = (low + high) / 2;
+
+		get_key_info(n, index[mid], key2, len2);
+
+		int r = compare_key(key2, len2, key1, len1);
+		if (r <= 0)
+			low  = mid + 1;
+		else
+			high = mid - 1;
+	}
+
+	index_t *index = node_index(n) - 1;
+
+	// check if there is enough space
+	if ((char *)n->data + (n->off + sizeof(op) + key_byte + len1 + value_bytes) > (char *)index)
+		return -1;
+
+	if (low) memmove(&index[0], &index[1], pos * index_byte);
+	index[low] = n->off;
+
+	// set op type before kv
+	*((uint8_t *)(n->data + n->off)) = op;
+	n->off += sizeof(uint8_t);
+
+	node_insert_kv(n, key1, len1, val);
 
 	return 1;
 }
