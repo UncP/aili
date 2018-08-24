@@ -271,7 +271,7 @@ void node_split(node *old, node *new, char *pkey, uint32_t *plen)
 
 /****** BATCH operation ******/
 
-#define get_op(n, off) (*(uint8_t *)(get_ptr(n, off) - sizeof(uint8_t)))
+#define get_op(n, off) ((uint32_t)(*(uint8_t *)(get_ptr(n, off) - sizeof(uint8_t))))
 
 batch* new_batch()
 {
@@ -290,7 +290,7 @@ void batch_clear(batch *b)
 }
 
 // insert a kv into node, this function allows duplicate key
-int batch_write(batch *b, uint8_t op, const void *key1, uint32_t len1, const void *val)
+int batch_write(batch *b, uint32_t op, const void *key1, uint32_t len1, const void *val)
 {
 	int low = 0, high = (int)b->keys - 1;
 	index_t *index = node_index(b);
@@ -310,11 +310,11 @@ int batch_write(batch *b, uint8_t op, const void *key1, uint32_t len1, const voi
 	--index;
 
 	// check if there is enough space
-	if ((char *)b->data + (b->off + sizeof(op) + key_byte + len1 + value_bytes) > (char *)index)
+	if ((char *)b->data + (b->off + sizeof(uint8_t) /* op */ + key_byte + len1 + value_bytes) > (char *)index)
 		return -1;
 
 	// set op type before kv
-	*((uint8_t *)(b->data + b->off)) = op;
+	*((uint8_t *)(b->data + b->off)) = (uint8_t)op;
 	b->off += sizeof(uint8_t);
 
 	if (low) memmove(&index[0], &index[1], low * index_byte);
@@ -326,16 +326,42 @@ int batch_write(batch *b, uint8_t op, const void *key1, uint32_t len1, const voi
 }
 
 // read a kv at index
-int batch_read(batch *b, uint32_t idx, uint8_t *op, void **key, uint32_t *len, void *val)
+int batch_read(batch *b, uint32_t idx, uint32_t *op, void **key, uint32_t *len, void **val)
 {
+	// TODO: remove this
 	if (idx >= b->keys) return 0;
 	index_t *index = node_index(b);
 	get_kv_info(b, index[idx], k, l, v);
 	*op = get_op(b, index[idx]);
-	*key = (char *)k;
+	*(char **)key = (char *)k;
 	*len = l;
-	*(val_t *)val = (val_t)v;
+	*(val_t **)val = (val_t)v;
 	return 1;
+}
+
+void path_clear(path *p)
+{
+	p->depth = 0;
+}
+
+void path_bind_kv(path *p, uint32_t op, void *key, uint32_t len, void *val)
+{
+	p->op  = op;
+	p->key = key;
+	p->len = len;
+	p->val = val;
+}
+
+void path_push_node(path *p, node *n)
+{
+	assert(p->depth < max_descend_depth);
+	p->nodes[p->depth++] = n;
+}
+
+node* path_pop_node(path *p)
+{
+	assert(p->depth);
+	return p->nodes[--p->depth];
 }
 
 #ifdef Test

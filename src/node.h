@@ -94,7 +94,6 @@ void node_split(node *old, node *new, char *pkey, uint32_t *plen);
  *            op       key len                           ptr
  *      |     1     |     1     |        key        |     8     |
 **/
-
 typedef node batch;
 
 batch* new_batch();
@@ -102,6 +101,23 @@ void free_batch(batch *b);
 void batch_clear(batch *b);
 int batch_write(batch *b, uint8_t op, const void *key1, uint32_t len1, const void *val);
 int batch_read(batch *b, uint32_t idx, uint8_t *op, void **key, uint32_t *len, void *val);
+
+#define max_descend_depth 8 // should be enough levels for a tree
+
+// the root to leaf descending path of one kv
+typedef struct path {
+	uint32_t  op;                       // operation
+	uint32_t  len;                      // key length
+	void     *key;                      // key data
+	void     *val;                      // value data
+	node     *nodes[max_descend_depth]; // nodes[0] is root
+	uint32_t  depth;
+};
+
+void path_clear(path *p);
+void path_bind_kv(path *p, uint32_t op, void *key, uint32_t len, void *val);
+void path_push_node(path *p, node *n);
+node* path_pop_node(path *p);
 
 #ifdef Test
 
