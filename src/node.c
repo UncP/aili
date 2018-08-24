@@ -11,6 +11,7 @@
 #include "node.h"
 
 static uint32_t node_size = node_min_size;
+static uint32_t node_id = 0;
 
 void set_node_size(uint32_t size)
 {
@@ -19,9 +20,11 @@ void set_node_size(uint32_t size)
 	node_size &= node_size_mask;
 }
 
+// get the ptr to the key length byte
 #define get_ptr(n, off) ((char *)n->data + off)
-#define get_len(n, off) ((uint32_t)(*(len_t *)get_ptr(n, off))
-#define get_key(n, off) ((char *)n->data + off + key_byte)
+// get the length of the key
+#define get_len(n, off) ((uint32_t)(*(len_t *)get_ptr(n, off)))
+#define get_key(n, off) (get_ptr(n, off) + key_byte)
 #define get_val(n, off) ((void *)(*(val_t *)(get_key(n, off) + get_len(n, off))))
 #define node_index(n)   ((index_t *)((char *)n + (node_size - (n->keys * index_byte))))
 #define get_key_info(n, off, key, len) \
@@ -32,8 +35,6 @@ void set_node_size(uint32_t size)
   uint32_t len = get_len(n, off);          \
   void *val = get_val(n, off);
 
-#define get_op(n, off) (*(uint8_t *)(get_ptr(n, off) - sizeof(uint8_t)))
-
 static int compare_key(const void *key1, uint32_t len1, const void *key2, uint32_t len2)
 {
 	uint32_t min = len1 < len2 ? len1 : len2;
@@ -41,7 +42,7 @@ static int compare_key(const void *key1, uint32_t len1, const void *key2, uint32
 	return r ? r : (len1 == len2 ? 0 : (len1 < len2 ? 1 : -1));
 }
 
-static uint32_t node_id = 0;
+/****** NODE operation ******/
 
 node* new_node(uint8_t type, uint8_t level)
 {
@@ -68,7 +69,7 @@ node* node_descend(node *n, const void *key, uint32_t len)
 	assert(n->type != Leaf && n->keys);
 
 	index_t *index = node_index(n);
-	int low = 0, high = (int)n->keys - 1, mid;
+	int low = 0, high = (int)n->keys - 1;
 
 	if (n->pre) { // compare with node prefix
 		uint32_t tlen = len < n->pre ? len : n->pre;
@@ -83,7 +84,7 @@ node* node_descend(node *n, const void *key, uint32_t len)
 	uint32_t    len1 = len - n->pre;
 
 	while (low < high) {
-		mid = (low + high + 1) / 2;
+		int mid = (low + high + 1) / 2;
 
 		get_key_info(n, index[mid], key2, len2);
 
@@ -204,42 +205,6 @@ int node_insert(node *n, const void *key, uint32_t len, const void *val)
 	return 1;
 }
 
-// insert a kv into node, this function allows duplicate key
-int node_put(node *n, uint8_t op, const void *key1, uint32_t len1, const void *val)
-{
-	int low = 0, high = (int)n->keys - 1, mid;
-	index_t *index = node_index(n);
-
-	while (low <= high) {
-		int mid = (low + high) / 2;
-
-		get_key_info(n, index[mid], key2, len2);
-
-		int r = compare_key(key2, len2, key1, len1);
-		if (r <= 0)
-			low  = mid + 1;
-		else
-			high = mid - 1;
-	}
-
-	index_t *index = node_index(n) - 1;
-
-	// check if there is enough space
-	if ((char *)n->data + (n->off + sizeof(op) + key_byte + len1 + value_bytes) > (char *)index)
-		return -1;
-
-	if (low) memmove(&index[0], &index[1], pos * index_byte);
-	index[low] = n->off;
-
-	// set op type before kv
-	*((uint8_t *)(n->data + n->off)) = op;
-	n->off += sizeof(uint8_t);
-
-	node_insert_kv(n, key1, len1, val);
-
-	return 1;
-}
-
 // split half of the node entries from `old` to `new`
 void node_split(node *old, node *new, char *pkey, uint32_t *plen)
 {
@@ -304,6 +269,62 @@ void node_split(node *old, node *new, char *pkey, uint32_t *plen)
 	old->next = new;
 }
 
+/****** BATCH operation ******/
+
+#define get_op(n, off) (*(uint8_t *)(get_ptr(n, off) - sizeof(uint8_t)))
+
+batch* new_batch()
+{
+	return new_node(Leaf, 0);
+}
+
+void free_batch(batch *b)
+{
+	free((void *)b);
+}
+
+void batch_clear(batch *b)
+{
+	b->keys = 0;
+	b->off  = 0;
+}
+
+// insert a kv into node, this function allows duplicate key
+int batch_add(batch *b, uint8_t op, const void *key1, uint32_t len1, const void *val)
+{
+	int low = 0, high = (int)b->keys - 1;
+	index_t *index = node_index(b);
+
+	while (low <= high) {
+		int mid = (low + high) / 2;
+
+		get_key_info(b, index[mid], key2, len2);
+
+		int r = compare_key(key2, len2, key1, len1);
+		if (r <= 0)
+			low  = mid + 1;
+		else
+			high = mid - 1;
+	}
+
+	--index;
+
+	// check if there is enough space
+	if ((char *)b->data + (b->off + sizeof(op) + key_byte + len1 + value_bytes) > (char *)index)
+		return -1;
+
+	// set op type before kv
+	*((uint8_t *)(b->data + b->off)) = op;
+	b->off += sizeof(uint8_t);
+
+	if (low) memmove(&index[0], &index[1], low * index_byte);
+	index[low] = b->off;
+
+	node_insert_kv(b, key1, len1, val);
+
+	return 1;
+}
+
 #ifdef Test
 
 #include <stdio.h>
@@ -311,6 +332,16 @@ void node_split(node *old, node *new, char *pkey, uint32_t *plen)
 uint32_t get_node_size()
 {
 	return node_size;
+}
+
+static char* format_kv(char *ptr, char *end, node* n, uint32_t off)
+{
+	ptr += snprintf(ptr, end - ptr, "%u  ", off);
+	uint32_t len = get_len(n, off);
+	snprintf(ptr, len + 1, "%s", get_key(n, off));
+	ptr += len;
+	ptr += snprintf(ptr, end - ptr, " %llu\n", (val_t)get_val(n, off));
+	return ptr;
 }
 
 void print_node(node *n, int detail)
@@ -330,25 +361,41 @@ void print_node(node *n, int detail)
 
 	index_t *index = node_index(n);
 	if (detail) {
-		for (uint32_t i = 0; i < n->keys; ++i) {
-			ptr += snprintf(ptr, end - ptr, " %u  ", index[i]);
-			uint32_t len = get_len(n, index[i]);
-			snprintf(ptr, len + 1, "%s", get_key(n, index[i]));
-			ptr += len;
-			ptr += snprintf(ptr, end - ptr, " %llu\n", (val_t)get_val(n, index[i]));
+		for (uint32_t i = 0; i < n->keys; ++i)
+			ptr = format_kv(ptr, end, n, index[i]);
+	} else {
+		if (n->keys > 0)
+			ptr = format_kv(ptr, end, n, index[0]);
+		if (n->keys > 1)
+			ptr = format_kv(ptr, end, n, index[n->keys - 1]);
+	}
+
+	printf("%s\n", buf);
+}
+
+void print_batch(batch *b, int detail)
+{
+	assert(b);
+	int size = (float)node_size * 1.5;
+	char buf[size], *ptr = buf, *end = buf + size;
+
+	ptr += snprintf(ptr, end - ptr, "keys: %u  ", b->keys);
+	ptr += snprintf(ptr, end - ptr, "  offset: %u\n", b->off);
+
+	index_t *index = node_index(b);
+	if (detail) {
+		for (uint32_t i = 0; i < b->keys; ++i) {
+			ptr += snprintf(ptr, end - ptr, "%s ", get_op(b, index[i]) == Write ? "w" : "r");
+			ptr = format_kv(ptr, end, b, index[i]);
 		}
 	} else {
-		if (n->keys > 0) {
-			uint32_t len = get_len(n, index[0]);
-			snprintf(ptr, len + 1, "%s", get_key(n, index[0]));
-			ptr += len;
-			ptr += snprintf(ptr, end - ptr, " %llu\n", (val_t)get_val(n, index[0]));
+		if (b->keys > 0) {
+			ptr += snprintf(ptr, end - ptr, "%s ", get_op(b, index[0]) == Write ? "w" : "r");
+			ptr = format_kv(ptr, end, b, index[0]);
 		}
-		if (n->keys > 1) {
-			uint32_t len = get_len(n, index[n->keys - 1]);
-			snprintf(ptr, len + 1, "%s", get_key(n, index[n->keys - 1]));
-			ptr += len;
-			ptr += snprintf(ptr, end - ptr, " %llu\n", (val_t)get_val(n, index[n->keys - 1]));
+		if (b->keys > 1) {
+			ptr += snprintf(ptr, end - ptr, "%s ", get_op(b, index[b->keys - 1]) == Write ? "w" : "r");
+			ptr = format_kv(ptr, end, b, index[b->keys - 1]);
 		}
 	}
 
@@ -356,7 +403,7 @@ void print_node(node *n, int detail)
 }
 
 // verify that all keys in node are in ascending order
-void node_validate(node *n)
+static void validate(node *n, int is_batch)
 {
 	assert(n);
 
@@ -369,10 +416,23 @@ void node_validate(node *n)
 	for (uint32_t i = 1; i < n->keys; ++i) {
 		char *cur_key = get_key(n, index[i]);
 		uint32_t cur_len = get_len(n, index[i]);
-		assert(compare_key(pre_key, pre_len, cur_key, cur_len) < 0);
+		if (is_batch == 0)
+			assert(compare_key(pre_key, pre_len, cur_key, cur_len) < 0);
+		else
+			assert(compare_key(pre_key, pre_len, cur_key, cur_len) <= 0);
 		pre_key = cur_key;
 		pre_len = cur_len;
 	}
+}
+
+void node_validate(node *n)
+{
+	validate(n, 0);
+}
+
+void batch_validate(batch *n)
+{
+	validate(n, 1);
 }
 
 #endif /* Test */

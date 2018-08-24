@@ -9,6 +9,9 @@ AFLAGS=$(CC) $(CFLAGS) $(DFLAGS)
 node_test: test/node_test.c src/node.o
 	$(AFLAGS) -o $@ $^
 
+batch_test: test/batch_test.c src/node.o
+	$(AFLAGS) -o $@ $^
+
 barrier_test: test/barrier_test.c src/barrier.o
 	$(AFLAGS) -o $@ $^
 

@@ -30,9 +30,14 @@
 
 #include <stdint.h>
 
+// node type
 #define Root   0
 #define Branch 1
 #define Leaf   2
+
+// op type
+#define Read  0
+#define Write 1
 
 // do not fucking change it
 typedef uint64_t val_t;
@@ -81,11 +86,29 @@ int node_insert(node *n, const void *key, uint32_t len, const void *val);
 void* node_search(node *n, const void *key, uint32_t len);
 void node_split(node *old, node *new, char *pkey, uint32_t *plen);
 
+/**
+ *   batch is a wrapper for node with some differences,
+ *   key may be duplicated, also it does not support prefix compression
+ *
+ *   layout of kv pair in batch:
+ *            op       key len                           ptr
+ *      |     1     |     1     |        key        |     8     |
+**/
+
+typedef node batch;
+
+batch* new_batch();
+void free_batch(batch *b);
+void batch_clear(batch *b);
+int batch_add(batch *b, uint8_t op, const void *key1, uint32_t len1, const void *val);
+
 #ifdef Test
 
 uint32_t get_node_size();
 void print_node(node *n, int detail);
+void print_batch(batch *b, int detail);
 void node_validate(node *n);
+void batch_validate(batch *n);
 
 #endif /* Test */
 
