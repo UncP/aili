@@ -6,6 +6,8 @@ AFLAGS=$(CC) $(CFLAGS) $(DFLAGS)
 %.o: %.c
 	$(AFLAGS) -c $^ -o $@
 
+all: node_test batch_test barrier_test
+
 node_test: test/node_test.c src/node.o
 	$(AFLAGS) -o $@ $^
 

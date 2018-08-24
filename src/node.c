@@ -39,7 +39,7 @@ static int compare_key(const void *key1, uint32_t len1, const void *key2, uint32
 {
 	uint32_t min = len1 < len2 ? len1 : len2;
 	int r = memcmp(key1, key2, min);
-	return r ? r : (len1 == len2 ? 0 : (len1 < len2 ? 1 : -1));
+	return r ? r : (len1 == len2 ? 0 : (len1 < len2 ? -1 : +1));
 }
 
 /****** NODE operation ******/
@@ -290,7 +290,7 @@ void batch_clear(batch *b)
 }
 
 // insert a kv into node, this function allows duplicate key
-int batch_add(batch *b, uint8_t op, const void *key1, uint32_t len1, const void *val)
+int batch_write(batch *b, uint8_t op, const void *key1, uint32_t len1, const void *val)
 {
 	int low = 0, high = (int)b->keys - 1;
 	index_t *index = node_index(b);
@@ -322,6 +322,19 @@ int batch_add(batch *b, uint8_t op, const void *key1, uint32_t len1, const void 
 
 	node_insert_kv(b, key1, len1, val);
 
+	return 1;
+}
+
+// read a kv at index
+int batch_read(batch *b, uint32_t idx, uint8_t *op, void **key, uint32_t *len, void *val)
+{
+	if (idx >= b->keys) return 0;
+	index_t *index = node_index(b);
+	get_kv_info(b, index[idx], k, l, v);
+	*op = get_op(b, index[idx]);
+	*key = (char *)k;
+	*len = l;
+	*(val_t *)val = (val_t)v;
 	return 1;
 }
 

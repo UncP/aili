@@ -100,7 +100,8 @@ typedef node batch;
 batch* new_batch();
 void free_batch(batch *b);
 void batch_clear(batch *b);
-int batch_add(batch *b, uint8_t op, const void *key1, uint32_t len1, const void *val);
+int batch_write(batch *b, uint8_t op, const void *key1, uint32_t len1, const void *val);
+int batch_read(batch *b, uint32_t idx, uint8_t *op, void **key, uint32_t *len, void *val);
 
 #ifdef Test
 
