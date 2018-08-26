@@ -34,8 +34,12 @@ void set_node_size(uint32_t size)
   const void *key = get_key(n, off);       \
   uint32_t len = get_len(n, off);          \
   void *val = get_val(n, off);
+#define get_kv_ptr(n, off, key, len, val)                 \
+  const void *key = get_key(n, off);                      \
+  uint32_t len = get_len(n, off);                         \
+  void *val = (void *)((char *)key + len);
 
-static int compare_key(const void *key1, uint32_t len1, const void *key2, uint32_t len2)
+int compare_key(const void *key1, uint32_t len1, const void *key2, uint32_t len2)
 {
 	uint32_t min = len1 < len2 ? len1 : len2;
 	int r = memcmp(key1, key2, min);
@@ -66,7 +70,7 @@ void free_node(node *n)
 
 node* node_descend(node *n, const void *key, uint32_t len)
 {
-	assert(n->type != Leaf && n->keys);
+	assert(n->level && n->keys);
 
 	index_t *index = node_index(n);
 	int low = 0, high = (int)n->keys - 1;
@@ -104,7 +108,7 @@ node* node_descend(node *n, const void *key, uint32_t len)
 // find the key in the leaf, return its pointer, if no such key, return null
 void* node_search(node *n, const void *key, uint32_t len)
 {
-	assert(n->type == Leaf);
+	assert(n->level == 0);
 
 	if (n->keys == 0) return 0;
 
@@ -290,7 +294,7 @@ void batch_clear(batch *b)
 }
 
 // insert a kv into node, this function allows duplicate key
-int batch_write(batch *b, uint32_t op, const void *key1, uint32_t len1, const void *val)
+static int batch_write(batch *b, uint32_t op, const void *key1, uint32_t len1, const void *val)
 {
 	int low = 0, high = (int)b->keys - 1;
 	index_t *index = node_index(b);
@@ -325,17 +329,27 @@ int batch_write(batch *b, uint32_t op, const void *key1, uint32_t len1, const vo
 	return 1;
 }
 
+int batch_add_write(batch *b, const void *key, uint32_t len, const void *val)
+{
+	return batch_write(b, Write, key, len, val);
+}
+
+int batch_add_read(batch *b, const void *key, uint32_t len)
+{
+	return batch_write(b, Read, key, len, 0);
+}
+
 // read a kv at index
-int batch_read(batch *b, uint32_t idx, uint32_t *op, void **key, uint32_t *len, void **val)
+int batch_read_at(batch *b, uint32_t idx, uint32_t *op, void **key, uint32_t *len, void **val)
 {
 	// TODO: remove this
 	if (idx >= b->keys) return 0;
 	index_t *index = node_index(b);
-	get_kv_info(b, index[idx], k, l, v);
+	get_kv_ptr(b, index[idx], k, l, v);
 	*op = get_op(b, index[idx]);
-	*(char **)key = (char *)k;
+	*key = (void *)k;
 	*len = l;
-	*(val_t **)val = (val_t)v;
+	*val = (void *)v;
 	return 1;
 }
 
@@ -344,12 +358,14 @@ void path_clear(path *p)
 	p->depth = 0;
 }
 
-void path_bind_kv(path *p, uint32_t op, void *key, uint32_t len, void *val)
+void path_set_kv_id(path *p, uint32_t id)
 {
-	p->op  = op;
-	p->key = key;
-	p->len = len;
-	p->val = val;
+	p->id = id;
+}
+
+uint32_t path_get_kv_id(path *p)
+{
+	return p->id;
 }
 
 void path_push_node(path *p, node *n)
@@ -362,6 +378,12 @@ node* path_pop_node(path *p)
 {
 	assert(p->depth);
 	return p->nodes[--p->depth];
+}
+
+node* path_get_leaf_node(path *p)
+{
+	assert(p->depth);
+	return p->nodes[p->depth - 1];
 }
 
 #ifdef Test

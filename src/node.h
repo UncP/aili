@@ -5,7 +5,7 @@
 **/
 
 /**
- *   B+ tree node is k-v storage unit & internal index unit (default)
+ *   B+ tree node is k-v storage unit & internal index unit
  *
  *   layout of a node in bytes:
  *       type    level   prefix             id         keys        offset    next node  first child
@@ -44,11 +44,14 @@ typedef uint64_t val_t;
 #define value_bytes sizeof(val_t)
 
 // you can change uint8_t to uint16_t so that bigger keys are supported,
-// but key length byte will take more space
+// but key length byte will take more space, also you need to update
+// `node_min_size` below to at least 128kb
 typedef uint8_t  len_t;
 #define key_byte sizeof(len_t)
 
-// you can change uint16_t to uint32_t so that bigger nodes are supported,
+#define max_key_size ((uint32_t)((len_t)~((uint64_t)0)))
+
+// you can change uint16_t to uint32_t so that bigger size nodes are supported,
 // but index will take more space
 typedef uint16_t index_t;
 #define index_byte sizeof(index_t)
@@ -71,14 +74,9 @@ typedef struct node
 	char         data[0];
 }node;
 
-// typedef struct pair
-// {
-// 	char      key[max_key_size + 1]; // +1 for alignment
-// 	uint32_t  len;
-// 	void     *val;
-// }pair;
-
 void set_node_size(uint32_t size);
+int compare_key(const void *key1, uint32_t len1, const void *key2, uint32_t len2);
+
 node* new_node(uint8_t type, uint8_t level);
 void free_node(node *n);
 node* node_descend(node *n, const void *key, uint32_t len);
@@ -99,25 +97,25 @@ typedef node batch;
 batch* new_batch();
 void free_batch(batch *b);
 void batch_clear(batch *b);
-int batch_write(batch *b, uint8_t op, const void *key1, uint32_t len1, const void *val);
-int batch_read(batch *b, uint32_t idx, uint8_t *op, void **key, uint32_t *len, void *val);
+int batch_add_write(batch *b, const void *key, uint32_t len, const void *val);
+int batch_add_read(batch *b, const void *key, uint32_t len);
+int batch_read_at(batch *b, uint32_t idx, uint32_t *op, void **key, uint32_t *len, void **val);
 
-#define max_descend_depth 8 // should be enough levels for a tree
+#define max_descend_depth 7 // should be enough levels for a b+ tree
 
 // the root to leaf descending path of one kv
 typedef struct path {
-	uint32_t  op;                       // operation
-	uint32_t  len;                      // key length
-	void     *key;                      // key data
-	void     *val;                      // value data
+	uint32_t  id;                       // id of the kv in a batch
+	uint32_t  depth;                    // current levels
 	node     *nodes[max_descend_depth]; // nodes[0] is root
-	uint32_t  depth;
-};
+}path;
 
 void path_clear(path *p);
-void path_bind_kv(path *p, uint32_t op, void *key, uint32_t len, void *val);
+void path_set_kv_id(path *p, uint32_t id);
+uint32_t path_get_kv_id(path *p);
 void path_push_node(path *p, node *n);
 node* path_pop_node(path *p);
+node* path_get_leaf_node(path *p);
 
 #ifdef Test
 

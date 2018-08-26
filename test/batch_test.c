@@ -37,7 +37,7 @@ void test_batch_clear()
 
 	batch *b = new_batch();
 
-	assert(batch_write(b, Write, key, len, (void *)0) == 1);
+	assert(batch_add_write(b, key, len, (void *)0) == 1);
 
 	batch_clear(b);
 
@@ -58,12 +58,15 @@ void test_batch_write()
 	// test sequential insert
 	for (uint32_t i = 0; i < 10; ++i) {
 		key[len - i - 1] = '1';
-		assert(batch_write(b, (i % 2) == 0 ? Write : Read, key, len, (void *)(uint64_t)i) == 1);
+		if ((i % 2) == 0)
+			assert(batch_add_write(b, key, len, (void *)(uint64_t)i) == 1);
+		else
+			assert(batch_add_read(b, key, len) == 1);
 		key[len - i - 1] = '0';
 	}
 
 	key[3] = '1';
-	assert(batch_write(b, Read, key, len, (void *)(uint64_t)6) == 1);
+	assert(batch_add_read(b, key, len) == 1);
 	key[3] = '0';
 
 	assert(b->keys == 11);
@@ -78,7 +81,10 @@ void test_batch_write()
 	for (uint32_t i = 0; i < 50; ++i) {
 		int idx = rand() % len;
 		key[idx] = '1';
-		assert(batch_write(b, (i % 2) == 0 ? Write : Read, key, len, (void *)(uint64_t)i) == 1);
+		if ((i % 2) == 0)
+			assert(batch_add_write(b, key, len, (void *)(uint64_t)i) == 1);
+		else
+			assert(batch_add_read(b, key, len) == 1);
 		key[idx] = '0';
 	}
 
@@ -99,24 +105,27 @@ void test_batch_read()
 	// test sequential insert
 	for (uint32_t i = 0; i < 10; ++i) {
 		key[len - i - 1] = '1';
-		assert(batch_write(b, (i % 2) == 0 ? Write : Read, key, len, (void *)(uint64_t)i) == 1);
+		if ((i % 2) == 0)
+			assert(batch_add_write(b, key, len, (void *)(uint64_t)i) == 1);
+		else
+			assert(batch_add_read(b, key, len) == 1);
 		key[len - i - 1] = '0';
 	}
 
-	uint8_t op;
+	uint32_t op;
 	char *key2;
 	uint32_t len2;
-	uint64_t val;
+	void *val;
 	for (uint32_t i = 0; i < 10; ++i) {
 		key[len - i - 1] = '1';
-		assert(batch_read(b, i, &op, (void **)&key2, &len2, (void *)&val) == 1);
+		assert(batch_read_at(b, i, &op, (void **)&key2, &len2, &val) == 1);
 		assert((i % 2 == 0) ? op == Write : op == Read);
-		assert(len == len2);
-		assert(memcmp(key, key2, len) == 0);
+		assert(compare_key(key, len, key2, len2) == 0);
+		assert((i % 2 == 0) ? (*(val_t *)val == i) : (*(val_t *)val == 0));
 		key[len - i - 1] = '0';
 	}
 
-	assert(batch_read(b, 10, &op, (void **)&key2, &len2, (void *)&val) == 0);
+	assert(batch_read_at(b, 10, &op, (void **)&key2, &len2, &val) == 0);
 
 	free_batch(b);
 }
@@ -133,7 +142,10 @@ void test_print_batch()
 	for (uint32_t i = 0; i < 20; ++i) {
 		int idx = rand() % len;
 		key[idx] = '1';
-		assert(batch_write(b, (i % 2) == 0 ? Write : Read, key, len, (void *)(uint64_t)i) == 1);
+		if ((i % 2) == 0)
+			assert(batch_add_write(b, key, len, (void *)(uint64_t)i) == 1);
+		else
+			assert(batch_add_read(b, key, len) == 1);
 		key[idx] = '0';
 	}
 

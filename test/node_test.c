@@ -121,7 +121,7 @@ void test_node_search()
 		key[rand() % len] = '0' + (rand() % 10);
 		int r = node_insert(n, key, len, (void *)(uint64_t)i);
 		if (r == 1)
-			assert((uint64_t)node_search(n, key, len) == i);
+			assert((val_t)node_search(n, key, len) == i);
 		else if (r == -1)
 			assert(0);
 	}
@@ -147,12 +147,12 @@ void test_node_descend()
 
 	for (uint32_t i = 0; i < len; ++i) {
 		key[len - i - 1] = '1';
-		assert((uint64_t)node_descend(n, key, len) == i);
+		assert((val_t)node_descend(n, key, len) == i);
 		key[len - i - 1] = '0';
 	}
 
 	key[0] = '3';
-	assert((uint64_t)node_descend(n, key, len) == len);
+	assert((val_t)node_descend(n, key, len) == len);
 
 	free_node(n);
 }
