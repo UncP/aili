@@ -12,11 +12,11 @@
 
 typedef struct barrier
 {
-	uint32_t        member;
-	uint32_t        left;
-	uint32_t        current;
-	pthread_mutex_t mutex;
-	pthread_cond_t  cond;
+  uint32_t        member;
+  uint32_t        left;
+  uint32_t        current;
+  pthread_mutex_t mutex;
+  pthread_cond_t  cond;
 }barrier;
 
 void init_barrier(barrier *b, uint32_t member);

@@ -12,7 +12,7 @@
 
 typedef struct palm_tree
 {
-	node *root;
+  node *root;
 }palm_tree;
 
 palm_tree* new_palm_tree();

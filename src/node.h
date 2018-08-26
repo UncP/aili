@@ -63,15 +63,15 @@ typedef uint16_t index_t;
 
 typedef struct node
 {
-	uint32_t    type:8;   // Root or Branch or Leaf
-	uint32_t   level:8;
-	uint32_t     pre:16;  // prefix length
-	uint32_t     id;
-	uint32_t     keys;    // number of keys
-	uint32_t     off;     // current data offset
-	struct node *next;    // pointer to the right child
-	struct node *first;   // pointer to the first child if it's level > 0
-	char         data[0];
+  uint32_t    type:8;   // Root or Branch or Leaf
+  uint32_t   level:8;
+  uint32_t     pre:16;  // prefix length
+  uint32_t     id;
+  uint32_t     keys;    // number of keys
+  uint32_t     off;     // current data offset
+  struct node *next;    // pointer to the right child
+  struct node *first;   // pointer to the first child if it's level > 0
+  char         data[0];
 }node;
 
 void set_node_size(uint32_t size);
@@ -105,9 +105,9 @@ int batch_read_at(batch *b, uint32_t idx, uint32_t *op, void **key, uint32_t *le
 
 // the root to leaf descending path of one kv
 typedef struct path {
-	uint32_t  id;                       // id of the kv in a batch
-	uint32_t  depth;                    // current levels
-	node     *nodes[max_descend_depth]; // nodes[0] is root
+  uint32_t  id;                       // id of the kv in a batch
+  uint32_t  depth;                    // current levels
+  node     *nodes[max_descend_depth]; // nodes[0] is root
 }path;
 
 void path_clear(path *p);

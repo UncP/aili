@@ -17,21 +17,21 @@ static barrier b;
 
 void* f(void *v)
 {
-	sleep(1 + (rand() % 5));
-	printf("hello world %llu\n", (uint64_t)v);
-	barrier_wait(&b);
-	return (void *)0;
+  sleep(1 + (rand() % 5));
+  printf("hello world %llu\n", (uint64_t)v);
+  barrier_wait(&b);
+  return (void *)0;
 }
 
 int main()
 {
-	init_barrier(&b, threads);
-	pthread_t ids[threads];
-	for (int i = 0; i < threads; ++i) {
-		assert(pthread_create(&ids[i], 0, f, (void *)(uint64_t)i) == 0);
-	}
-	for (int i = 0; i != threads; ++i)
-		assert(pthread_join(ids[i], 0) == 0);
+  init_barrier(&b, threads);
+  pthread_t ids[threads];
+  for (int i = 0; i < threads; ++i) {
+    assert(pthread_create(&ids[i], 0, f, (void *)(uint64_t)i) == 0);
+  }
+  for (int i = 0; i != threads; ++i)
+    assert(pthread_join(ids[i], 0) == 0);
 
-	return 0;
+  return 0;
 }

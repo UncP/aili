@@ -12,10 +12,10 @@
 
 typedef struct fence
 {
-	uint32_t  id;                    // path id
-	uint32_t  len;                   // key length
-	char      key[max_key_size + 1]; // key data, +1 for alignment
-	node     *ptr;                   // new node pointer
+  uint32_t  id;                    // path id
+  uint32_t  len;                   // key length
+  char      key[max_key_size + 1]; // key data, +1 for alignment
+  node     *ptr;                   // new node pointer
 }fence;
 
 /**
@@ -37,20 +37,20 @@ typedef struct fence
 **/
 typedef struct worker
 {
-	uint32_t  id;        // my id
-	uint32_t  total;     // total workers
-	barrier  *bar;       // barrier of the worker pool
+  uint32_t  id;        // my id
+  uint32_t  total;     // total workers
+  barrier  *bar;       // barrier of the worker pool
 
-	uint32_t  max_path;  // maximum path number
-	uint32_t  cur_path;  // current path number
-	path     *paths;     // paths for all the keys this worker has
+  uint32_t  max_path;  // maximum path number
+  uint32_t  cur_path;  // current path number
+  path     *paths;     // paths for all the keys this worker has
 
-	uint32_t  max_fence; // maximum number of new node this worker generates
-	uint32_t  cur_fence; // current number of new node this worker generates
-	fence    *fences;    // to place the fence key info, works like
+  uint32_t  max_fence; // maximum number of new node this worker generates
+  uint32_t  cur_fence; // current number of new node this worker generates
+  fence    *fences;    // to place the fence key info, works like
 
-	worker   *prev;      // previous worker with smaller id
-	worker   *next;      // next worker with bigger id
+  worker   *prev;      // previous worker with smaller id
+  worker   *next;      // next worker with bigger id
 }worker;
 
 worker* new_worker(uint32_t id, uint32_t total, barrier *b);
