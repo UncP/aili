@@ -97,69 +97,60 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
 	node *to_process; // node actually to process the key
 	node *next = 0; // node next to `to_process`
 	for (; i < worker_get_path_count(w); ++i) {
-			path *cp = worker_get_path_at(w, i);
-			node *cn = path_get_leaf_node(cp);
-			uint32_t  op;
-			void    *key;
-			uint32_t len;
-			void    *val;
-			assert(batch_read_at(b, path_get_kv_id(cp), &op, &key, &len, &val));
+		path *cp = worker_get_path_at(w, i);
+		node *cn = path_get_leaf_node(cp);
+		uint32_t  op;
+		void    *key;
+		uint32_t len;
+		void    *val;
+		assert(batch_read_at(b, path_get_kv_id(cp), &op, &key, &len, &val));
 
-			// if current node is the same as previous, and there is a split
-			// for previous node, we need to determine which node current key lands to
-			if (cn == pre && split) {
-				to_process = compare_key(key, len, fence.key, fence.len) < 0 ? cn : new;
+		if (cn == pre) {
+			if (next) {
+				to_process = compare_key(key, len, fence_key, fence_len) < 0 ? to_process : next;
 			} else {
-				to_process = cn;
-				split = 0;
+				// `to_process` is the latest node, continue to use it
 			}
+		} else {
+			to_process = cn;
+			next = 0; // previous split has no influence on current key
+		}
 
-			if (cn == pre) {
-				if (next) {
-					to_process = compare_key(key, len, fence_key, fence_len) < 0 ? to_process : next;
+		if (op == Write) {
+			switch (node_insert(to_process, key, len, val)) {
+			case 1:  // key insert succeed, we set value to 1
+				*(val_t *)&val = 1;
+				break;
+			case 0:  // key already insert, we set value to 0
+				*(val_t *)&val = 0;
+				break;
+			case -1: // node does not have enough space, needs to split
+				node *new = new_node(to_process->type, to_process->level);
+				// record fence key to for later promotion
+				fence *f = worker_get_new_fence(w);
+				f->ptr = new;
+				f->id = path_get_kv_id(cp);
+				node_split(to_process, new, fence.key, &fence.len);
+				fence_key = fence.key;
+				fence_len = fence.len;
+
+				// compare current key with fence key to determine which node to insert
+				if (compare_key(key, len, fence.key, fence.len) < 0) {
+					assert(node_insert(to_process, key, len, val) == 1);
+					next = new;
 				} else {
-					// `to_process` is the latest node, continue to use it
+					assert(node_insert(new, key, len, val) == 1);
+					to_process = new;
+					next = 0;
 				}
-			} else {
-				to_process = cn;
-				next = 0; // previous split has no influence on current key
+				break;
+			default:
+				assert(0);
 			}
+		} else { // Read
+			*(val_t *)&val = node_search(to_process, key, len);
+		}
 
-			if (op == Write) {
-				switch (node_insert(to_process, key, len, val)) {
-				case 1:  // key insert succeed, we set value to 1
-					*(val_t *)&val = 1;
-					break;
-				case 0:  // key already insert, we set value to 0
-					*(val_t *)&val = 0;
-					break;
-				case -1: // node does not have enough space, needs to split
-					node *new = new_node(to_process->type, to_process->level);
-					// record fence key to for later promotion
-					fence *f = worker_get_new_fence(w);
-					f->ptr = new;
-					f->id = path_get_kv_id(cp);
-					node_split(to_process, new, fence.key, &fence.len);
-					fence_key = fence.key;
-					fence_len = fence.len;
-
-					// compare current key with fence key to determine which node to insert
-					if (compare_key(key, len, fence.key, fence.len) < 0) {
-						assert(node_insert(to_process, key, len, val) == 1);
-						next = new;
-					} else {
-						assert(node_insert(new, key, len, val) == 1);
-						to_process = new;
-						next = 0;
-					}
-					break;
-				default:
-					assert(0);
-				}
-			} else { // Read
-				*(val_t *)&val = node_search(to_process, key, len);
-			}
-
-			pre = cn; // record previous node
+		pre = cn; // record previous node
 	}
 }
