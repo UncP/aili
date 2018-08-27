@@ -43,6 +43,8 @@ typedef struct worker
 
   uint32_t  max_path;  // maximum path number
   uint32_t  cur_path;  // current path number
+  uint32_t  beg_path;  // begin path index this worker needs to process
+  uint32_t  end_path;  // end path index this worker needs to process
   path     *paths;     // paths for all the keys this worker has
 
   uint32_t  max_fence; // maximum number of new node this worker generates
@@ -57,10 +59,12 @@ worker* new_worker(uint32_t id, uint32_t total, barrier *b);
 void free_worker(worker* w);
 path* worker_get_new_path(worker *w);
 path* worker_get_path_at(worker *w, uint32_t idx);
-uint32_t worker_get_path_count(worker *w);
+uint32_t worker_get_path_beg(worker *w);
+uint32_t worker_get_path_end(worker *w);
 fence* worker_get_new_fence(worker *w);
 fence* worker_get_fence_at(worker *w, uint32_t idx);
 uint32_t worker_get_fence_count(worker *w);
+void worker_resolve_hazards(worker *w);
 void worker_clear(worker *w);
 void worker_link(worker *a, worker *b);
 
