@@ -22,7 +22,9 @@ worker* new_worker(uint32_t id, uint32_t total, barrier *b)
   w->cur_path = 0;
   w->paths = (path *)malloc(sizeof(path) * w->max_path);
 
-  // TODO: is there a better value?
+  // TODO: change this to `max_descend_depth`?
+  // 4 is enough even in extreme situations, so it's not likely
+  // more memory will be required
   w->max_fence = 4;
   w->cur_fence = 0;
   w->fences = (fence *)malloc(sizeof(fence) * w->max_fence);
@@ -64,11 +66,6 @@ uint32_t worker_get_path_beg(worker *w)
   return w->beg_path;
 }
 
-uint32_t worker_get_path_end(worker *w)
-{
-  return w->end_path;
-}
-
 fence* worker_get_new_fence(worker *w)
 {
   // TODO: optimize memory allocation?
@@ -96,26 +93,30 @@ uint32_t worker_get_fence_count(worker *w)
  *  can write that node, so this function is to find out the paths that
  *  this worker should process. there are modifications to worker's path that
  *  may cause concurrency problems since this function is called by each worker
- *  at the same time, but we use some trick to avoid it
+ *  at the same time, but we use some trick to avoid it.
+ *  there is a chance that this worker will not have any path to process,
+ *  especially when sequential insertion happens
  *
- *  after this function, the path and index should be like this:
- *
- *            beg_path                 cur_path          end_path            max_path
- *  |   0   |   1   |   2   |   ...   |   N   |   N+1   |   N+2   |   ...   |   M   |
- *
- *  [cur_path, endpath) is from next worker, after this function,
- *  [0, beg_path) belong to previous worker,
- *  we need to process [beg_path, end_path) for this worker
- *
+ *  this function is actually very neat :), it does not only solve the concurrency
+ *  problem, but also avoids the memory allocation problem
 **/
 void worker_resolve_hazards(worker *w)
 {
+  // this worker does not have any path
+  if (w->cur_path == 0) {
+    w->tot_path = 0;
+    return ;
+  }
+
   // we don't modify `cur_path` in this function because this is visible to other workers
-  // but we can safely modify `beg_path` and `end_path`
+  // but we can safely modify `beg_path`
 
-  w->beg_path = 0;
-
+  // decide which path we start to process in this worker
   if (w->prev) {
+    // we set `beg_path` to `cur_path` because there is a chance that no path in this worker
+    // will be processed by this worker
+    w->beg_path = w->cur_path;
+
     path *lp = &w->prev->paths[w->prev->cur_path - 1];
     node *ln = path_get_leaf_node(lp);
     for (uint32_t i = 0; i < w->cur_path; ++i) {
@@ -126,33 +127,40 @@ void worker_resolve_hazards(worker *w)
         break;
       }
     }
+  } else {
+    // since there is no previous worker, all the paths in this worker belong to this worker
+    w->beg_path = 0;
   }
-  // now `w->beg_path` will be the index that this worker is responsible to start to process
 
-  w->end_path = w->cur_path;
-  if (w->next) {
-    path *cp = &w->paths[w->cur_path - 1];
-    node *cn = path_get_leaf_node(cp);
-    // after this loop, `j` will be the path count that this worker is responsible to process for `w->next`
-    for (uint32_t j = 0; j < w->next->cur_path; ++j) {
-      path *np = &w->next->paths[i];
+  // calculate the paths needs to process in this worker
+  w->tot_path = w->cur_path - w->beg_path;
+
+  path *lp = &w->paths[w->cur_path - 1];
+  node *ln = path_get_leaf_node(lp);
+  // calculate the paths needs to process in other workers, it may cover several workers
+  // escpecially when sequential insertion happens
+  worker *next = w->next;
+  while (next) {
+    for (uint32_t j = 0; j < next->cur_path; ++j) {
+      path *np = &next->paths[i];
       node *nn = path_get_leaf_node(np);
-      if (nn != cn) {
-        break;
-      } else {
-        // this path is now owned by this worker
-        // TODO: optimization? sizeof(path) currently is 64 bytes, so not a very heavy memcpy
-        // TODO: deal memory allocation or just refactor `paths`
-        memcpy(&w->paths[w->end_path++], np, sizeof(path));
+      if (nn != ln) {
+        // once there is a path leaf node not the same with this worker's last path leaf node, return
+        return;
+      } else if (w->tot_path) {
+        // it's possible that this worker does not have any path to process,
+        // so we need to test `tot_path` to determine whether this path in next worker belongs to
+        // previous worker
+        ++w->tot_path;
       }
     }
+    next = next->next;
   }
-  // now `w->end_path` will be the index that this worker is responsible to stop to process
 }
 
 void worker_clear(worker *w)
 {
-  // TODO: set max_path to end_path?
+  // TODO: set max_path to cur_path?
   for (uint32_t i = 0; i < w->max_path; ++i)
     path_clear(&w->paths[i]);
   w->cur_path = 0;

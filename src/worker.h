@@ -44,7 +44,7 @@ typedef struct worker
   uint32_t  max_path;  // maximum path number
   uint32_t  cur_path;  // current path number
   uint32_t  beg_path;  // begin path index this worker needs to process
-  uint32_t  end_path;  // end path index this worker needs to process
+  uint32_t  tot_path;  // total paths that this worker needs to process
   path     *paths;     // paths for all the keys this worker has
 
   uint32_t  max_fence; // maximum number of new node this worker generates
