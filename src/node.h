@@ -43,6 +43,8 @@
 typedef uint64_t val_t;
 #define value_bytes sizeof(val_t)
 
+#define set_val(ptr, val) ((*(val_t *)&ptr) = (val))
+
 // you can change uint8_t to uint16_t so that bigger keys are supported,
 // but key length byte will take more space, also you need to update
 // `node_min_size` below to at least 128kb

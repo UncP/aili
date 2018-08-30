@@ -128,7 +128,7 @@ void worker_resolve_hazards(worker *w)
       }
     }
   } else {
-    // since there is no previous worker, all the paths in this worker belong to this worker
+    // since there is no previous worker, all the paths in this worker are processed by this worker
     w->beg_path = 0;
   }
 
@@ -140,8 +140,8 @@ void worker_resolve_hazards(worker *w)
   // calculate the paths needs to process in other workers, it may cover several workers
   // escpecially when sequential insertion happens
   worker *next = w->next;
-  while (next) {
-    for (uint32_t j = 0; j < next->cur_path; ++j) {
+  while (next && next->cur_path) {
+    for (uint32_t i = 0; i < next->cur_path; ++i) {
       path *np = &next->paths[i];
       node *nn = path_get_leaf_node(np);
       if (nn != ln) {
@@ -174,4 +174,27 @@ void worker_link(worker *a, worker *b)
 {
   a->next = b;
   b->prev = a;
+}
+
+void init_path_iter(path_iter *iter, worker *w)
+{
+	assert(w);
+	iter->current = 0;
+	iter->total   = w->tot_path;
+	iter->offset  = w->beg_path;
+	iter->owner   = w;
+}
+
+path* next_path(path_iter *iter)
+{
+	if (iter->current++ == iter->total)
+		return 0;
+
+	if (iter->offset == w->cur_path) {
+		iter->owner = iter->owner->next;
+		assert(iter->owner && iter->owner->cur_path);
+		iter->offset = 0;
+	}
+
+	return &iter->owner->paths[iter->offset++];
 }

@@ -74,8 +74,13 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
   node *pn = 0; // previous node
   node *to_process; // node actually to process the key
   node *next = 0; // node next to `to_process`
-  for (uint32_t i = worker_get_path_beg(w); i < worker_get_path_end(w); ++i) {
-    path *cp = worker_get_path_at(w, i);
+
+  path_iter iter;
+  path *cp;
+  init_path_iter(&iter, w);
+
+  // iterate all the path and write or read the key in the leaf node
+  while ((cp = next_path(&iter))) {
     node *cn = path_get_leaf_node(cp);
     uint32_t  op;
     void    *key;
@@ -97,10 +102,10 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
     if (op == Write) {
       switch (node_insert(to_process, key, len, val)) {
         case 1:  // key insert succeed, we set value to 1
-          *(val_t *)&val = 1;
+          set_val(val, 1);
           break;
         case 0:  // key already insert, we set value to 0
-          *(val_t *)&val = 0;
+          set_val(val, 0);
           break;
         case -1: // node does not have enough space, needs to split
           node *new = new_node(to_process->type, to_process->level);
@@ -126,9 +131,13 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
           assert(0);
       }
     } else { // Read
-      *(val_t *)&val = node_search(to_process, key, len);
+      set_val(val, node_search(to_process, key, len));
     }
 
     pn = cn; // record previous node
   }
+
+  // we have successfully processed all the modifications to the leaf nodes
+  // now we need to fix the split
+
 }

@@ -68,4 +68,16 @@ void worker_resolve_hazards(worker *w);
 void worker_clear(worker *w);
 void worker_link(worker *a, worker *b);
 
+// used to iterate the paths processed by one worker, but path may be in several workers
+typedef struct path_iter
+{
+	uint32_t current;
+	uint32_t total;
+	uint32_t offset;
+	worker  *owner;
+}path_iter;
+
+void init_path_iter(path_iter *iter);
+path* next_path(path_iter *iter);
+
 #endif /* _worker_h_ */
