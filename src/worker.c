@@ -178,23 +178,23 @@ void worker_link(worker *a, worker *b)
 
 void init_path_iter(path_iter *iter, worker *w)
 {
-	assert(w);
-	iter->current = 0;
-	iter->total   = w->tot_path;
-	iter->offset  = w->beg_path;
-	iter->owner   = w;
+  assert(w);
+  iter->current = 0;
+  iter->total   = w->tot_path;
+  iter->offset  = w->beg_path;
+  iter->owner   = w;
 }
 
 path* next_path(path_iter *iter)
 {
-	if (iter->current++ == iter->total)
-		return 0;
+  if (iter->current++ == iter->total)
+    return 0;
 
-	if (iter->offset == w->cur_path) {
-		iter->owner = iter->owner->next;
-		assert(iter->owner && iter->owner->cur_path);
-		iter->offset = 0;
-	}
+  if (iter->offset == w->cur_path) {
+    iter->owner = iter->owner->next;
+    assert(iter->owner && iter->owner->cur_path);
+    iter->offset = 0;
+  }
 
-	return &iter->owner->paths[iter->offset++];
+  return &iter->owner->paths[iter->offset++];
 }

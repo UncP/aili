@@ -71,10 +71,10 @@ void worker_link(worker *a, worker *b);
 // used to iterate the paths processed by one worker, but path may be in several workers
 typedef struct path_iter
 {
-	uint32_t current;
-	uint32_t total;
-	uint32_t offset;
-	worker  *owner;
+  uint32_t current;
+  uint32_t total;
+  uint32_t offset;
+  worker  *owner;
 }path_iter;
 
 void init_path_iter(path_iter *iter);
