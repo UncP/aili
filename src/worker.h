@@ -51,8 +51,8 @@ typedef struct worker
   uint32_t  cur_fence; // current number of new node this worker generates
   fence    *fences;    // to place the fence key info, works like
 
-  worker   *prev;      // previous worker with smaller id
-  worker   *next;      // next worker with bigger id
+  struct worker *prev; // previous worker with smaller id
+  struct worker *next; // next worker with bigger id
 }worker;
 
 worker* new_worker(uint32_t id, uint32_t total, barrier *b);
@@ -65,7 +65,7 @@ fence* worker_get_new_fence(worker *w);
 fence* worker_get_fence_at(worker *w, uint32_t idx);
 uint32_t worker_get_fence_count(worker *w);
 void worker_resolve_hazards(worker *w);
-void worker_clear(worker *w);
+void worker_reset(worker *w);
 void worker_link(worker *a, worker *b);
 
 // used to iterate the paths processed by one worker, but path may be in several workers
@@ -77,7 +77,7 @@ typedef struct path_iter
   worker  *owner;
 }path_iter;
 
-void init_path_iter(path_iter *iter);
+void init_path_iter(path_iter *iter, worker *w);
 path* next_path(path_iter *iter);
 
 #endif /* _worker_h_ */

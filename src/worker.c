@@ -5,6 +5,7 @@
 **/
 
 #include <assert.h>
+#include <stdlib.h>
 
 #include "worker.h"
 
@@ -158,7 +159,7 @@ void worker_resolve_hazards(worker *w)
   }
 }
 
-void worker_clear(worker *w)
+void worker_reset(worker *w)
 {
   // TODO: set max_path to cur_path?
   for (uint32_t i = 0; i < w->max_path; ++i)
@@ -190,7 +191,7 @@ path* next_path(path_iter *iter)
   if (iter->current++ == iter->total)
     return 0;
 
-  if (iter->offset == w->cur_path) {
+  if (iter->offset == iter->owner->cur_path) {
     iter->owner = iter->owner->next;
     assert(iter->owner && iter->owner->cur_path);
     iter->offset = 0;
