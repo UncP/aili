@@ -380,10 +380,11 @@ node* path_pop_node(path *p)
   return p->nodes[--p->depth];
 }
 
-node* path_get_leaf_node(path *p)
+node* path_get_node_at_level(path *p, uint32_t level)
 {
-  assert(p->depth);
-  return p->nodes[p->depth - 1];
+  // TODO: remove this
+  assert(p->depth > level);
+  return p->nodes[level];
 }
 
 #ifdef Test

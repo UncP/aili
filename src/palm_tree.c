@@ -22,7 +22,7 @@ void free_palm_tree(palm_tree *pt)
   // TODO
 }
 
-// for each key, we descend to leaf node, and store each key's descending path
+// for each key in [beg, end), we descend to leaf node, and store each key's descending path
 static void descend_to_leaf(node *root, batch *b, uint32_t beg, uint32_t end, worker *w)
 {
   uint32_t level = root->level;
@@ -69,7 +69,7 @@ static void execute_on_leaf_nodes(batch *b, worker *w)
   init_path_iter(&iter, w);
   // iterate all the path and write or read the key in the leaf node
   while ((cp = next_path(&iter))) {
-    node *cn = path_get_leaf_node(cp);
+    node *cn = path_get_node_at_level(cp, 0);
     uint32_t  op;
     void    *key;
     uint32_t len;
@@ -99,8 +99,8 @@ static void execute_on_leaf_nodes(batch *b, worker *w)
           node *nn = new_node(to_process->type, to_process->level);
           // record fence key for later promotion
           fence *f = worker_get_new_fence(w);
+          f->pth = cp;
           f->ptr = nn;
-          f->id = path_get_kv_id(cp);
           node_split(to_process, nn, f->key, &f->len);
           fence_key = f->key;
           fence_len = f->len;
@@ -114,6 +114,7 @@ static void execute_on_leaf_nodes(batch *b, worker *w)
             to_process = nn;
             next = 0;
           }
+          set_val(val, 1);
           break;
         }
         default:
@@ -138,7 +139,7 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
   uint32_t beg = w->id * part;
   uint32_t end = beg + part > b->keys ? b->keys : beg + part;
 
-  // descend_to_leaf for each key that belongs to this worker in this batch
+  // descend to leaf for each key that belongs to this worker in this batch
   descend_to_leaf(pt->root, b, beg, end, w);
 
   // TODO: point-to-point synchronization
@@ -148,18 +149,22 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
   // try to find overlap nodes in previoud worker and next worker,
   // if there is a previous worker owns the same leaf node in current worker,
   // it will be processed by previous worker
-  worker_resolve_hazards(w);
+  worker_redistribute_work(w);
 
   // now we process all the paths that belong to this worker
-  execute_on_leaf(b, w);
+  execute_on_leaf_nodes(b, w);
 
   // TODO: point-to-point synchronization
   // wait until all the worker finished leaf node operation
   barrier_wait(w->bar);
 
-  // now we need to fix the split
+  // fix the split level by level
+  uint32_t level = 1;
+  while (level < pt->root->level) {
+    worker_redistribute_split_work(w, level);
 
+  }
 
-
+  // handle root split
 
 }

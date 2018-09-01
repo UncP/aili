@@ -101,7 +101,7 @@ uint32_t worker_get_fence_count(worker *w)
  *  this function is actually very neat :), it does not only solve the concurrency
  *  problem, but also avoids the memory allocation problem
 **/
-void worker_resolve_hazards(worker *w)
+void worker_redistribute_work(worker *w)
 {
   // this worker does not have any path
   if (w->cur_path == 0) {
@@ -118,11 +118,12 @@ void worker_resolve_hazards(worker *w)
     // will be processed by this worker
     w->beg_path = w->cur_path;
 
+    // w->prev->cur_path can't be 0 if this worker has non-zero path
     path *lp = &w->prev->paths[w->prev->cur_path - 1];
-    node *ln = path_get_leaf_node(lp);
+    node *ln = path_get_node_at_level(lp, 0);
     for (uint32_t i = 0; i < w->cur_path; ++i) {
       path *cp = &w->paths[i];
-      node *cn = path_get_leaf_node(cp);
+      node *cn = path_get_node_at_level(cp, 0);
       if (ln != cn) {
         w->beg_path = i;
         break;
@@ -137,14 +138,14 @@ void worker_resolve_hazards(worker *w)
   w->tot_path = w->cur_path - w->beg_path;
 
   path *lp = &w->paths[w->cur_path - 1];
-  node *ln = path_get_leaf_node(lp);
+  node *ln = path_get_node_at_level(lp, 0);
   // calculate the paths needs to process in other workers, it may cover several workers
   // escpecially when sequential insertion happens
   worker *next = w->next;
   while (next && next->cur_path) {
     for (uint32_t i = 0; i < next->cur_path; ++i) {
       path *np = &next->paths[i];
-      node *nn = path_get_leaf_node(np);
+      node *nn = path_get_node_at_level(np, 0);
       if (nn != ln) {
         // once there is a path leaf node not the same with this worker's last path leaf node, return
         return;
@@ -159,6 +160,50 @@ void worker_resolve_hazards(worker *w)
   }
 }
 
+void worker_redistribute_split_work(worker *w, uint32_t level)
+{
+  if (w->cur_fence == 0) {
+    w->tot_fence = 0;
+    return ;
+  }
+
+  if (w->prev && w->prev->cur_fence) {
+    w->beg_fence = w->cur_fence;
+
+    path *lp = w->prev->fences[w->prev->cur_fence - 1].pth;
+    node *ln = path_get_node_at_level(lp, level);
+
+    for (uint32_t i = 0; i < w->cur_fence; ++i) {
+      path *cp = w->fences[i].pth;
+      node *cn = path_get_node_at_level(cp, level);
+      if (ln != cn) {
+        w->beg_fence = i;
+        break;
+      }
+    }
+  } else {
+    w->beg_fence = 0;
+  }
+
+  w->tot_fence = w->cur_fence - w->beg_fence;
+
+  path *lp = w->fences[w->cur_fence - 1].pth;
+  node *ln = path_get_node_at_level(lp, level);
+
+  worker *next = w->next;
+  while (next && next->cur_fence) {
+    for (uint32_t i = 0; i < next->cur_fence; ++i) {
+      path *np = next->fences[i].pth;
+      node *nn = path_get_node_at_level(np, level);
+      if (nn != ln)
+        return ;
+      else
+        ++w->tot_fence;
+    }
+    next = next->next;
+  }
+}
+
 void worker_reset(worker *w)
 {
   // TODO: set max_path to cur_path?
@@ -166,8 +211,6 @@ void worker_reset(worker *w)
     path_clear(&w->paths[i]);
   w->cur_path = 0;
 
-  for (uint32_t i = 0; i < w->max_fence; ++i)
-    w->fences[i].len = 0;
   w->cur_fence = 0;
 }
 

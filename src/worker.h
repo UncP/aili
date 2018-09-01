@@ -12,7 +12,7 @@
 
 typedef struct fence
 {
-  uint32_t  id;                    // path id
+  path     *pth;                   // path that this fence belongs to
   uint32_t  len;                   // key length
   char      key[max_key_size + 1]; // key data, +1 for alignment
   node     *ptr;                   // new node pointer
@@ -49,6 +49,8 @@ typedef struct worker
 
   uint32_t  max_fence; // maximum number of new node this worker generates
   uint32_t  cur_fence; // current number of new node this worker generates
+  uint32_t  beg_fence; // begin fence index this worker needs to process
+  uint32_t  tot_fence; // total fences that this worker needs to process
   fence    *fences;    // to place the fence key info, works like
 
   struct worker *prev; // previous worker with smaller id
@@ -64,7 +66,8 @@ uint32_t worker_get_path_end(worker *w);
 fence* worker_get_new_fence(worker *w);
 fence* worker_get_fence_at(worker *w, uint32_t idx);
 uint32_t worker_get_fence_count(worker *w);
-void worker_resolve_hazards(worker *w);
+void worker_redistribute_work(worker *w);
+void worker_redistribute_split_work(worker *w, uint32_t level);
 void worker_reset(worker *w);
 void worker_link(worker *a, worker *b);
 
