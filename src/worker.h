@@ -83,4 +83,16 @@ typedef struct path_iter
 void init_path_iter(path_iter *iter, worker *w);
 path* next_path(path_iter *iter);
 
+// used to iterate the fences processed by one worker, but fence may be in several workers
+typedef struct fence_iter
+{
+  uint32_t current;
+  uint32_t total;
+  uint32_t offset;
+  worker  *owner;
+}fence_iter;
+
+void init_fence_iter(fence_iter *iter, worker *w);
+fence* next_fence(fence_iter *iter);
+
 #endif /* _worker_h_ */

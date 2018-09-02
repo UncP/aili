@@ -160,13 +160,17 @@ void worker_redistribute_work(worker *w)
   }
 }
 
+// this function does exactly the same work as `worker_redistribute_work`
+// but with some critical difference
 void worker_redistribute_split_work(worker *w, uint32_t level)
 {
+  // no split, return directly
   if (w->cur_fence == 0) {
     w->tot_fence = 0;
     return ;
   }
 
+  // make sure there is a previous worker and previous worker has split
   if (w->prev && w->prev->cur_fence) {
     w->beg_fence = w->cur_fence;
 
@@ -191,7 +195,10 @@ void worker_redistribute_split_work(worker *w, uint32_t level)
   node *ln = path_get_node_at_level(lp, level);
 
   worker *next = w->next;
-  while (next && next->cur_fence) {
+  // we can't do an early termination like the function above because
+  // it's possible that next worker does not has split, but next next worker
+  // does, they might land on the same internal node
+  while (next) {
     for (uint32_t i = 0; i < next->cur_fence; ++i) {
       path *np = next->fences[i].pth;
       node *nn = path_get_node_at_level(np, level);
@@ -241,4 +248,28 @@ path* next_path(path_iter *iter)
   }
 
   return &iter->owner->paths[iter->offset++];
+}
+
+void init_fence_iter(fence_iter *iter, worker *w)
+{
+  assert(w);
+  iter->current = 0;
+  iter->total   = w->tot_fence;
+  iter->offset  = w->beg_fence;
+  iter->owner   = w;
+}
+
+fence* next_fence(fence_iter *iter)
+{
+  if (iter->current++ == iter->total)
+    return 0;
+
+  if (iter->offset == iter->owner->cur_fence) {
+    iter->owner = iter->owner->next;
+    // current owner may not have any split, remove assert
+    // assert(iter->owner && iter->owner->cur_path);
+    iter->offset = 0;
+  }
+
+  return &iter->owner->fences[iter->offset++];
 }
