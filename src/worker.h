@@ -47,11 +47,11 @@ typedef struct worker
   uint32_t  tot_path;  // total paths that this worker needs to process
   path     *paths;     // paths for all the keys this worker has
 
-  uint32_t  max_fence; // maximum number of new node this worker generates
-  uint32_t  cur_fence; // current number of new node this worker generates
-  uint32_t  beg_fence; // begin fence index this worker needs to process
-  uint32_t  tot_fence; // total fences that this worker needs to process
-  fence    *fences;    // to place the fence key info, works like
+  uint32_t  max_fence;    // maximum number of new node this worker generates
+  uint32_t  cur_fence[2]; // current number of new node this worker generates
+  uint32_t  beg_fence;    // begin fence index this worker needs to process
+  uint32_t  tot_fence;    // total fences that this worker needs to process
+  fence    *fences[2];    // to place the fence key info, there are 2 groups for switch
 
   struct worker *prev; // previous worker with smaller id
   struct worker *next; // next worker with bigger id
@@ -60,12 +60,7 @@ typedef struct worker
 worker* new_worker(uint32_t id, uint32_t total, barrier *b);
 void free_worker(worker* w);
 path* worker_get_new_path(worker *w);
-path* worker_get_path_at(worker *w, uint32_t idx);
-uint32_t worker_get_path_beg(worker *w);
-uint32_t worker_get_path_end(worker *w);
-fence* worker_get_new_fence(worker *w);
-fence* worker_get_fence_at(worker *w, uint32_t idx);
-uint32_t worker_get_fence_count(worker *w);
+fence* worker_get_new_fence(worker *w, uint32_t level);
 void worker_redistribute_work(worker *w);
 void worker_redistribute_split_work(worker *w, uint32_t level);
 void worker_reset(worker *w);
@@ -86,13 +81,14 @@ path* next_path(path_iter *iter);
 // used to iterate the fences processed by one worker, but fence may be in several workers
 typedef struct fence_iter
 {
-  uint32_t current;
-  uint32_t total;
-  uint32_t offset;
-  worker  *owner;
+  uint32_t level;   // indicate which fences we are processing
+  uint32_t current; // number of fence we have itered
+  uint32_t total;   // total fence we need to iter
+  uint32_t offset;  // current fence index
+  worker  *owner;   // current worker this iter uses
 }fence_iter;
 
-void init_fence_iter(fence_iter *iter, worker *w);
+void init_fence_iter(fence_iter *iter, worker *w, uint32_t level);
 fence* next_fence(fence_iter *iter);
 
 #endif /* _worker_h_ */

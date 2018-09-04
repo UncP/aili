@@ -101,7 +101,7 @@ static void execute_on_leaf_nodes(batch *b, worker *w)
         case -1: { // node does not have enough space, needs to split
           node *nn = new_node(to_process->type, to_process->level);
           // record fence key for later promotion
-          fence *f = worker_get_new_fence(w);
+          fence *f = worker_get_new_fence(w, 0);
           f->pth = cp;
           f->ptr = nn;
           node_split(to_process, nn, f->key, &f->len);
@@ -144,7 +144,7 @@ static void execute_on_branch_nodes(worker *w, uint32_t level)
   fence_iter iter;
   fence *cf;
 
-  init_path_iter(&iter, w);
+  init_fence_iter(&iter, w, level);
   // iterate all the fence and write key in the branch node
   while ((cf = next_fence(&iter))) {
     path *cp = cf->pth;
@@ -177,7 +177,7 @@ static void execute_on_branch_nodes(worker *w, uint32_t level)
         // TODO: fix this
         node *nn = new_node(to_process->type, to_process->level);
         // record fence key for later promotion
-        fence *f = worker_get_new_fence(w);
+        fence *f = worker_get_new_fence(w, level);
         f->pth = cp;
         f->ptr = nn;
         node_split(to_process, nn, f->key, &f->len);

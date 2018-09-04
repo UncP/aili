@@ -27,8 +27,10 @@ worker* new_worker(uint32_t id, uint32_t total, barrier *b)
   // 4 is enough even in extreme situations, so it's not likely
   // more memory will be required
   w->max_fence = 4;
-  w->cur_fence = 0;
-  w->fences = (fence *)malloc(sizeof(fence) * w->max_fence);
+  w->cur_fence[0] = 0;
+  w->cur_fence[1] = 0;
+  w->fences[0] = (fence *)malloc(sizeof(fence) * w->max_fence);
+  w->fences[1] = (fence *)malloc(sizeof(fence) * w->max_fence);
 
   w->prev = 0;
   w->next = 0;
@@ -43,6 +45,12 @@ void free_worker(worker* w)
   free((void *)w);
 }
 
+// this is a FUCKING genius optimization!!!
+void worker_switch_fence(worker *w, uint32_t level)
+{
+  w->cur_fence[level % 2] = 0;
+}
+
 path* worker_get_new_path(worker *w)
 {
   // TODO: optimize memory allocation?
@@ -55,38 +63,18 @@ path* worker_get_new_path(worker *w)
   return &w->paths[w->cur_path++];
 }
 
-path* worker_get_path_at(worker *w, uint32_t idx)
+fence* worker_get_new_fence(worker *w, uint32_t level)
 {
-  // TODO: remove this
-  assert(w->beg_path > idx);
-  return &w->paths[idx];
-}
-
-uint32_t worker_get_path_beg(worker *w)
-{
-  return w->beg_path;
-}
-
-fence* worker_get_new_fence(worker *w)
-{
+  uint32_t idx = level % 2;
+  uint32_t *cur_fence = &w->cur_fence[idx];
   // TODO: optimize memory allocation?
-  if (w->cur_fence == w->max_fence) {
+  if (*cur_fence == w->max_fence) {
     w->max_fence = (uint32_t)((float)w->max_fence * 1.5);
-    w->fences = (fence *)realloc(w->fences, sizeof(fence) * w->max_fence);
+    w->fences[idx] = (fence *)realloc(w->fences[idx], sizeof(fence) * w->max_fence);
   }
-  assert(w->cur_path < w->max_path);
-  return &w->fences[w->cur_fence++];
-}
-
-fence* worker_get_fence_at(worker *w, uint32_t idx)
-{
-  assert(w->cur_fence > idx);
-  return &w->fences[idx];
-}
-
-uint32_t worker_get_fence_count(worker *w)
-{
-  return w->cur_fence;
+  // TODO: remove this
+  assert(*cur_fence < w->max_fence);
+  return &w->fences[idx][*cur_fence++];
 }
 
 /**
@@ -164,21 +152,23 @@ void worker_redistribute_work(worker *w)
 // but with some critical difference
 void worker_redistribute_split_work(worker *w, uint32_t level)
 {
+  uint32_t idx = (level - 1) % 2;
   // no split, return directly
-  if (w->cur_fence == 0) {
+  uint32_t cur_fence = w->cur_fence[idx];
+  if (cur_fence == 0) {
     w->tot_fence = 0;
     return ;
   }
 
   // make sure there is a previous worker and previous worker has split
-  if (w->prev && w->prev->cur_fence) {
-    w->beg_fence = w->cur_fence;
+  if (w->prev && w->prev->cur_fence[idx]) {
+    w->beg_fence = cur_fence;
 
-    path *lp = w->prev->fences[w->prev->cur_fence - 1].pth;
+    path *lp = w->prev->fences[idx][w->prev->cur_fence[idx] - 1].pth;
     node *ln = path_get_node_at_level(lp, level);
 
-    for (uint32_t i = 0; i < w->cur_fence; ++i) {
-      path *cp = w->fences[i].pth;
+    for (uint32_t i = 0; i < cur_fence; ++i) {
+      path *cp = w->fences[idx][i].pth;
       node *cn = path_get_node_at_level(cp, level);
       if (ln != cn) {
         w->beg_fence = i;
@@ -189,9 +179,9 @@ void worker_redistribute_split_work(worker *w, uint32_t level)
     w->beg_fence = 0;
   }
 
-  w->tot_fence = w->cur_fence - w->beg_fence;
+  w->tot_fence = cur_fence - w->beg_fence;
 
-  path *lp = w->fences[w->cur_fence - 1].pth;
+  path *lp = w->fences[idx][cur_fence - 1].pth;
   node *ln = path_get_node_at_level(lp, level);
 
   worker *next = w->next;
@@ -199,8 +189,10 @@ void worker_redistribute_split_work(worker *w, uint32_t level)
   // it's possible that next worker does not has split, but next next worker
   // does, they might land on the same internal node
   while (next) {
-    for (uint32_t i = 0; i < next->cur_fence; ++i) {
-      path *np = next->fences[i].pth;
+  	uint32_t next_fence = next->cur_fence[idx];
+  	fence *fences = next->fences[idx];
+    for (uint32_t i = 0; i < next_fence; ++i) {
+      path *np = fences[i].pth;
       node *nn = path_get_node_at_level(np, level);
       if (nn != ln)
         return ;
@@ -218,7 +210,8 @@ void worker_reset(worker *w)
     path_clear(&w->paths[i]);
   w->cur_path = 0;
 
-  w->cur_fence = 0;
+  w->cur_fence[0] = 0;
+  w->cur_fence[1] = 0;
 }
 
 void worker_link(worker *a, worker *b)
@@ -250,9 +243,10 @@ path* next_path(path_iter *iter)
   return &iter->owner->paths[iter->offset++];
 }
 
-void init_fence_iter(fence_iter *iter, worker *w)
+void init_fence_iter(fence_iter *iter, worker *w, uint32_t level)
 {
-  assert(w);
+  assert(w && level);
+  iter->level   = (level - 1) % 2;
   iter->current = 0;
   iter->total   = w->tot_fence;
   iter->offset  = w->beg_fence;
@@ -264,12 +258,12 @@ fence* next_fence(fence_iter *iter)
   if (iter->current++ == iter->total)
     return 0;
 
-  if (iter->offset == iter->owner->cur_fence) {
+  if (iter->offset == iter->owner->cur_fence[iter->level]) {
     iter->owner = iter->owner->next;
     // current owner may not have any split, remove assert
     // assert(iter->owner && iter->owner->cur_path);
     iter->offset = 0;
   }
 
-  return &iter->owner->fences[iter->offset++];
+  return &iter->owner->fences[iter->level][iter->offset++];
 }
