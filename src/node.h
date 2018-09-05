@@ -116,7 +116,6 @@ void path_clear(path *p);
 void path_set_kv_id(path *p, uint32_t id);
 uint32_t path_get_kv_id(path *p);
 void path_push_node(path *p, node *n);
-node* path_pop_node(path *p);
 node* path_get_node_at_level(path *p, uint32_t level);
 
 #ifdef Test

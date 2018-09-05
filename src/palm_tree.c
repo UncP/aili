@@ -13,13 +13,41 @@
 palm_tree* new_palm_tree()
 {
   palm_tree *pt = (palm_tree *)malloc(sizeof(palm_tree));
-  pt->root = new_node(Leaf, 0); // set root as leaf to avoid some adjustment later
+  pt->root = new_node(Root, 0);
   return pt;
 }
 
 void free_palm_tree(palm_tree *pt)
 {
   // TODO
+}
+
+static void handle_root_split(palm_tree *pt, worker *w)
+{
+  // handled by worker 0 since every path starts with root, if there is a root split,
+  // all the work must belong to worker 0
+  assert(w->id == 0);
+
+  fence *fences;
+  uint32_t number;
+  worker_get_fences(w, pt->root->level, &fences, &number);
+
+  node *new_root = 0;
+
+  // TODO: remove this?
+  if (number) {
+    new_root = new_node(Root, pt->root->level + 1);
+    // adjust old root type
+    pt->root->type = pt->root->level == 0 ? Leaf : Branch;
+    // set old root as new root's first child
+    new_root->first = pt->root;
+    // replace old root
+    pt->root = new_root;
+  }
+
+  for (uint32_t i = 0; i < number; ++i) {
+    assert(node_insert(pt->root, fences[i].key, fences[i].len, fences[i].ptr) == 1);
+  }
 }
 
 // for each key in [beg, end), we descend to leaf node, and store each key's descending path
@@ -99,7 +127,7 @@ static void execute_on_leaf_nodes(batch *b, worker *w)
           set_val(val, 0);
           break;
         case -1: { // node does not have enough space, needs to split
-          node *nn = new_node(to_process->type, to_process->level);
+          node *nn = new_node(Leaf, to_process->level);
           // record fence key for later promotion
           fence *f = worker_get_new_fence(w, 0);
           f->pth = cp;
@@ -175,7 +203,7 @@ static void execute_on_branch_nodes(worker *w, uint32_t level)
         break;
       case -1: { // node does not have enough space, needs to split
         // TODO: fix this
-        node *nn = new_node(to_process->type, to_process->level);
+        node *nn = new_node(Branch, to_process->level);
         // record fence key for later promotion
         fence *f = worker_get_new_fence(w, level);
         f->pth = cp;
@@ -207,7 +235,6 @@ static void execute_on_branch_nodes(worker *w, uint32_t level)
 // TODO: combine leaf work and branch work?
 void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
 {
-  // reset worker
   worker_reset(w);
 
   // calculate [beg, end) in a batch that current thread needs to process
@@ -231,21 +258,28 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
   // now we process all the paths that belong to this worker
   execute_on_leaf_nodes(b, w);
 
-  // TODO: point-to-point synchronization
   // wait until all the worker finished leaf node operation
   barrier_wait(w->bar);
 
+  // TODO: early temination
   // fix the split level by level
-  uint32_t level = 1;
-  while (level < pt->root->level) {
+  uint32_t level = 1, root_level = pt->root->level;
+  while (level <= root_level) {
     worker_redistribute_split_work(w, level);
 
     execute_on_branch_nodes(w, level);
 
+    if (level == root_level)
+      handle_root_split(pt, w);
+
     barrier_wait(w->bar);
 
     ++level;
-  }
 
-  // handle root split
+    // this is a very very smart and elegant optimization, we use `level` as an outside
+    // synchronization method, even `level` is on each thread's stack, but it is
+    // globally equal, so it can be used to avoid concurrency problems and
+    // save a lot of frequent memory allocation for split information at the same time
+    worker_switch_fence(w, level);
+  }
 }

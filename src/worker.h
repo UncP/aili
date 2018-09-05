@@ -61,6 +61,8 @@ worker* new_worker(uint32_t id, uint32_t total, barrier *b);
 void free_worker(worker* w);
 path* worker_get_new_path(worker *w);
 fence* worker_get_new_fence(worker *w, uint32_t level);
+void worker_switch_fence(worker *w, uint32_t level);
+void worker_get_fences(worker *w, uint32_t level, fence **fences, uint32_t *number);
 void worker_redistribute_work(worker *w);
 void worker_redistribute_split_work(worker *w, uint32_t level);
 void worker_reset(worker *w);

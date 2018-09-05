@@ -77,6 +77,12 @@ fence* worker_get_new_fence(worker *w, uint32_t level)
   return &w->fences[idx][*cur_fence++];
 }
 
+void worker_get_fences(worker *w, uint32_t level, fence **fences, uint32_t *number)
+{
+  *number = w->cur_fence[level % 2];
+  *fences = w->fences[level % 2];
+}
+
 /**
  *  since two paths may descend to the same leaf node, but only one worker
  *  can write that node, so this function is to find out the paths that
@@ -86,7 +92,7 @@ fence* worker_get_new_fence(worker *w, uint32_t level)
  *  there is a chance that this worker will not have any path to process,
  *  especially when sequential insertion happens
  *
- *  this function is actually very neat :), it does not only solve the concurrency
+ *  this function is actually very neat :), it does not only avoid the concurrency
  *  problem, but also avoids the memory allocation problem
 **/
 void worker_redistribute_work(worker *w)
@@ -153,8 +159,8 @@ void worker_redistribute_work(worker *w)
 void worker_redistribute_split_work(worker *w, uint32_t level)
 {
   uint32_t idx = (level - 1) % 2;
-  // no split, return directly
   uint32_t cur_fence = w->cur_fence[idx];
+  // no split, return directly
   if (cur_fence == 0) {
     w->tot_fence = 0;
     return ;

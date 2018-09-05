@@ -374,17 +374,11 @@ void path_push_node(path *p, node *n)
   p->nodes[p->depth++] = n;
 }
 
-node* path_pop_node(path *p)
-{
-  assert(p->depth);
-  return p->nodes[--p->depth];
-}
-
 node* path_get_node_at_level(path *p, uint32_t level)
 {
   // TODO: remove this
   assert(p->depth > level);
-  return p->nodes[level];
+  return p->nodes[p->depth - level - 1];
 }
 
 #ifdef Test
