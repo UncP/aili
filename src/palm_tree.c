@@ -24,30 +24,23 @@ void free_palm_tree(palm_tree *pt)
 
 static void handle_root_split(palm_tree *pt, worker *w)
 {
-  // handled by worker 0 since every path starts with root, if there is a root split,
-  // all the work must belong to worker 0
-  assert(w->id == 0);
-
-  fence *fences;
   uint32_t number;
+  fence *fences;
   worker_get_fences(w, pt->root->level, &fences, &number);
 
-  node *new_root = 0;
+  if (number == 0) return ;
 
-  // TODO: remove this?
-  if (number) {
-    new_root = new_node(Root, pt->root->level + 1);
-    // adjust old root type
-    pt->root->type = pt->root->level == 0 ? Leaf : Branch;
-    // set old root as new root's first child
-    new_root->first = pt->root;
-    // replace old root
-    pt->root = new_root;
-  }
+  node *new_root = new_node(Root, pt->root->level + 1);
+  // adjust old root type
+  pt->root->type = pt->root->level == 0 ? Leaf : Branch;
+  // set old root as new root's first child
+  new_root->first = pt->root;
 
-  for (uint32_t i = 0; i < number; ++i) {
-    assert(node_insert(pt->root, fences[i].key, fences[i].len, fences[i].ptr) == 1);
-  }
+  for (uint32_t i = 0; i < number; ++i)
+    assert(node_insert(new_root, fences[i].key, fences[i].len, fences[i].ptr) == 1);
+
+  // replace old root
+  pt->root = new_root;
 }
 
 // for each key in [beg, end), we descend to leaf node, and store each key's descending path
@@ -108,10 +101,9 @@ static void execute_on_leaf_nodes(batch *b, worker *w)
     assert(batch_read_at(b, path_get_kv_id(cp), &op, &key, &len, &val));
 
     if (cn == pn) {
-      if (next) {
-        to_process = compare_key(key, len, fence_key, fence_len) < 0 ? to_process : next;
-      } else {
-        // `to_process` is the latest node, continue to use it
+      if (next && compare_key(key, len, fence_key, fence_len) >= 0) {
+        to_process = next;
+        next = 0;
       }
     } else {
       to_process = cn;
@@ -173,7 +165,7 @@ static void execute_on_branch_nodes(worker *w, uint32_t level)
   fence *cf;
 
   init_fence_iter(&iter, w, level);
-  // iterate all the fence and write key in the branch node
+  // iterate all the fence and insert key in the branch node
   while ((cf = next_fence(&iter))) {
     path *cp = cf->pth;
     node *cn = path_get_node_at_level(cp, level);
@@ -185,10 +177,9 @@ static void execute_on_branch_nodes(worker *w, uint32_t level)
     void    *val = cf->ptr;
 
     if (cn == pn) {
-      if (next) {
-        to_process = compare_key(key, len, fence_key, fence_len) < 0 ? to_process : next;
-      } else {
-        // `to_process` is the latest node, continue to use it
+      if (next && compare_key(key, len, fence_key, fence_len) >= 0) {
+        to_process = next;
+        next = 0;
       }
     } else {
       to_process = cn;
@@ -202,7 +193,6 @@ static void execute_on_branch_nodes(worker *w, uint32_t level)
         assert(0);
         break;
       case -1: { // node does not have enough space, needs to split
-        // TODO: fix this
         node *nn = new_node(Branch, to_process->level);
         // record fence key for later promotion
         fence *f = worker_get_new_fence(w, level);
@@ -264,13 +254,10 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
   // TODO: early temination
   // fix the split level by level
   uint32_t level = 1, root_level = pt->root->level;
-  while (level <= root_level) {
+  while (level < root_level) {
     worker_redistribute_split_work(w, level);
 
     execute_on_branch_nodes(w, level);
-
-    if (level == root_level)
-      handle_root_split(pt, w);
 
     barrier_wait(w->bar);
 
@@ -282,4 +269,8 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
     // save a lot of frequent memory allocation for split information at the same time
     worker_switch_fence(w, level);
   }
+
+  // we don't need to sync here since if there is a root split, it always falls on worker 0
+  if (w->id == 0)
+    handle_root_split(pt, w);
 }

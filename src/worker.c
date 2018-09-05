@@ -21,6 +21,8 @@ worker* new_worker(uint32_t id, uint32_t total, barrier *b)
   // TODO: is there a better value?
   w->max_path = 64;
   w->cur_path = 0;
+  w->beg_path = 0;
+  w->tot_path = 0;
   w->paths = (path *)malloc(sizeof(path) * w->max_path);
 
   // TODO: change this to `max_descend_depth`?
@@ -45,12 +47,6 @@ void free_worker(worker* w)
   free((void *)w);
 }
 
-// this is a FUCKING genius optimization!!!
-void worker_switch_fence(worker *w, uint32_t level)
-{
-  w->cur_fence[level % 2] = 0;
-}
-
 path* worker_get_new_path(worker *w)
 {
   // TODO: optimize memory allocation?
@@ -61,6 +57,12 @@ path* worker_get_new_path(worker *w)
   // TODO: remove this
   assert(w->cur_path < w->max_path);
   return &w->paths[w->cur_path++];
+}
+
+// this is a FUCKING genius optimization!!!
+void worker_switch_fence(worker *w, uint32_t level)
+{
+  w->cur_fence[level % 2] = 0;
 }
 
 fence* worker_get_new_fence(worker *w, uint32_t level)
@@ -112,7 +114,7 @@ void worker_redistribute_work(worker *w)
     // will be processed by this worker
     w->beg_path = w->cur_path;
 
-    // w->prev->cur_path can't be 0 if this worker has non-zero path
+    // `w->prev->cur_path` can't be 0 if this worker has non-zero path
     path *lp = &w->prev->paths[w->prev->cur_path - 1];
     node *ln = path_get_node_at_level(lp, 0);
     for (uint32_t i = 0; i < w->cur_path; ++i) {
@@ -131,6 +133,11 @@ void worker_redistribute_work(worker *w)
   // calculate the paths needs to process in this worker
   w->tot_path = w->cur_path - w->beg_path;
 
+  // if we don't have any path for this worker, we can return directly since
+  // there will not be any path for this worker in next workers
+  if (w->tot_path == 0)
+    return ;
+
   path *lp = &w->paths[w->cur_path - 1];
   node *ln = path_get_node_at_level(lp, 0);
   // calculate the paths needs to process in other workers, it may cover several workers
@@ -140,15 +147,11 @@ void worker_redistribute_work(worker *w)
     for (uint32_t i = 0; i < next->cur_path; ++i) {
       path *np = &next->paths[i];
       node *nn = path_get_node_at_level(np, 0);
-      if (nn != ln) {
-        // once there is a path leaf node not the same with this worker's last path leaf node, return
-        return;
-      } else if (w->tot_path) {
-        // it's possible that this worker does not have any path to process,
-        // so we need to test `tot_path` to determine whether this path in next worker belongs to
-        // previous worker
+      // once there is a path leaf node not the same with this worker's last path leaf node, return
+      if (nn != ln)
+        return ;
+      else
         ++w->tot_path;
-      }
     }
     next = next->next;
   }
@@ -187,6 +190,9 @@ void worker_redistribute_split_work(worker *w, uint32_t level)
 
   w->tot_fence = cur_fence - w->beg_fence;
 
+  // we don't return here if `w->tot_fence == 0` because there might be
+  // a split in next worker but belongs to this worker
+
   path *lp = w->fences[idx][cur_fence - 1].pth;
   node *ln = path_get_node_at_level(lp, level);
 
@@ -195,8 +201,8 @@ void worker_redistribute_split_work(worker *w, uint32_t level)
   // it's possible that next worker does not has split, but next next worker
   // does, they might land on the same internal node
   while (next) {
-  	uint32_t next_fence = next->cur_fence[idx];
-  	fence *fences = next->fences[idx];
+    uint32_t next_fence = next->cur_fence[idx];
+    fence *fences = next->fences[idx];
     for (uint32_t i = 0; i < next_fence; ++i) {
       path *np = fences[i].pth;
       node *nn = path_get_node_at_level(np, level);
