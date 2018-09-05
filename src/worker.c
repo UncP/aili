@@ -258,10 +258,11 @@ fence* next_fence(fence_iter *iter)
   if (iter->current++ == iter->total)
     return 0;
 
-  if (iter->offset == iter->owner->cur_fence[iter->level]) {
+  // loop until we find a worker has split, it's impossible this is a dead loop
+  while (iter->offset == iter->owner->cur_fence[iter->level]) {
     iter->owner = iter->owner->next;
-    // current owner may not have any split, remove assert
-    // assert(iter->owner && iter->owner->cur_path);
+    // current owner may not have any split, remove assert `cur_fence`
+    assert(iter->owner);
     iter->offset = 0;
   }
 
