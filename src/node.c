@@ -68,6 +68,23 @@ void free_node(node *n)
   free((void *)n);
 }
 
+void free_btree_node(node *n)
+{
+  if (n == 0) return ;
+
+  if (n->level) {
+    assert(n->keys);
+    index_t *index = node_index(n);
+    free_btree_node(n->first);
+    for (uint32_t i = 0; i < n->keys; ++i) {
+      node *child = (node *)get_val(n, index[i]);
+      free_btree_node(child);
+    }
+  }
+
+  free_node(n);
+}
+
 node* node_descend(node *n, const void *key, uint32_t len)
 {
   assert(n->level && n->keys);
@@ -489,6 +506,57 @@ void node_validate(node *n)
 void batch_validate(batch *n)
 {
   validate(n, 1);
+}
+
+void node_get_whole_key(node *n, uint32_t idx, char *key, uint32_t *len)
+{
+  assert(idx <= n->keys);
+  index_t *index = node_index(n);
+  get_key_info(n, index[idx], buf, buf_len);
+  if (n->pre)
+    memcpy(key, n->data, n->pre);
+  memcpy(key + n->pre, buf, buf_len);
+  *len += n->pre + buf_len;
+}
+
+void btree_node_validate(node *n)
+{
+  if (n == 0) return ;
+
+  if (n->level == 0)
+    assert(n->first == 0);
+  else
+    assert(n->first != 0);
+
+  // validate that keys in ascending order in this node
+  validate(n, 0);
+
+  char first_key[max_key_size], last_key[max_key_size];
+  uint32_t first_len, last_len;
+  node_get_whole_key(n, 0, first_key, &first_len);
+  node_get_whole_key(n, n->keys - 1, last_key, &last_len);
+
+  // validate the last key in this node is smaller than the first key in next node
+  if (n->next) {
+    char next_key[max_key_size];
+    uint32_t next_len;
+    node_get_whole_key(n->next, 0, next_key, &next_len);
+    assert(compare_key(last_key, last_len, next_key, next_len) < 0);
+  }
+
+  if (n->level) {
+    // validate that the first key in this node is larger than the last key in the first child
+    char child_last_key[max_key_size], child_first_key[max_key_size];
+    uint32_t child_last_len, child_first_len;
+    node_get_whole_key(n->first, n->first->keys - 1, child_last_key, &child_last_len);
+    assert(compare_key(child_last_key, child_last_len, first_key, first_len) < 0);
+
+    // validate that the last key in this node is larger than the first key in the last child
+    index_t *index = node_index(n);
+    node *last_child = (node *)get_val(n, index[n->keys - 1]);
+    node_get_whole_key(last_child, 0, child_first_key, &child_first_len);
+    assert(compare_key(last_key, last_len, child_first_key, child_first_len) >= 0); // equal is allowed
+  }
 }
 
 #endif /* Test */

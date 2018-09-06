@@ -81,6 +81,7 @@ int compare_key(const void *key1, uint32_t len1, const void *key2, uint32_t len2
 
 node* new_node(uint8_t type, uint8_t level);
 void free_node(node *n);
+void free_btree_node(node *n);
 node* node_descend(node *n, const void *key, uint32_t len);
 int node_insert(node *n, const void *key, uint32_t len, const void *val);
 void* node_search(node *n, const void *key, uint32_t len);
@@ -94,6 +95,7 @@ void node_split(node *old, node *new, char *pkey, uint32_t *plen);
  *            op       key len                           ptr
  *      |     1     |     1     |        key        |     8     |
 **/
+// TODO: different size for node and batch, batch size should be much larger than node size
 typedef node batch;
 
 batch* new_batch();
@@ -125,6 +127,7 @@ void print_node(node *n, int detail);
 void print_batch(batch *b, int detail);
 void node_validate(node *n);
 void batch_validate(batch *n);
+void btree_node_validate(node *n);
 
 #endif /* Test */
 

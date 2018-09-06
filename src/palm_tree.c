@@ -19,8 +19,26 @@ palm_tree* new_palm_tree()
 
 void free_palm_tree(palm_tree *pt)
 {
-  // TODO
+  free_btree_node(pt->root);
 }
+
+#ifdef Test
+
+void palm_tree_validate(palm_tree *pt)
+{
+  node *ptr = pt->root;
+  while (ptr) {
+    node *next = ptr->first;
+    node *cur = ptr;
+    while (cur) {
+      btree_node_validate(cur);
+      cur = cur->next;
+    }
+    ptr = next;
+  }
+}
+
+#endif /* Test */
 
 static void handle_root_split(palm_tree *pt, worker *w)
 {
@@ -69,7 +87,7 @@ static void descend_to_leaf(node *root, batch *b, uint32_t beg, uint32_t end, wo
     }
 
     // TODO: remove this
-    assert(cur && cur->type == Leaf);
+    assert(cur && cur->level == 0);
 
     path_push_node(p, cur);
   }
@@ -222,7 +240,6 @@ static void execute_on_branch_nodes(worker *w, uint32_t level)
 }
 
 // this is the entrance for all the write/read operations
-// TODO: combine leaf work and branch work?
 void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
 {
   worker_reset(w);
@@ -263,14 +280,16 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
 
     ++level;
 
-    // this is a very very smart and elegant optimization, we use `level` as an outside
-    // synchronization method, even `level` is on each thread's stack, but it is
+    // this is a very fucking smart and elegant optimization, we use `level` as an external
+    // synchronization value, even `level` is on each thread's stack, but it is
     // globally equal, so it can be used to avoid concurrency problems and
-    // save a lot of frequent memory allocation for split information at the same time
+    // save a lot of small but frequent memory allocation for split information at the same time
     worker_switch_fence(w, level);
   }
 
-  // we don't need to sync here since if there is a root split, it always falls on worker 0
   if (w->id == 0)
     handle_root_split(pt, w);
+
+  // we don't need to sync here since if there is a root split, it always falls on worker 0
+  return ;
 }

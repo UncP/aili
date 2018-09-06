@@ -59,6 +59,7 @@ typedef struct worker
 
 worker* new_worker(uint32_t id, uint32_t total, barrier *b);
 void free_worker(worker* w);
+void worker_link(worker *a, worker *b);
 path* worker_get_new_path(worker *w);
 fence* worker_get_new_fence(worker *w, uint32_t level);
 void worker_switch_fence(worker *w, uint32_t level);
@@ -66,15 +67,14 @@ void worker_get_fences(worker *w, uint32_t level, fence **fences, uint32_t *numb
 void worker_redistribute_work(worker *w);
 void worker_redistribute_split_work(worker *w, uint32_t level);
 void worker_reset(worker *w);
-void worker_link(worker *a, worker *b);
 
 // used to iterate the paths processed by one worker, but path may be in several workers
 typedef struct path_iter
 {
-  uint32_t current;
-  uint32_t total;
-  uint32_t offset;
-  worker  *owner;
+  uint32_t current; // number of path we have itered
+  uint32_t total;   // total fence we need to iter
+  uint32_t offset;  // current fence index
+  worker  *owner;   // current worker this iter uses
 }path_iter;
 
 void init_path_iter(path_iter *iter, worker *w);

@@ -18,7 +18,9 @@ worker* new_worker(uint32_t id, uint32_t total, barrier *b)
   w->total = total;
   w->bar = b;
 
-  // TODO: is there a better value?
+  // TODO: dynamically change this in account of batch size and worker number
+  // for a 4kb node, 16 bytes key, there will be about 256 keys,
+  // if there are 4 workers, 64 should be enough
   w->max_path = 64;
   w->cur_path = 0;
   w->beg_path = 0;
@@ -47,19 +49,24 @@ void free_worker(worker* w)
   free((void *)w);
 }
 
+void worker_link(worker *a, worker *b)
+{
+  a->next = b;
+  b->prev = a;
+}
+
 path* worker_get_new_path(worker *w)
 {
   // TODO: optimize memory allocation?
   if (w->cur_path == w->max_path) {
     w->max_path = (uint32_t)((float)w->max_path * 1.5);
-    w->paths = (path *)realloc(w->paths, sizeof(path) * w->max_path);
+    assert(w->paths = (path *)realloc(w->paths, sizeof(path) * w->max_path));
   }
   // TODO: remove this
   assert(w->cur_path < w->max_path);
   return &w->paths[w->cur_path++];
 }
 
-// this is a FUCKING genius optimization!!!
 void worker_switch_fence(worker *w, uint32_t level)
 {
   w->cur_fence[level % 2] = 0;
@@ -72,7 +79,7 @@ fence* worker_get_new_fence(worker *w, uint32_t level)
   // TODO: optimize memory allocation?
   if (*cur_fence == w->max_fence) {
     w->max_fence = (uint32_t)((float)w->max_fence * 1.5);
-    w->fences[idx] = (fence *)realloc(w->fences[idx], sizeof(fence) * w->max_fence);
+    assert(w->fences[idx] = (fence *)realloc(w->fences[idx], sizeof(fence) * w->max_fence));
   }
   // TODO: remove this
   assert(*cur_fence < w->max_fence);
@@ -135,8 +142,7 @@ void worker_redistribute_work(worker *w)
 
   // if we don't have any path for this worker, we can return directly since
   // there will not be any path for this worker in next workers
-  if (w->tot_path == 0)
-    return ;
+  if (w->tot_path == 0) return ;
 
   path *lp = &w->paths[w->cur_path - 1];
   node *ln = path_get_node_at_level(lp, 0);
@@ -147,10 +153,11 @@ void worker_redistribute_work(worker *w)
     for (uint32_t i = 0; i < next->cur_path; ++i) {
       path *np = &next->paths[i];
       node *nn = path_get_node_at_level(np, 0);
-      // once there is a path leaf node not the same with this worker's last path leaf node, return
       if (nn != ln)
+        // once there is a path leaf node not the same with this worker's last path leaf node, return
         return ;
       else
+        // we have another path in next workers to process
         ++w->tot_path;
     }
     next = next->next;
@@ -161,6 +168,7 @@ void worker_redistribute_work(worker *w)
 // but with some critical difference
 void worker_redistribute_split_work(worker *w, uint32_t level)
 {
+  // at this point, we are in `level`, but the split information is in `level-1`
   uint32_t idx = (level - 1) % 2;
   uint32_t cur_fence = w->cur_fence[idx];
   // no split, return directly
@@ -190,8 +198,7 @@ void worker_redistribute_split_work(worker *w, uint32_t level)
 
   w->tot_fence = cur_fence - w->beg_fence;
 
-  // we don't return here if `w->tot_fence == 0` because there might be
-  // a split in next worker but belongs to this worker
+  if (w->tot_fence == 0) return ;
 
   path *lp = w->fences[idx][cur_fence - 1].pth;
   node *ln = path_get_node_at_level(lp, level);
@@ -224,12 +231,6 @@ void worker_reset(worker *w)
 
   w->cur_fence[0] = 0;
   w->cur_fence[1] = 0;
-}
-
-void worker_link(worker *a, worker *b)
-{
-  a->next = b;
-  b->prev = a;
 }
 
 void init_path_iter(path_iter *iter, worker *w)

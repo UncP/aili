@@ -16,7 +16,13 @@ typedef struct palm_tree
 }palm_tree;
 
 palm_tree* new_palm_tree();
-void free_palm_tree();
+void free_palm_tree(palm_tree *pt);
 void palm_tree_execute(palm_tree *pt, batch *b, worker *w);
+
+#ifdef Test
+
+void palm_tree_validate(palm_tree *pt);
+
+#endif /* Test */
 
 #endif /* _palm_tree_h_ */

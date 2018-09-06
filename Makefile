@@ -4,7 +4,7 @@ DFLAGS=-DTest
 AFLAGS=$(CC) $(CFLAGS)
 
 %.o: %.c
-	$(AFLAGS) -c $^ -o $@
+	$(AFLAGS) -c $^ -o $@ $(DFLAGS)
 
 all: node_test batch_test barrier_test
 
