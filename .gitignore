@@ -1,3 +1,5 @@
 *.o
 *_test
 .tags
+gen_data
+data

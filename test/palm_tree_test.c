@@ -8,6 +8,7 @@
 
 int main()
 {
+  test_single_thread_insertion();
 
 	return 0;
 }
