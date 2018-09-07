@@ -44,7 +44,8 @@ worker* new_worker(uint32_t id, uint32_t total, barrier *b)
 
 void free_worker(worker* w)
 {
-  free((void *)w->fences);
+  free((void *)w->fences[0]);
+  free((void *)w->fences[1]);
   free((void *)w->paths);
   free((void *)w);
 }

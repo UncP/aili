@@ -256,7 +256,7 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
 
   // TODO: point-to-point synchronization
   // wait until all the worker collected the path information
-  barrier_wait(w->bar);
+  if (w->bar) barrier_wait(w->bar);
 
   // try to find overlap nodes in previoud worker and next worker,
   // if there is a previous worker owns the same leaf node in current worker,
@@ -267,7 +267,7 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
   execute_on_leaf_nodes(b, w);
 
   // wait until all the worker finished leaf node operation
-  barrier_wait(w->bar);
+  if (w->bar) barrier_wait(w->bar);
 
   // TODO: early temination
   // fix the split level by level
@@ -277,7 +277,7 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
 
     execute_on_branch_nodes(w, level);
 
-    barrier_wait(w->bar);
+    if (w->bar) barrier_wait(w->bar);
 
     ++level;
 
