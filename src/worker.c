@@ -18,18 +18,18 @@ worker* new_worker(uint32_t id, uint32_t total, barrier *b)
   w->total = total;
   w->bar = b;
 
-  // TODO: dynamically change this in account of batch size and worker number
   // for a 4kb node, 16 bytes key, there will be about 256 keys,
   // if there are 4 workers, 64 should be enough
+  // TODO: dynamically change this in account of batch size and worker number
   w->max_path = 64;
   w->cur_path = 0;
   w->beg_path = 0;
   w->tot_path = 0;
   w->paths = (path *)malloc(sizeof(path) * w->max_path);
 
-  // TODO: change this to `max_descend_depth`?
   // 4 is enough even in extreme situations, so it's not likely
   // more memory will be required
+  // TODO: change this to `max_descend_depth`?
   w->max_fence = 4;
   w->cur_fence[0] = 0;
   w->cur_fence[1] = 0;
@@ -166,6 +166,7 @@ void worker_redistribute_work(worker *w)
 
 // this function does exactly the same work as `worker_redistribute_work`
 // but with some critical difference
+// TODO: maybe they can be combined?
 void worker_redistribute_split_work(worker *w, uint32_t level)
 {
   // at this point, we are in `level`, but the split information is in `level-1`

@@ -171,6 +171,7 @@ static void execute_on_leaf_nodes(batch *b, worker *w)
 
 // this function does exactly the same work as `execute_on_leaf_nodes`,
 // but with some critical difference
+// TODO: maybe they can be combined?
 static void execute_on_branch_nodes(worker *w, uint32_t level)
 {
   char *fence_key;
@@ -280,9 +281,9 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
 
     ++level;
 
-    // this is a very fucking smart and elegant optimization, we use `level` as an external
-    // synchronization value, even `level` is on each thread's stack, but it is
-    // globally equal, so it can be used to avoid concurrency problems and
+    // this is a very fucking smart and simple and elegant optimization, we use `level` as an external
+    // synchronization value, although `level` is on each thread's stack, it is
+    // globally equal at the same stage, so it can be used to avoid concurrency problems and
     // save a lot of small but frequent memory allocation for split information at the same time
     worker_switch_fence(w, level);
   }

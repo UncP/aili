@@ -529,7 +529,7 @@ void btree_node_validate(node *n)
     assert(n->first != 0);
 
   // validate that keys in ascending order in this node
-  validate(n, 0);
+  node_validate(n);
 
   char first_key[max_key_size], last_key[max_key_size];
   uint32_t first_len, last_len;
@@ -551,11 +551,11 @@ void btree_node_validate(node *n)
     node_get_whole_key(n->first, n->first->keys - 1, child_last_key, &child_last_len);
     assert(compare_key(child_last_key, child_last_len, first_key, first_len) < 0);
 
-    // validate that the last key in this node is larger than the first key in the last child
+    // validate that the last key in this node is larger than or equal the first key in the last child
     index_t *index = node_index(n);
     node *last_child = (node *)get_val(n, index[n->keys - 1]);
     node_get_whole_key(last_child, 0, child_first_key, &child_first_len);
-    assert(compare_key(last_key, last_len, child_first_key, child_first_len) >= 0); // equal is allowed
+    assert(compare_key(last_key, last_len, child_first_key, child_first_len) >= 0); // equal is valid
   }
 }
 
