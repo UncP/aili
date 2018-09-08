@@ -56,6 +56,17 @@ void worker_link(worker *a, worker *b)
   b->prev = a;
 }
 
+void worker_reset(worker *w)
+{
+  // TODO: set max_path to cur_path?
+  for (uint32_t i = 0; i < w->max_path; ++i)
+    path_clear(&w->paths[i]);
+  w->cur_path = 0;
+
+  w->cur_fence[0] = 0;
+  w->cur_fence[1] = 0;
+}
+
 path* worker_get_new_path(worker *w)
 {
   // TODO: optimize memory allocation?
@@ -76,15 +87,14 @@ void worker_switch_fence(worker *w, uint32_t level)
 fence* worker_get_new_fence(worker *w, uint32_t level)
 {
   uint32_t idx = level % 2;
-  uint32_t *cur_fence = &w->cur_fence[idx];
   // TODO: optimize memory allocation?
-  if (*cur_fence == w->max_fence) {
+  if (w->cur_fence[idx] == w->max_fence) {
     w->max_fence = (uint32_t)((float)w->max_fence * 1.5);
     assert(w->fences[idx] = (fence *)realloc(w->fences[idx], sizeof(fence) * w->max_fence));
   }
   // TODO: remove this
-  assert(*cur_fence < w->max_fence);
-  return &w->fences[idx][*cur_fence++];
+  assert(w->cur_fence[idx] < w->max_fence);
+  return &w->fences[idx][w->cur_fence[idx]++];
 }
 
 void worker_get_fences(worker *w, uint32_t level, fence **fences, uint32_t *number)
@@ -222,17 +232,6 @@ void worker_redistribute_split_work(worker *w, uint32_t level)
     }
     next = next->next;
   }
-}
-
-void worker_reset(worker *w)
-{
-  // TODO: set max_path to cur_path?
-  for (uint32_t i = 0; i < w->max_path; ++i)
-    path_clear(&w->paths[i]);
-  w->cur_path = 0;
-
-  w->cur_fence[0] = 0;
-  w->cur_fence[1] = 0;
 }
 
 void init_path_iter(path_iter *iter, worker *w)

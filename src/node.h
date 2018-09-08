@@ -43,7 +43,7 @@
 typedef uint64_t val_t;
 #define value_bytes sizeof(val_t)
 
-#define set_val(ptr, val) ((*(val_t *)&ptr) = (val))
+#define set_val(ptr, val) ((*(val_t *)(ptr)) = (val))
 
 // you can change uint8_t to uint16_t so that bigger keys are supported,
 // but key length byte will take more space, also you need to update
@@ -123,8 +123,8 @@ node* path_get_node_at_level(path *p, uint32_t level);
 #ifdef Test
 
 uint32_t get_node_size();
-void print_node(node *n, int detail);
-void print_batch(batch *b, int detail);
+void node_print(node *n, int detail);
+void batch_print(batch *b, int detail);
 void node_validate(node *n);
 void batch_validate(batch *n);
 void btree_node_validate(node *n);

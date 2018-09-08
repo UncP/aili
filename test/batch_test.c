@@ -149,8 +149,8 @@ void test_print_batch()
     key[idx] = '0';
   }
 
-  print_batch(b, 0);
-  print_batch(b, 1);
+  batch_print(b, 0);
+  batch_print(b, 1);
 
   free_batch(b);
 }

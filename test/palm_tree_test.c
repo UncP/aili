@@ -13,6 +13,7 @@
 
 #include "../src/palm_tree.h"
 
+const static uint64_t value = 3190;
 static char *file;
 static int all;
 
@@ -40,7 +41,7 @@ void test_single_thread_palm_tree()
     for (int i = 0; i < ptr; ++i) {
       char *key = buf + i, *tmp = key;
       uint32_t len = 0;
-      while (tmp[len] != '\0' || tmp[len] != '\n')
+      while (tmp[len] != '\0' && tmp[len] != '\n')
         ++len;
       tmp[len] = '\0';
       i += len;
@@ -50,10 +51,10 @@ void test_single_thread_palm_tree()
         break;
       }
 
-      if (batch_add_write(b, key, len, 0) == -1) {
+      if (batch_add_write(b, key, len, (void *)value) == -1) {
         palm_tree_execute(pt, b, w);
         batch_clear(b);
-        assert(batch_add_write(b, key, len, 0) == 1);
+        assert(batch_add_write(b, key, len, (void *)value) == 1);
       }
     }
   }
@@ -62,7 +63,61 @@ void test_single_thread_palm_tree()
   palm_tree_execute(pt, b, w);
   batch_clear(b);
 
+  curr = 0;
+  flag = 1;
+  count = 0;
+  for (; (ptr = pread(fd, buf, block, curr)) > 0 && flag; curr += ptr) {
+    while (--ptr && buf[ptr] != '\n' && buf[ptr] != '\0') buf[ptr] = '\0';
+    if (ptr) buf[ptr++] = '\0';
+    else break;
+    for (int i = 0; i < ptr; ++i) {
+      char *key = buf + i, *tmp = key;
+      uint32_t len = 0;
+      while (tmp[len] != '\0' && tmp[len] != '\n')
+        ++len;
+      tmp[len] = '\0';
+      i += len;
+
+      if (count++ == all) {
+        flag = 0;
+        break;
+      }
+
+      if (batch_add_read(b, key, len) == -1) {
+        palm_tree_execute(pt, b, w);
+        for (uint32_t j = 0; j < b->keys; ++j) {
+          uint32_t op;
+          void *key = 0;
+          uint32_t klen;
+          void *val = 0;
+          batch_read_at(b, j, &op, &key, &klen, &val);
+          assert(*(uint64_t *)val == value);
+        }
+        batch_clear(b);
+        assert(batch_add_read(b, key, len) == 1);
+      }
+    }
+  }
+
+  // finish remained work
+  palm_tree_execute(pt, b, w);
+  for (uint32_t j = 0; j < b->keys; ++j) {
+    uint32_t op;
+    void *key = 0;
+    uint32_t klen;
+    void *val = 0;
+    batch_read_at(b, j, &op, &key, &klen, &val);
+    assert(*(uint64_t *)val == value);
+  }
+  batch_clear(b);
+
+  palm_tree_validate(pt);
+
   close(fd);
+
+  free_batch(b);
+  free_worker(w);
+  free_palm_tree(pt);
 }
 
 int main(int argc, char **argv)

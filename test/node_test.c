@@ -186,8 +186,8 @@ void test_node_split_level_0()
   node_validate(old);
   node_validate(new);
 
-  print_node(old, 1);
-  print_node(new, 1);
+  node_print(old, 1);
+  node_print(new, 1);
 
   free_node(old);
   free_node(new);
@@ -224,8 +224,8 @@ void test_node_split_level_1()
   node_validate(old);
   node_validate(new);
 
-  print_node(old, 1);
-  print_node(new, 1);
+  node_print(old, 1);
+  node_print(new, 1);
 
   free_node(old);
   free_node(new);
@@ -239,7 +239,7 @@ void test_print_node()
 
   node *n = new_node(Leaf, 1);
 
-  print_node(n, 1);
+  node_print(n, 1);
 
   for (uint32_t i = 0; i < len; ++i) {
     key[len - i - 1] = '1';
@@ -247,9 +247,9 @@ void test_print_node()
     key[len - i - 1] = '0';
   }
 
-  print_node(n, 0);
+  node_print(n, 0);
 
-  print_node(n, 1);
+  node_print(n, 1);
 
   free_node(n);
 }

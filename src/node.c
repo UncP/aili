@@ -87,12 +87,15 @@ void free_btree_node(node *n)
 
 node* node_descend(node *n, const void *key, uint32_t len)
 {
+  // TODO: remove this
   assert(n->level && n->keys);
 
   index_t *index = node_index(n);
   int low = 0, high = (int)n->keys - 1;
 
   if (n->pre) { // compare with node prefix
+    // TODO: remove this
+    assert(0);
     uint32_t tlen = len < n->pre ? len : n->pre;
     int r = compare_key(key, tlen, n->data, n->pre);
     if (r < 0)
@@ -116,7 +119,7 @@ node* node_descend(node *n, const void *key, uint32_t len)
   }
 
   get_kv_info(n, index[low], key2, len2, val);
-  if (compare_key(key2, len2, key1, len1) < 0)
+  if (compare_key(key2, len2, key1, len1) <= 0)
     return (node *)val;
   else
     return n->first;
@@ -178,6 +181,8 @@ int node_insert(node *n, const void *key, uint32_t len, const void *val)
   int pos = -1;
 
   if (n->pre) { // compare with node prefix
+    // TODO: remove this
+    assert(0);
     int r = compare_key(key, len, n->data, n->pre);
     if (r < 0)
       pos = 0;
@@ -409,19 +414,33 @@ uint32_t get_node_size()
 
 static char* format_kv(char *ptr, char *end, node* n, uint32_t off)
 {
-  ptr += snprintf(ptr, end - ptr, "%u  ", off);
+  ptr += snprintf(ptr, end - ptr, "%4u  ", off);
   uint32_t len = get_len(n, off);
+  ptr += snprintf(ptr, end - ptr, "%u  ", len);
   snprintf(ptr, len + 1, "%s", get_key(n, off));
   ptr += len;
-  ptr += snprintf(ptr, end - ptr, " %llu\n", (val_t)get_val(n, off));
+  ptr += snprintf(ptr, end - ptr, "  %llu\n", (val_t)get_val(n, off));
   return ptr;
 }
 
-void print_node(node *n, int detail)
+static char* format_child(char *ptr, char *end, node* n, uint32_t off)
+{
+  ptr += snprintf(ptr, end - ptr, "%4u  ", off);
+  uint32_t len = get_len(n, off);
+  ptr += snprintf(ptr, end - ptr, "%u  ", len);
+  snprintf(ptr, len + 1, "%s", get_key(n, off));
+  ptr += len;
+  node *child = (node *)get_val(n, off);
+  ptr += snprintf(ptr, end - ptr, "  %u\n", child->id);
+  return ptr;
+}
+
+void node_print(node *n, int detail)
 {
   assert(n);
   int size = (float)node_size * 1.5;
   char buf[size], *ptr = buf, *end = buf + size;
+  char* (*format)(char *, char *, node *, uint32_t) = n->level == 0 ? format_kv : format_child;
 
   ptr += snprintf(ptr, end - ptr, "id: %u  ", n->id);
   ptr += snprintf(ptr, end - ptr, "type: %s  ",
@@ -435,18 +454,18 @@ void print_node(node *n, int detail)
   index_t *index = node_index(n);
   if (detail) {
     for (uint32_t i = 0; i < n->keys; ++i)
-      ptr = format_kv(ptr, end, n, index[i]);
+      ptr = (*format)(ptr, end, n, index[i]);
   } else {
     if (n->keys > 0)
-      ptr = format_kv(ptr, end, n, index[0]);
+      ptr = (*format)(ptr, end, n, index[0]);
     if (n->keys > 1)
-      ptr = format_kv(ptr, end, n, index[n->keys - 1]);
+      ptr = (*format)(ptr, end, n, index[n->keys - 1]);
   }
 
   printf("%s\n", buf);
 }
 
-void print_batch(batch *b, int detail)
+void batch_print(batch *b, int detail)
 {
   assert(b);
   int size = (float)node_size * 1.5;
@@ -513,10 +532,13 @@ void node_get_whole_key(node *n, uint32_t idx, char *key, uint32_t *len)
   assert(idx <= n->keys);
   index_t *index = node_index(n);
   get_key_info(n, index[idx], buf, buf_len);
-  if (n->pre)
+  if (n->pre) {
+    // TODO: remove this
+    assert(0);
     memcpy(key, n->data, n->pre);
+  }
   memcpy(key + n->pre, buf, buf_len);
-  *len += n->pre + buf_len;
+  *len = buf_len + n->pre;
 }
 
 void btree_node_validate(node *n)
@@ -530,6 +552,8 @@ void btree_node_validate(node *n)
 
   // validate that keys in ascending order in this node
   node_validate(n);
+
+  if (n->keys == 0) return ; // tree is empty
 
   char first_key[max_key_size], last_key[max_key_size];
   uint32_t first_len, last_len;

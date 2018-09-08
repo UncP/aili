@@ -5,8 +5,10 @@
 **/
 
 #include <stdlib.h>
+#include <string.h>
 #include <math.h>
 #include <assert.h>
+#include <stdio.h>
 
 #include "palm_tree.h"
 
@@ -64,8 +66,6 @@ static void handle_root_split(palm_tree *pt, worker *w)
 // for each key in [beg, end), we descend to leaf node, and store each key's descending path
 static void descend_to_leaf(node *root, batch *b, uint32_t beg, uint32_t end, worker *w)
 {
-  uint32_t level = root->level;
-
   for (uint32_t i = beg; i < end; ++i) {
     uint32_t  op;
     void    *key;
@@ -78,6 +78,7 @@ static void descend_to_leaf(node *root, batch *b, uint32_t beg, uint32_t end, wo
     path_set_kv_id(p, i);
 
     // loop until we reach level 0 node, push all the node to `p` along the way
+    uint32_t level = root->level;
     node *cur = root;
     while (level--) {
       node *pre = cur;
@@ -129,7 +130,7 @@ static void execute_on_leaf_nodes(batch *b, worker *w)
     }
 
     if (op == Write) {
-      switch (node_insert(to_process, key, len, val)) {
+      switch (node_insert(to_process, key, len, (const void *)*(val_t *)val)) {
         case 1:  // key insert succeed, we set value to 1
           set_val(val, 1);
           break;
@@ -148,10 +149,10 @@ static void execute_on_leaf_nodes(batch *b, worker *w)
 
           // compare current key with fence key to determine which node to insert
           if (compare_key(key, len, fence_key, fence_len) < 0) {
-            assert(node_insert(to_process, key, len, val) == 1);
+            assert(node_insert(to_process, key, len, (const void *)*(val_t *)val) == 1);
             next = nn;
           } else {
-            assert(node_insert(nn, key, len, val) == 1);
+            assert(node_insert(nn, key, len, (const void *)*(val_t *)val) == 1);
             to_process = nn;
             next = 0;
           }
