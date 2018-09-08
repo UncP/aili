@@ -91,8 +91,6 @@ node* node_descend(node *n, const void *key, uint32_t len)
   assert(n->level && n->keys);
 
   index_t *index = node_index(n);
-  int low = 0, high = (int)n->keys - 1;
-
   if (n->pre) { // compare with node prefix
     // TODO: remove this
     assert(0);
@@ -101,28 +99,28 @@ node* node_descend(node *n, const void *key, uint32_t len)
     if (r < 0)
       return n->first;
     if (r > 0)
-      return (node *)get_val(n, index[high]);
+      return (node *)get_val(n, index[n->keys - 1]);
   }
 
   const void *key1 = key + n->pre;
   uint32_t    len1 = len - n->pre;
 
-  while (low < high) {
-    int mid = (low + high + 1) / 2;
+  int first = 0, count = (int)n->keys;
 
-    get_key_info(n, index[mid], key2, len2);
+  while (count > 0) {
+    int half = count >> 1;
+    int middle = first + half;
 
-    if (compare_key(key2, len2, key1, len1) < 0)
-      low  = mid;
-    else
-      high = mid - 1;
+    get_key_info(n, index[middle], key2, len2);
+
+    if (compare_key(key2, len2, key1, len1) <= 0) {
+      first = middle + 1;
+      count -= half + 1;
+    } else {
+      count = half;
+    }
   }
-
-  get_kv_info(n, index[low], key2, len2, val);
-  if (compare_key(key2, len2, key1, len1) <= 0)
-    return (node *)val;
-  else
-    return n->first;
+  return first ? (node *)get_val(n, index[first - 1]) : n->first;
 }
 
 // find the key in the leaf, return its pointer, if no such key, return null

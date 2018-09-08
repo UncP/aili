@@ -8,6 +8,7 @@
 #include <string.h>
 #include <math.h>
 #include <assert.h>
+// TODO: remove this
 #include <stdio.h>
 
 #include "palm_tree.h"

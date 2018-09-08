@@ -224,9 +224,6 @@ void test_node_split_level_1()
   node_validate(old);
   node_validate(new);
 
-  node_print(old, 1);
-  node_print(new, 1);
-
   free_node(old);
   free_node(new);
 }
@@ -237,7 +234,7 @@ void test_print_node()
 
   key_buf(key, 10);
 
-  node *n = new_node(Leaf, 1);
+  node *n = new_node(Leaf, 0);
 
   node_print(n, 1);
 
