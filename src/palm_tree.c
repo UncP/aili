@@ -274,7 +274,7 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
   // TODO: early temination
   // fix the split level by level
   uint32_t level = 1, root_level = pt->root->level;
-  while (level < root_level) {
+  while (level <= root_level) {
     worker_redistribute_split_work(w, level);
 
     execute_on_branch_nodes(w, level);

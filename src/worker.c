@@ -58,8 +58,7 @@ void worker_link(worker *a, worker *b)
 
 void worker_reset(worker *w)
 {
-  // TODO: set max_path to cur_path?
-  for (uint32_t i = 0; i < w->max_path; ++i)
+  for (uint32_t i = 0; i < w->cur_path; ++i)
     path_clear(&w->paths[i]);
   w->cur_path = 0;
 
