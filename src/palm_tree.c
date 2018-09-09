@@ -210,7 +210,7 @@ static void execute_on_branch_nodes(worker *w, uint32_t level)
     switch (node_insert(to_process, key, len, val)) {
       case 1:  // key insert succeed
         break;
-      case 0:  // key already inserted
+      case 0:  // key already inserted, it's not possible
         assert(0);
         break;
       case -1: { // node does not have enough space, needs to split

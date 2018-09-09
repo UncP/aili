@@ -449,6 +449,9 @@ void node_print(node *n, int detail)
   ptr += n->pre + 8;
   ptr += snprintf(ptr, end - ptr, "  offset: %u\n", n->off);
 
+  if (n->level)
+    ptr += snprintf(ptr, end - ptr, "first: %u\n", n->first->id);
+
   index_t *index = node_index(n);
   if (detail) {
     for (uint32_t i = 0; i < n->keys; ++i)
@@ -459,6 +462,9 @@ void node_print(node *n, int detail)
     if (n->keys > 1)
       ptr = (*format)(ptr, end, n, index[n->keys - 1]);
   }
+
+  if (n->next)
+    ptr += snprintf(ptr, end - ptr, "next: %u\n", n->next->id);
 
   printf("%s\n", buf);
 }
@@ -539,16 +545,16 @@ void node_get_whole_key(node *n, uint32_t idx, char *key, uint32_t *len)
   *len = buf_len + n->pre;
 }
 
+// this function is used to verify that a b+tree node is validate
+// in the tree, it verifies 4 aspects:
+//   1. the key in this node is in ascending order
+//   2. the last key in this node is smaller than the first key in next node
+//   3. the first key in this node is larger than the last key in the first child
+//   4. the last key in this node is smaller than or equal the first key in the last child
 void btree_node_validate(node *n)
 {
   if (n == 0) return ;
 
-  if (n->level == 0)
-    assert(n->first == 0);
-  else
-    assert(n->first != 0);
-
-  // validate that keys in ascending order in this node
   node_validate(n);
 
   if (n->keys == 0) return ; // tree is empty
@@ -567,17 +573,22 @@ void btree_node_validate(node *n)
   }
 
   if (n->level) {
+    assert(n->first != 0);
+
     // validate that the first key in this node is larger than the last key in the first child
     char child_last_key[max_key_size], child_first_key[max_key_size];
     uint32_t child_last_len, child_first_len;
     node_get_whole_key(n->first, n->first->keys - 1, child_last_key, &child_last_len);
     assert(compare_key(child_last_key, child_last_len, first_key, first_len) < 0);
 
-    // validate that the last key in this node is larger than or equal the first key in the last child
+    // validate that the last key in this node is smaller than or equal the first key in the last child
     index_t *index = node_index(n);
     node *last_child = (node *)get_val(n, index[n->keys - 1]);
     node_get_whole_key(last_child, 0, child_first_key, &child_first_len);
-    assert(compare_key(last_key, last_len, child_first_key, child_first_len) >= 0); // equal is valid
+    assert(compare_key(last_key, last_len, child_first_key, child_first_len) <= 0); // equal is valid
+
+  } else {
+    assert(n->first == 0);
   }
 }
 

@@ -63,6 +63,8 @@ void test_single_thread_palm_tree()
   palm_tree_execute(pt, b, w);
   batch_clear(b);
 
+  palm_tree_validate(pt);
+
   curr = 0;
   flag = 1;
   count = 0;
@@ -110,8 +112,6 @@ void test_single_thread_palm_tree()
     assert(*(uint64_t *)val == value);
   }
   batch_clear(b);
-
-  palm_tree_validate(pt);
 
   close(fd);
 
