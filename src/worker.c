@@ -235,6 +235,7 @@ void worker_redistribute_split_work(worker *w, uint32_t level)
 
 void init_path_iter(path_iter *iter, worker *w)
 {
+  // TODO: remove this
   assert(w);
   iter->current = 0;
   iter->total   = w->tot_path;
@@ -258,6 +259,7 @@ path* next_path(path_iter *iter)
 
 void init_fence_iter(fence_iter *iter, worker *w, uint32_t level)
 {
+  // TODO: remove this
   assert(w && level);
   iter->level   = (level - 1) % 2;
   iter->current = 0;

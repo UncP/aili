@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-std=c11 -Wall -O3
+CFLAGS=-std=c99 -Wall -O3
 DFLAGS=-DTest
 AFLAGS=$(CC) $(CFLAGS)
 

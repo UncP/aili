@@ -59,7 +59,7 @@ typedef uint16_t index_t;
 #define index_byte sizeof(index_t)
 
 #define node_min_size  (((uint32_t)1) << 12) //  4kb
-#define node_max_size  (((uint32_t)1) << 16) // 64kb,
+#define node_max_size  (((uint32_t)1) << 16) // 64kb
                                              // if you set `index_t` to uint32_t,
                                              // the node_max_size can be up to 4gb
 

@@ -10,12 +10,24 @@
 #include <assert.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <sys/time.h>
 
 #include "../src/palm_tree.h"
 
 const static uint64_t value = 3190;
 static char *file;
 static int all;
+
+long long mstime()
+{
+  struct timeval tv;
+  long long ust;
+
+  gettimeofday(&tv, NULL);
+  ust = ((long long)tv.tv_sec)*1000000;
+  ust += tv.tv_usec;
+  return ust / 1000;
+}
 
 // benchmark single thread performance
 void test_single_thread_palm_tree()
@@ -34,6 +46,7 @@ void test_single_thread_palm_tree()
   int block = 4 * 4096, curr = 0, ptr = 0, count = 0;
   char buf[block];
   int flag = 1;
+  long long before = mstime();
   for (; (ptr = pread(fd, buf, block, curr)) > 0 && flag; curr += ptr) {
     while (--ptr && buf[ptr] != '\n' && buf[ptr] != '\0') buf[ptr] = '\0';
     if (ptr) buf[ptr++] = '\0';
@@ -62,12 +75,15 @@ void test_single_thread_palm_tree()
   // finish remained work
   palm_tree_execute(pt, b, w);
   batch_clear(b);
+  long long after = mstime();
+  printf("\033[31mtotal: %d\033[0m\n\033[32mput time: %f  s\033[0m\n", all, (float)(after - before) / 1000);
 
   palm_tree_validate(pt);
 
   curr = 0;
   flag = 1;
   count = 0;
+  before = mstime();
   for (; (ptr = pread(fd, buf, block, curr)) > 0 && flag; curr += ptr) {
     while (--ptr && buf[ptr] != '\n' && buf[ptr] != '\0') buf[ptr] = '\0';
     if (ptr) buf[ptr++] = '\0';
@@ -112,6 +128,9 @@ void test_single_thread_palm_tree()
     assert(*(uint64_t *)val == value);
   }
   batch_clear(b);
+
+  after = mstime();
+  printf("\033[34mget time: %f  s\033[0m\n", (float)(after - before) / 1000);
 
   close(fd);
 

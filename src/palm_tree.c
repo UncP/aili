@@ -268,7 +268,7 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
   // now we process all the paths that belong to this worker
   execute_on_leaf_nodes(b, w);
 
-  // wait until all the worker finished leaf node operation
+  // wait until all the workers finish leaf node operation
   if (w->bar) barrier_wait(w->bar);
 
   // TODO: early temination
@@ -285,7 +285,7 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
 
     // this is a very fucking smart and simple and elegant optimization, we use `level` as an external
     // synchronization value, although `level` is on each thread's stack, it is
-    // globally equal at the same stage, so it can be used to avoid concurrency problems and
+    // globally equal at each stage, so it can be used to avoid concurrency problems and
     // save a lot of small but frequent memory allocation for split information at the same time
     worker_switch_fence(w, level);
   }
