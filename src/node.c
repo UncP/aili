@@ -68,6 +68,7 @@ void free_node(node *n)
   free((void *)n);
 }
 
+// dfs free each node
 void free_btree_node(node *n)
 {
   if (n == 0) return ;

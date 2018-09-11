@@ -35,28 +35,26 @@ int main(int argc, char **argv)
 
   const char *dir = "./data";
 
-  if (access(dir, F_OK)) {
+  if (access(dir, F_OK))
     assert(mkdir(dir, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IROTH) >= 0);
-  } else {
-    printf("data directory already exists\n");
-    exit(0);
-  }
 
   srand(time(NULL));
 
+  uint64_t total_len = 0;
   for (int i = 0; i < file_num; ++i) {
     char file[64];
     memset(file, 0, 64);
     memcpy(file, dir, strlen(dir));
     sprintf(file + strlen(dir), "/%d", i);
-    int fd = open(file, O_WRONLY | O_CREAT);
+    int fd = open(file, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP);
     assert(fd != -1);
     for (int j = 0; j < key_num; ++j) {
-      char key[key_len+1];
+      char key[key_len + 1];
       for (int k = 0; k < key_len; ++k)
         key[k] = string[rand() % str_len];
       key[key_len] = '\n';
-      pwrite(fd, key, key_len + 1, (uint64_t)(key_len + 1) * j);
+      pwrite(fd, key, key_len + 1, total_len);
+      total_len += key_len + 1;
     }
     fsync(fd);
     close(fd);

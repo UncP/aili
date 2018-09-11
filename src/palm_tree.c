@@ -20,6 +20,7 @@ palm_tree* new_palm_tree()
   return pt;
 }
 
+// free the entire palm tree recursively
 void free_palm_tree(palm_tree *pt)
 {
   free_btree_node(pt->root);
@@ -121,7 +122,7 @@ static void execute_on_leaf_nodes(batch *b, worker *w)
     if (cn != pn) {
       curr = cn;
       fnc.ptr = 0; // previous split has no influence on current key
-    } else if (fnc.ptr && compare_key(key, len, fnc.key, fnc.len) >= 0) {
+    } else if (fnc.ptr && compare_key(key, len, fnc.key, fnc.len) >= 0) { // equal is possible
       curr = fnc.ptr;
       fnc.ptr = 0;
     }
@@ -188,7 +189,7 @@ static void execute_on_branch_nodes(worker *w, uint32_t level)
     if (cn != pn) {
       curr = cn;
       fnc.ptr = 0; // previous split has no influence on current key
-    } else if (fnc.ptr && compare_key(key, len, fnc.key, fnc.len) >= 0) {
+    } else if (fnc.ptr && compare_key(key, len, fnc.key, fnc.len) >= 0) {  // equal is possible
       curr = fnc.ptr;
       fnc.ptr = 0;
     }
