@@ -52,6 +52,7 @@ typedef struct worker
   uint32_t  beg_fence;    // begin fence index this worker needs to process
   uint32_t  tot_fence;    // total fences that this worker needs to process
   fence    *fences[2];    // to place the fence key info, there are 2 groups for switch
+                          // each of them are sorted according to the key
 
   struct worker *prev; // previous worker with smaller id
   struct worker *next; // next worker with bigger id
@@ -61,7 +62,8 @@ worker* new_worker(uint32_t id, uint32_t total, barrier *b);
 void free_worker(worker* w);
 void worker_link(worker *a, worker *b);
 path* worker_get_new_path(worker *w);
-fence* worker_get_new_fence(worker *w, uint32_t level);
+uint32_t worker_insert_fence(worker *w, uint32_t level, fence *f);
+void worker_update_fence(worker *w, uint32_t level, fence *f, uint32_t i);
 void worker_switch_fence(worker *w, uint32_t level);
 void worker_get_fences(worker *w, uint32_t level, fence **fences, uint32_t *number);
 void worker_redistribute_work(worker *w);

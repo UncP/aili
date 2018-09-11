@@ -6,6 +6,7 @@
 
 #include <assert.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "worker.h"
 
@@ -70,7 +71,7 @@ path* worker_get_new_path(worker *w)
 {
   // TODO: optimize memory allocation?
   if (w->cur_path == w->max_path) {
-    w->max_path = (uint32_t)((float)w->max_path * 1.5);
+    w->max_path = w->max_path * 2;
     assert(w->paths = (path *)realloc(w->paths, sizeof(path) * w->max_path));
   }
   // TODO: remove this
@@ -88,12 +89,56 @@ fence* worker_get_new_fence(worker *w, uint32_t level)
   uint32_t idx = level % 2;
   // TODO: optimize memory allocation?
   if (w->cur_fence[idx] == w->max_fence) {
-    w->max_fence = (uint32_t)((float)w->max_fence * 1.5);
+    w->max_fence = w->max_fence * 2;
     assert(w->fences[idx] = (fence *)realloc(w->fences[idx], sizeof(fence) * w->max_fence));
   }
   // TODO: remove this
   assert(w->cur_fence[idx] < w->max_fence);
   return &w->fences[idx][w->cur_fence[idx]++];
+}
+
+// insert fence info in fence key order for later promotion
+// return insert position for later fence info update
+uint32_t worker_insert_fence(worker *w, uint32_t level, fence *f)
+{
+  uint32_t idx = level % 2;
+  uint32_t cur = w->cur_fence[idx];
+  if (cur == w->max_fence) {
+    w->max_fence = w->max_fence * 2;
+    assert(w->fences[idx] = (fence *)realloc(w->fences[idx], sizeof(fence) * w->max_fence));
+  }
+  // TODO: remove this
+  assert(cur < w->max_fence);
+
+  // find which index to insert new fence
+  uint32_t i = 0;
+  fence *fences = w->fences[idx];
+  for (; i < cur; ++i)
+    if (compare_key(fences[i].key, fences[i].len, f->key, f->len) > 0)
+      break;
+
+  // save the space for new fence
+  uint32_t l = cur, j = i;
+  for (; i < cur; ++i, --l)
+    memcpy(&fences[l], &fences[l - 1], sizeof(fence));
+
+  memcpy(&fences[j], f, sizeof(fence));
+  ++w->cur_fence[idx];
+
+  return j;
+}
+
+void worker_update_fence(worker *w, uint32_t level, fence *f, uint32_t i)
+{
+  uint32_t idx = level % 2;
+  uint32_t cur = w->cur_fence[idx];
+  // TODO: remove this
+  assert(cur > 0 && i < cur);
+
+  if (i == cur - 1)
+    f->ptr = 0;
+  else
+    memcpy(f, &w->fences[idx][i + 1], sizeof(fence));
 }
 
 void worker_get_fences(worker *w, uint32_t level, fence **fences, uint32_t *number)
