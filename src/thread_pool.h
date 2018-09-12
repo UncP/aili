@@ -9,6 +9,9 @@
 
 #include <pthread.h>
 
+#include "worker.h"
+#include "palm_tree.h"
+
 typedef struct thread_pool
 {
   int        num;
@@ -17,9 +20,11 @@ typedef struct thread_pool
 
   pthread_mutex_t lock;
   pthread_cond_t  cond;
+
+  worker **workers;
 }thread_pool;
 
-thread_pool* new_thread_pool(int num);
+thread_pool* new_thread_pool(int num, palm_tree *pt);
 void thread_pool_stop(thread_pool *tp);
 void free_thread_pool(thread_pool *tp);
 

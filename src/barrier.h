@@ -19,7 +19,8 @@ typedef struct barrier
   pthread_cond_t  cond;
 }barrier;
 
-void init_barrier(barrier *b, uint32_t member);
+barrier* new_barrier(uint32_t member);
+void free_barrier(barrier *b);
 void barrier_wait(barrier *b);
 
 #endif /* _barrier_h_ */

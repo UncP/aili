@@ -265,7 +265,7 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
 
     ++level;
 
-    // this is a very fucking smart and simple and elegant optimization, we use `level` as an external
+    // this is a very fucking smart and elegant optimization, we use `level` as an external
     // synchronization value, although `level` is on each thread's stack, it is
     // globally equal at each stage, so it can be used to avoid concurrency problems and
     // save a lot of small but frequent memory allocation for split information at the same time

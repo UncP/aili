@@ -10,14 +10,6 @@
 #include "node.h"
 #include "barrier.h"
 
-typedef struct fence
-{
-  path     *pth;                   // path that this fence belongs to
-  uint32_t  len;                   // key length
-  char      key[max_key_size + 1]; // key data, +1 for alignment
-  node     *ptr;                   // new node pointer
-}fence;
-
 /**
  *   every thread has a worker, worker does write/read operations to b+ tree,
  *   worker is chained together to form a double-linked list,

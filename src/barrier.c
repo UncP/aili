@@ -4,15 +4,25 @@
  *    license:    BSD-3
 **/
 
+#include <stdlib.h>
+
 #include "barrier.h"
 
-void init_barrier(barrier *b, uint32_t member)
+barrier* new_barrier(uint32_t member)
 {
+  barrier *b = (barrier *)malloc(sizeof(barrier));
   b->member = member;
   b->left = member;
   b->current = 0;
   pthread_mutex_init(&b->mutex, 0);
   pthread_cond_init(&b->cond, 0);
+
+  return b;
+}
+
+void free_barrier(barrier *b)
+{
+  free((void *)b);
 }
 
 void barrier_wait(barrier *b)

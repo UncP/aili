@@ -95,7 +95,7 @@ void node_split(node *old, node *new, char *pkey, uint32_t *plen);
  *            op       key len                           ptr
  *      |     1     |     1     |        key        |     8     |
 **/
-// TODO: different size for node and batch, batch size should be much larger than node size
+// TODO: different size for node and batch, batch size can be much larger than node size
 typedef node batch;
 
 batch* new_batch();
@@ -119,6 +119,14 @@ void path_set_kv_id(path *p, uint32_t id);
 uint32_t path_get_kv_id(path *p);
 void path_push_node(path *p, node *n);
 node* path_get_node_at_level(path *p, uint32_t level);
+
+typedef struct fence
+{
+  path     *pth;                   // path that this fence belongs to
+  uint32_t  len;                   // key length
+  char      key[max_key_size + 1]; // key data, +1 for alignment
+  node     *ptr;                   // new node pointer
+}fence;
 
 #ifdef Test
 
