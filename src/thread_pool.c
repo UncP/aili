@@ -9,40 +9,51 @@
 
 #include "thread_pool.h"
 
-typedef struct job
+typedef struct thread_arg
 {
   palm_tree *pt;
-  worker    *w;
-}
+  worker    *wrk;
+  bounded_queue *que;
+}thread_arg;
 
-static job* new_job(palm_tree *pt, worker *w)
+static thread_arg* new_thread_arg(palm_tree *pt, worker *w, bounded_queue *q)
 {
-  job *j = (job *)malloc(sizeof(job));
-  j->pt = pt;
-  j->w = w;
+  thread_arg *j = (thread_arg *)malloc(sizeof(thread_arg));
+  j->pt  = pt;
+  j->wrk = w;
+  j->que = q;
 
   return j;
 }
 
-static void free_job(job *j)
+static void free_thread_arg(thread_arg *j)
 {
   free((void *)j);
 }
 
 static void* run(void *arg)
 {
-  job *j = (job *)arg;
+  thread_arg *j = (thread_arg *)arg;
   palm_tree *pt = j->pt;
-  worker    *w  = j->w;
+  worker *w= j->wrk;
+  bounded_queue *q = j->que;
 
   while (1) {
+    batch *b = bounded_queue_top(que);
 
+    if (b)
+      palm_tree_execute(pt, b, w);
+    else
+      break;
+
+    if (w->id == 0)
+      bounded_queue_pop(que);
   }
 
-  free_job(j);
+  free_thread_arg(j);
 }
 
-thread_pool* new_thread_pool(int num, palm_tree *pt)
+thread_pool* new_thread_pool(int num, palm_tree *pt, bounded_queue *queue)
 {
   thread_pool *tp = (thread_pool *)malloc(sizeof(thread_pool));
 
@@ -50,16 +61,16 @@ thread_pool* new_thread_pool(int num, palm_tree *pt)
   if (num >= 4) num = 4;
 
   tp->num = num;
-  tp->run = 1;
+  tp->pt = pt;
   tp->ids = (pthread_t *)malloc(sizeof(pthread_t) * tp->num);
   tp->workers = (worker **)malloc(sizeof(worker *) * tp->num);
 
-  barrier *bar = tp->num > 1 ? new_barrier(tp->num) : 0;
+  tp->bar = tp->num > 1 ? new_barrier(tp->num) : 0;
 
   for (int i = 0; i < tp->num; ++i) {
-    tp->workers[i] = new_worker(i, tp->num, bar);
+    tp->workers[i] = new_worker(i, tp->num, tp->bar);
 
-    job *j = new_job(pt, tp->workers[i]);
+    thread_arg *j = new_thread_arg(tp->pt, tp->workers[i], tp->bar);
 
     assert(pthread_create(&tp->ids[i], 0, run, (void *)j) == 0);
 
@@ -67,13 +78,18 @@ thread_pool* new_thread_pool(int num, palm_tree *pt)
       worker_link(tp->workers[i - 1], tp->workers[i]);
   }
 
+  assert(pthread_mutex_init(&tp->lock, 0) == 0);
+  assert(pthread_cond_init(&tp->cond, 0) == 0);
+
   return tp;
 }
 
 void thread_pool_stop(thread_pool *tp)
 {
   pthread_mutex_lock(&tp->lock);
-  tp->run = 0;
+
+  bounded_queue_clear(tp->queue);
+
   pthread_mutex_unlock(&tp->lock);
 }
 
@@ -83,6 +99,7 @@ void free_thread_pool(thread_pool *tp)
   for (int i = 0; i < tp->num; ++i)
     free_worker(tp->workers[i]);
 
+  free((void *)tp->bar);
   free((void *)tp->workers);
   free((void *)tp->ids);
   free((void *)tp);

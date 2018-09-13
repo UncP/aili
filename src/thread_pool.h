@@ -11,6 +11,8 @@
 
 #include "worker.h"
 #include "palm_tree.h"
+#include "barrier.h"
+#include "bounded_queue.h"
 
 typedef struct thread_pool
 {
@@ -18,13 +20,16 @@ typedef struct thread_pool
   int        run;
   pthread_t *ids;
 
-  pthread_mutex_t lock;
-  pthread_cond_t  cond;
+  bounded_queue *queue;
+
+  palm_tree *pt;
 
   worker **workers;
+  barrier *bar;
+
 }thread_pool;
 
-thread_pool* new_thread_pool(int num, palm_tree *pt);
+thread_pool* new_thread_pool(int num, palm_tree *pt, bounded_queue *queue);
 void thread_pool_stop(thread_pool *tp);
 void free_thread_pool(thread_pool *tp);
 
