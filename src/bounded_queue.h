@@ -25,5 +25,9 @@ typedef struct bounded_queue
 
 bounded_queue* new_bounded_queue(int total);
 void free_bounded_queue(bounded_queue *q);
+void bounded_queue_clear(bounded_queue *q);
+void bounded_queue_push(bounded_queue *q, void *element);
+void* bounded_queue_top(bounded_queue *q);
+void bounded_queue_pop(bounded_queue *q);
 
 #endif /* _bounded_queue_h_ */

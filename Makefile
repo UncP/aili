@@ -17,7 +17,7 @@ batch_test: test/batch_test.c src/node.o
 barrier_test: test/barrier_test.c src/barrier.o
 	$(AFLAGS) -o $@ $^ $(DFLAGS)
 
-palm_tree_test: test/palm_tree_test.c src/barrier.o src/node.o src/worker.o src/palm_tree.o
+palm_tree_test: test/palm_tree_test.c src/barrier.o src/node.o src/worker.o src/palm_tree.o src/bounded_queue.o src/thread_pool.o
 	$(AFLAGS) -o $@ $^ $(DFLAGS)
 
 gen_data: ./test_data.c
