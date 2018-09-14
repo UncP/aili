@@ -20,6 +20,7 @@ bounded_queue* new_bounded_queue(int total)
   q->total = total;
   q->head = 0;
   q->tail = 0;
+  q->size = 0;
   q->clear = 0;
 
   q->array = (void **)malloc(sizeof(void *) * q->total);
@@ -35,9 +36,10 @@ void bounded_queue_clear(bounded_queue *q)
   pthread_mutex_lock(&q->mutex);
 
   q->clear = 1;
+  pthread_cond_broadcast(&q->cond);
 
   // wait until all the queue elements have been processed
-  while (q->head != q->tail)
+  while (q->size)
     pthread_cond_wait(&q->cond, &q->mutex);
 
   pthread_mutex_unlock(&q->mutex);
@@ -46,7 +48,7 @@ void bounded_queue_clear(bounded_queue *q)
 void free_bounded_queue(bounded_queue *q)
 {
   pthread_mutex_destroy(&q->mutex);
-  pthread_mutex_destroy(&q->cond);
+  pthread_cond_destroy(&q->cond);
 
   free((void *)q->array);
 
@@ -56,15 +58,18 @@ void free_bounded_queue(bounded_queue *q)
 void bounded_queue_push(bounded_queue *q, void *element)
 {
   pthread_mutex_lock(&q->mutex);
-  while (((q->tail + 1) % q->total) == q->head)
+
+  while (q->size == q->total && !q->clear)
     pthread_cond_wait(&q->cond, &q->mutex);
 
-  q->array[q->tail++] = element;
-  if (q->tail == q->total)
-    q->tail = 0;
-
-  // wake up all the workers
-  pthread_cond_broadcast(&q->cond);
+  if (!q->clear) {
+    q->array[q->tail++] = element;
+    ++q->size;
+    if (q->tail == q->total)
+      q->tail = 0;
+    // wake up all the workers
+    pthread_cond_broadcast(&q->cond);
+  }
 
   pthread_mutex_unlock(&q->mutex);
 }
@@ -74,14 +79,14 @@ void* bounded_queue_top(bounded_queue *q)
 {
   pthread_mutex_lock(&q->mutex);
 
-  while (q->head == q->tail && !q->clear)
+  while (!q->size && !q->clear)
     pthread_cond_wait(&q->cond, &q->mutex);
 
   void *r;
   if (!q->clear)
-  	r = q->array[q->head];
+    r = q->array[q->head];
   else
-  	r = 0;
+    r = 0;
 
   pthread_mutex_unlock(&q->mutex);
   return r;
@@ -91,9 +96,11 @@ void bounded_queue_pop(bounded_queue *q)
 {
   pthread_mutex_lock(&q->mutex);
 
-  if (++q->head == q->total)
-  	q->head = 0;
+  assert(q->size);
 
+  if (++q->head == q->total)
+    q->head = 0;
+  --q->size;
   pthread_cond_signal(&q->cond);
 
   pthread_mutex_unlock(&q->mutex);

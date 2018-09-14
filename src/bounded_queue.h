@@ -15,6 +15,7 @@ typedef struct bounded_queue
   int total;
   int head;
   int tail;
+  int size;
   int clear;
 
   void **array;
