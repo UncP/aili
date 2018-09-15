@@ -11,7 +11,7 @@
 
 bounded_queue* new_bounded_queue(int total)
 {
-  if (total <= 0) total = 4;
+  if (total <= 0) total = 1;
   // we don't use a big queue to avoid too much batch memory
   if (total >= 8) total = 8;
 
@@ -83,7 +83,7 @@ void* bounded_queue_top(bounded_queue *q)
     pthread_cond_wait(&q->cond, &q->mutex);
 
   void *r;
-  if (!q->clear)
+  if (q->size)
     r = q->array[q->head];
   else
     r = 0;
