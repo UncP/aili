@@ -6,6 +6,8 @@
 
 #include <stdlib.h>
 #include <assert.h>
+// TODO: remove this
+#include <stdio.h>
 
 #include "thread_pool.h"
 
@@ -42,7 +44,7 @@ static void* run(void *arg)
   barrier *bar = j->bar;
 
   while (1) {
-    // TODO: can this loop be optimized? lock-free queue?
+    // TODO: optimization?
     batch *bth = bounded_queue_top(q);
 
     if (bth)
@@ -55,7 +57,7 @@ static void* run(void *arg)
       bounded_queue_pop(q);
 
     // TODO: optimization?
-    // need to sync here to prevent a worker executing the same batch twice
+    // sync here to prevent a worker executing the same batch twice
     if (bar) barrier_wait(bar);
   }
 
@@ -95,6 +97,7 @@ thread_pool* new_thread_pool(int num, palm_tree *pt, bounded_queue *queue)
 
 void thread_pool_stop(thread_pool *tp)
 {
+  // printf("stopping thread pool\n");
   bounded_queue_clear(tp->queue);
 
   for (int i = 0; i < tp->num; ++i)

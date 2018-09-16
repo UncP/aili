@@ -35,12 +35,12 @@ void bounded_queue_clear(bounded_queue *q)
 {
   pthread_mutex_lock(&q->mutex);
 
-  q->clear = 1;
-  pthread_cond_broadcast(&q->cond);
-
   // wait until all the queue elements have been processed
   while (q->size)
     pthread_cond_wait(&q->cond, &q->mutex);
+
+  q->clear = 1;
+  pthread_cond_broadcast(&q->cond);
 
   pthread_mutex_unlock(&q->mutex);
 }
@@ -83,7 +83,7 @@ void* bounded_queue_top(bounded_queue *q)
     pthread_cond_wait(&q->cond, &q->mutex);
 
   void *r;
-  if (q->size)
+  if (!q->clear)
     r = q->array[q->head];
   else
     r = 0;

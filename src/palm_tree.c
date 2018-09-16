@@ -44,6 +44,7 @@ void palm_tree_validate(palm_tree *pt)
 
 #endif /* Test */
 
+// only processed by worker 0
 static void handle_root_split(palm_tree *pt, worker *w)
 {
   uint32_t number;
@@ -227,6 +228,9 @@ static void execute_on_branch_nodes(worker *w, uint32_t level)
 // this is the entrance for all the write/read operations
 void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
 {
+  // get root level to prevent dead lock bug when promoting node modifications
+  uint32_t root_level = pt->root->level;
+
   worker_reset(w);
 
   // calculate [beg, end) in a batch that current thread needs to process
@@ -255,7 +259,7 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
 
   // TODO: early temination
   // fix the split level by level
-  uint32_t level = 1, root_level = pt->root->level;
+  uint32_t level = 1;
   while (level <= root_level) {
     worker_redistribute_split_work(w, level);
 

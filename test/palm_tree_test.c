@@ -205,7 +205,8 @@ void test_palm_tree_with_thread_pool()
 
   free_bounded_queue(queue);
   free_thread_pool(tp);
-  batch_clear(cb);
+  for (int i = 0; i < queue_size + 1; ++i)
+    batch_clear(batches[i]);
 
   palm_tree_validate(pt);
 
