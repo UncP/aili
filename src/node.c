@@ -54,7 +54,7 @@ node* new_node(uint8_t type, uint8_t level)
   n->type  = type;
   n->level = level;
   n->pre   = 0;
-  n->id    = node_id++;
+  n->id    = __sync_fetch_and_add(&node_id, 1);
   n->keys  = 0;
   n->off   = 0;
   n->next  = 0;

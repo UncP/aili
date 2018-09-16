@@ -97,7 +97,6 @@ thread_pool* new_thread_pool(int num, palm_tree *pt, bounded_queue *queue)
 
 void thread_pool_stop(thread_pool *tp)
 {
-  // printf("stopping thread pool\n");
   bounded_queue_clear(tp->queue);
 
   for (int i = 0; i < tp->num; ++i)

@@ -7,6 +7,8 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
+// TODO: remove this
+#include <stdio.h>
 
 #include "worker.h"
 
@@ -233,23 +235,27 @@ void worker_redistribute_split_work(worker *w, uint32_t level)
     return ;
   }
 
-  // make sure there is a previous worker and previous worker has split
-  if (w->prev && w->prev->cur_fence[idx]) {
-    w->beg_fence = cur_fence;
+  int flag = 1;
+  w->beg_fence = cur_fence;
+  // we need to loop here because previous worker may not have any split, but
+  // previous previous worker may do, they might land on the same internal node
+  worker *prev = w->prev;
+  while (prev && flag) {
+    if (prev->cur_fence[idx]) {
+      path *lp = prev->fences[idx][prev->cur_fence[idx] - 1].pth;
+      node *ln = path_get_node_at_level(lp, level);
 
-    path *lp = w->prev->fences[idx][w->prev->cur_fence[idx] - 1].pth;
-    node *ln = path_get_node_at_level(lp, level);
-
-    for (uint32_t i = 0; i < cur_fence; ++i) {
-      path *cp = w->fences[idx][i].pth;
-      node *cn = path_get_node_at_level(cp, level);
-      if (ln != cn) {
-        w->beg_fence = i;
-        break;
+      for (uint32_t i = 0; i < cur_fence; ++i) {
+        path *cp = w->fences[idx][i].pth;
+        node *cn = path_get_node_at_level(cp, level);
+        if (ln != cn) {
+          w->beg_fence = i;
+          flag = 0;
+          break;
+        }
       }
     }
-  } else {
-    w->beg_fence = 0;
+    prev = prev->prev;
   }
 
   w->tot_fence = cur_fence - w->beg_fence;
@@ -328,3 +334,34 @@ fence* next_fence(fence_iter *iter)
 
   return &iter->owner->fences[iter->level][iter->offset++];
 }
+
+#ifdef Test
+
+void worker_print_path_info(worker *w)
+{
+  printf("worker %u path info\n", w->id);
+  path *p;
+  path_iter pi;
+  init_path_iter(&pi, w);
+  while ((p = next_path(&pi))) {
+    node* n = path_get_node_at_level(p, 0);
+    printf("%u ", n->id);
+  }
+  printf("\n");
+}
+
+void worker_print_fence_info(worker *w, uint32_t level)
+{
+  printf("worker %u split info at level %u\n", w->id, level);
+  printf("%u\n", w->cur_fence[(level - 1) % 2]);
+  fence *f;
+  fence_iter fi;
+  init_fence_iter(&fi, w, level);
+  while ((f = next_fence(&fi))) {
+    node *n = path_get_node_at_level(f->pth, level - 1);
+    f->key[f->len] = '\0';
+    printf("%u %s  split by:%u\n", f->ptr->id, f->key, n->id);
+  }
+}
+
+#endif

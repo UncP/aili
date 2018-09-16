@@ -87,4 +87,11 @@ typedef struct fence_iter
 void init_fence_iter(fence_iter *iter, worker *w, uint32_t level);
 fence* next_fence(fence_iter *iter);
 
+#ifdef Test
+
+void worker_print_path_info(worker *w);
+void worker_print_fence_info(worker *w, uint32_t level);
+
+#endif
+
 #endif /* _worker_h_ */
