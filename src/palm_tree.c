@@ -12,11 +12,23 @@
 #include <stdio.h>
 
 #include "palm_tree.h"
+#include "metric.h"
+#include "timer.h"
+
+static const char *stage_1 = "stage1: divide & search";
+static const char *stage_2 = "stage2: modify leaves";
+static const char *stage_3 = "stage3: promote split & modify braches";
+static const char *stage_4 = "stage4: modify root";
 
 palm_tree* new_palm_tree()
 {
   palm_tree *pt = (palm_tree *)malloc(sizeof(palm_tree));
   pt->root = new_node(Root, 0);
+
+  register_metric(stage_1);
+  register_metric(stage_2);
+  register_metric(stage_3);
+  register_metric(stage_4);
   return pt;
 }
 
@@ -233,6 +245,8 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
 
   worker_reset(w);
 
+  /*  ---  Stage 1  --- */
+  unsigned long long s1 = get_cpu_clock();
   // calculate [beg, end) in a batch that current thread needs to process
   // it's possible that a worker has no key to process
   uint32_t part = (uint32_t)ceilf((float)b->keys / w->total);
@@ -246,6 +260,9 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
   // wait until all the worker collected the path information
   if (w->bar) barrier_wait(w->bar);
 
+  /*  ---  Stage 2  --- */
+  unsigned long long s2 = get_cpu_clock();
+  add_metric(stage_1, s2 - s1);
   // try to find overlap nodes in previoud worker and next worker,
   // if there is a previous worker owns the same leaf node in current worker,
   // it will be processed by previous worker
@@ -257,8 +274,11 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
   // wait until all the workers finish leaf node operation
   if (w->bar) barrier_wait(w->bar);
 
-  // TODO: early termination
+  /*  ---  Stage 3  --- */
   // fix the split level by level
+  // TODO: early termination
+  unsigned long long s3 = get_cpu_clock();
+  add_metric(stage_2, s3 - s2);
   uint32_t level = 1;
   while (level <= root_level) {
     worker_redistribute_split_work(w, level);
@@ -276,9 +296,13 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
     worker_switch_fence(w, level);
   }
 
+  /*  ---  Stage 4  --- */
+  unsigned long long s4 = get_cpu_clock();
+  add_metric(stage_3, s4 - s3);
   if (w->id == 0)
     handle_root_split(pt, w);
 
+  add_metric(stage_4, get_cpu_clock() - s4);
   // we don't need to sync here since if there is a root split, it always falls on worker 0
   return ;
 }
