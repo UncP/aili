@@ -61,7 +61,7 @@ void worker_link(worker *a, worker *b)
 
 void worker_reset(worker *w)
 {
-  for (uint32_t i = 0; i < w->cur_path; ++i)
+  for (uint32_t i = 0; i < w->max_path; ++i)
     path_clear(&w->paths[i]);
   w->cur_path = 0;
 
@@ -143,10 +143,22 @@ void worker_update_fence(worker *w, uint32_t level, fence *f, uint32_t i)
     memcpy(f, &w->fences[idx][i + 1], sizeof(fence));
 }
 
+// loop all the workers to find the fence info for root split, this function should
+// only be called by worker 0
+// TODO: there is only one root split under any circumstances, but looping all the workers
+//       may be an expensive job, especially if this machine supports dozens of threads
 void worker_get_fences(worker *w, uint32_t level, fence **fences, uint32_t *number)
 {
-  *number = w->cur_fence[level % 2];
-  *fences = w->fences[level % 2];
+  assert(w->id == 0);
+  uint32_t idx = level % 2;
+  worker *next = w->next;
+  while (next) {
+    for (uint32_t i = 0; i < next->cur_fence[idx]; ++i)
+      worker_insert_fence(w, level, &next->fences[idx][i]);
+    next = next->next;
+  }
+  *number = w->cur_fence[idx];
+  *fences = w->fences[idx];
 }
 
 /**
@@ -223,7 +235,6 @@ void worker_redistribute_work(worker *w)
 
 // this function does exactly the same work as `worker_redistribute_work`
 // but with some critical difference
-// TODO: maybe they can be combined?
 void worker_redistribute_split_work(worker *w, uint32_t level)
 {
   // at this point, we are in `level`, but the split information is in `level-1`
@@ -235,13 +246,15 @@ void worker_redistribute_split_work(worker *w, uint32_t level)
     return ;
   }
 
-  int flag = 1;
-  w->beg_fence = cur_fence;
+  w->beg_fence = 0;
+  worker *prev = w->prev;
   // we need to loop here because previous worker may not have any split, but
   // previous previous worker may do, they might land on the same internal node
-  worker *prev = w->prev;
-  while (prev && flag) {
+  while (prev) {
+    int compared = 0;
     if (prev->cur_fence[idx]) {
+      compared = 1;
+      w->beg_fence = cur_fence;
       path *lp = prev->fences[idx][prev->cur_fence[idx] - 1].pth;
       node *ln = path_get_node_at_level(lp, level);
 
@@ -250,11 +263,12 @@ void worker_redistribute_split_work(worker *w, uint32_t level)
         node *cn = path_get_node_at_level(cp, level);
         if (ln != cn) {
           w->beg_fence = i;
-          flag = 0;
           break;
         }
       }
     }
+    if (compared)
+      break;
     prev = prev->prev;
   }
 
@@ -353,14 +367,14 @@ void worker_print_path_info(worker *w)
 void worker_print_fence_info(worker *w, uint32_t level)
 {
   printf("worker %u split info at level %u\n", w->id, level);
-  printf("%u\n", w->cur_fence[(level - 1) % 2]);
+  printf("myself:%u total:%u\n", w->cur_fence[(level - 1) % 2], w->tot_fence - w->beg_fence);
   fence *f;
   fence_iter fi;
   init_fence_iter(&fi, w, level);
   while ((f = next_fence(&fi))) {
-    node *n = path_get_node_at_level(f->pth, level - 1);
+    node *n = path_get_node_at_level(f->pth, level);
     f->key[f->len] = '\0';
-    printf("%u %s  split by:%u\n", f->ptr->id, f->key, n->id);
+    printf("%u %s  parent:%u\n", f->ptr->id, f->key, n->id);
   }
 }
 

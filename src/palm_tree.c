@@ -257,7 +257,7 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
   // wait until all the workers finish leaf node operation
   if (w->bar) barrier_wait(w->bar);
 
-  // TODO: early temination
+  // TODO: early termination
   // fix the split level by level
   uint32_t level = 1;
   while (level <= root_level) {

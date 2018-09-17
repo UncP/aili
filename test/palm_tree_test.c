@@ -198,7 +198,7 @@ void test_palm_tree_with_thread_pool()
   // finish remained work
   bounded_queue_push(queue, cb);
 
-  // wait until total_keys the batches have been executed
+  // wait until all keys in the batches have been executed
   thread_pool_stop(tp);
   long long after = mstime();
   printf("\033[31mtotal: %d\033[0m\n\033[32mput time: %f  s\033[0m\n", total_keys, (float)(after - before) / 1000);
@@ -255,7 +255,7 @@ void test_palm_tree_with_thread_pool()
   // finish remained work
   bounded_queue_push(queue, cb);
 
-  // wait until total_keys the batches have been executed
+  // wait until all keys in the batches have been executed
   thread_pool_stop(tp);
 
   for (int i = 0; i < queue_size + 1; ++i) {

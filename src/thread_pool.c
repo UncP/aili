@@ -83,13 +83,13 @@ thread_pool* new_thread_pool(int num, palm_tree *pt, bounded_queue *queue)
 
   for (int i = 0; i < tp->num; ++i) {
     tp->workers[i] = new_worker(i, tp->num, tp->bar);
-
-    thread_arg *j = new_thread_arg(tp->pt, tp->workers[i], tp->queue, tp->bar);
-
-    assert(pthread_create(&tp->ids[i], 0, run, (void *)j) == 0);
-
     if (i > 0)
       worker_link(tp->workers[i - 1], tp->workers[i]);
+  }
+
+  for (int i = 0; i < tp->num; ++i) {
+    thread_arg *j = new_thread_arg(tp->pt, tp->workers[i], tp->queue, tp->bar);
+    assert(pthread_create(&tp->ids[i], 0, run, (void *)j) == 0);
   }
 
   return tp;
