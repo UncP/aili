@@ -180,6 +180,9 @@ void test_palm_tree_with_thread_pool()
       tmp[len] = '\0';
       i += len;
 
+      if (count && (count % 1000000) == 0)
+        printf("%d\n", count);
+
       if (count++ == total_keys) {
         flag = 0;
         break;
@@ -228,6 +231,9 @@ void test_palm_tree_with_thread_pool()
         ++len;
       tmp[len] = '\0';
       i += len;
+
+      if (count && (count % 1000000) == 0)
+        printf("%d\n", count);
 
       if (count++ == total_keys) {
         flag = 0;
