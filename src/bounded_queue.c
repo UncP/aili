@@ -31,6 +31,16 @@ bounded_queue* new_bounded_queue(int total)
   return q;
 }
 
+void free_bounded_queue(bounded_queue *q)
+{
+  pthread_mutex_destroy(&q->mutex);
+  pthread_cond_destroy(&q->cond);
+
+  free((void *)q->array);
+
+  free((void *)q);
+}
+
 void bounded_queue_clear(bounded_queue *q)
 {
   pthread_mutex_lock(&q->mutex);
@@ -43,16 +53,6 @@ void bounded_queue_clear(bounded_queue *q)
   pthread_cond_broadcast(&q->cond);
 
   pthread_mutex_unlock(&q->mutex);
-}
-
-void free_bounded_queue(bounded_queue *q)
-{
-  pthread_mutex_destroy(&q->mutex);
-  pthread_cond_destroy(&q->cond);
-
-  free((void *)q->array);
-
-  free((void *)q);
 }
 
 void bounded_queue_push(bounded_queue *q, void *element)

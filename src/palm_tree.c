@@ -27,7 +27,7 @@ palm_tree* new_palm_tree(int worker_num)
     register_metric(i, stage_2, (void *)new_clock());
     register_metric(i, stage_3, (void *)new_clock());
     register_metric(i, stage_4, (void *)new_clock());
-	}
+  }
 
   palm_tree *pt = (palm_tree *)malloc(sizeof(palm_tree));
   pt->root = new_node(Root, 0);
@@ -263,7 +263,8 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
 
   // TODO: point-to-point synchronization
   // wait until all the worker collected the path information
-  if (w->bar) barrier_wait(w->bar);
+  // if (w->bar) barrier_wait(w->bar);
+  worker_sync(w, 0);
 
   struct clock c1 = clock_get(), d1 = clock_get_duration(&c, &c1);
   update_metric(w->id, stage_1, &d1, clock_update);
@@ -279,7 +280,8 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
   execute_on_leaf_nodes(b, w);
 
   // wait until all the workers finish leaf node operation
-  if (w->bar) barrier_wait(w->bar);
+  // if (w->bar) barrier_wait(w->bar);
+  worker_sync(w, 1);
 
   struct clock c2 = clock_get(), d2 = clock_get_duration(&c1, &c2);
   update_metric(w->id, stage_2, &d2, clock_update);
@@ -294,9 +296,10 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
 
     execute_on_branch_nodes(w, level);
 
-    if (w->bar) barrier_wait(w->bar);
-
     ++level;
+
+    // if (w->bar) barrier_wait(w->bar);
+    worker_sync(w, level);
 
     // this is a very fucking smart and elegant optimization, we use `level` as an external
     // synchronization value, although `level` is on each thread's stack, it is

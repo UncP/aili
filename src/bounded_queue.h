@@ -9,7 +9,6 @@
 
 #include <pthread.h>
 
-// a bounded queue designed for palm tree
 typedef struct bounded_queue
 {
   int total;

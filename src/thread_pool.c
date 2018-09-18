@@ -99,6 +99,7 @@ void thread_pool_stop(thread_pool *tp)
 {
   bounded_queue_clear(tp->queue);
 
+  // collect all the child threads
   for (int i = 0; i < tp->num; ++i)
     assert(pthread_join(tp->ids[i], 0) == 0);
 }

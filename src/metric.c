@@ -11,7 +11,7 @@
 
 #include "metric.h"
 
-#define max_metric_entry 64
+#define max_metric_entry 32
 
 typedef struct metric
 {

@@ -10,6 +10,8 @@
 #include "node.h"
 #include "barrier.h"
 
+typedef struct _channel channel;
+
 /**
  *   every thread has a worker, worker does write/read operations to b+ tree,
  *   worker is chained together to form a double-linked list,
@@ -48,6 +50,13 @@ typedef struct worker
 
   struct worker *prev; // previous worker with smaller id
   struct worker *next; // next worker with bigger id
+
+  /* point to point synchronization */
+  channel *ch;
+  node    *their_last;
+  node    *my_first;
+  node    *my_last;
+  node    *their_first;
 }worker;
 
 worker* new_worker(uint32_t id, uint32_t total, barrier *b);
@@ -61,6 +70,7 @@ void worker_get_fences(worker *w, uint32_t level, fence **fences, uint32_t *numb
 void worker_redistribute_work(worker *w);
 void worker_redistribute_split_work(worker *w, uint32_t level);
 void worker_reset(worker *w);
+void worker_sync(worker *w, uint32_t level);
 
 // used to iterate the paths processed by one worker, but path may be in several workers
 typedef struct path_iter

@@ -12,6 +12,66 @@
 
 #include "worker.h"
 
+// a magic number for pointer, no pointer will be equal with it
+#define magic_pointer 913
+
+// a channel specially tailored for palm tree algorithm, not the channel you see in Go or Rust
+struct _channel
+{
+  int    total;
+  void **last;
+  void **first;
+};
+
+channel* new_channel(int total)
+{
+  channel *c = (channel *)malloc(sizeof(channel));
+
+  c->total = total;
+  c->first = (void **)calloc(c->total, sizeof(void *));
+  c->last  = (void **)calloc(c->total, sizeof(void *));
+
+  return c;
+}
+
+void free_channel(channel *c)
+{
+  free((void *)c->last);
+  free((void *)c->first);
+
+  free((void *)c);
+}
+
+void channel_reset(channel *c)
+{
+  memset(c->first, 0, c->total * sizeof(void *));
+  memset(c->last,  0, c->total * sizeof(void *));
+}
+
+void channel_set_first(channel *c, uint32_t idx, void *ptr)
+{
+  assert(idx < c->total);
+  __sync_val_compare_and_swap((uint64_t *)c->first[idx], 0, (uint64_t)ptr);
+}
+
+void channel_set_last(channel *c, uint32_t idx, void *ptr)
+{
+  assert(idx < c->total);
+  __sync_val_compare_and_swap((uint64_t *)c->last[idx], 0, (uint64_t)ptr);
+}
+
+void* channel_get_first(channel *c, uint32_t idx)
+{
+  assert(idx < c->total);
+  return (void *)__sync_val_compare_and_swap((uint64_t *)c->first[idx], 0, 0);
+}
+
+void* channel_get_last(channel *c, uint32_t idx)
+{
+  assert(idx < c->total);
+  return (void *)__sync_val_compare_and_swap((uint64_t *)c->last[idx], 0, 0);
+}
+
 worker* new_worker(uint32_t id, uint32_t total, barrier *b)
 {
   assert(id < total);
@@ -42,11 +102,15 @@ worker* new_worker(uint32_t id, uint32_t total, barrier *b)
   w->prev = 0;
   w->next = 0;
 
+  w->ch = new_channel(max_descend_depth);
+
   return w;
 }
 
 void free_worker(worker* w)
 {
+  free_channel(w->ch);
+
   free((void *)w->fences[0]);
   free((void *)w->fences[1]);
   free((void *)w->paths);
@@ -67,6 +131,8 @@ void worker_reset(worker *w)
 
   w->cur_fence[0] = 0;
   w->cur_fence[1] = 0;
+
+  channel_reset(w->ch);
 }
 
 path* worker_get_new_path(worker *w)
@@ -296,6 +362,103 @@ void worker_redistribute_split_work(worker *w, uint32_t level)
     }
     next = next->next;
   }
+}
+
+/**
+ *   point to point synchronization pseudo code
+ *
+ *   sent-first,  sent-last  = false
+ *   their-first, their-last = NULL
+ *
+ *   initialize my-first, my-last
+ *
+ *   while ¬ ∧ {their-first, their-last, sent-first, sent-last} {
+ *       if my-first ∧ ¬sent-first
+ *           SEND-FIRST(i − 1, d, my-first)
+ *           sent-first = true
+ *
+ *       if my-last ∧ ¬sent-last
+ *           SEND-LAST(i + 1, d, my-last)
+ *           sent-last = true
+ *
+ *       if ¬their-first
+ *           their-first = TRY-RECV-FIRST(i + 1, d)
+ *
+ *       if their-first ∧ ¬my-first
+ *           my-first = their-first
+ *
+ *       if ¬their-last
+ *           their-last = TRY-RECV-LAST(i − 1, d)
+ *
+ *       if their-last ∧ ¬my-last
+ *           my-last = their-last
+ *   }
+ *
+ *
+ *   node sequence:
+ *     their-last  my-first  my-last  their-first
+ *   they can be overlapped
+**/
+void worker_sync(worker *w, uint32_t level)
+{
+  int set_first = 0, set_last = 0;
+  node *their_first = 0, *their_last = 0;
+
+  node *my_first = 0, *my_last = 0;
+
+  // handle worker boundary case
+  if (w->id == 0) {
+    set_first = 1;
+    their_last = (node *)magic_pointer; // as long as it's not zero
+  }
+  if (w->id == w->total - 1) {
+    set_last = 1;
+    their_first = (node *)magic_pointer; // as long as it's not zero
+  }
+
+  // initialize `my` node info
+  if (level == 0) { // we are descending to leaf
+    if (w->cur_path) {
+      my_first = path_get_node_at_level(&w->paths[0], level);
+      my_last  = path_get_node_at_level(&w->paths[w->cur_path - 1], level);
+    }
+  } else { // we are promoting split
+    uint32_t idx = (level - 1) % 2;
+    if (w->cur_fence[idx]) {
+      my_first = path_get_node_at_level(w->fences[idx][0].pth, level);
+      my_last  = path_get_node_at_level(w->fences[idx][w->cur_fence[idx] - 1].pth, level);
+    }
+  }
+
+  while (!(set_first && set_last && their_first && their_last)) {
+    if (my_first && !set_first) {
+      channel_set_first(w->prev->ch, level, (void *)my_first); // `w->prev` can't be NULL
+      set_first = 1;
+    }
+
+    if (my_last && !set_last) {
+      channel_set_last(w->next->ch, level, (void *)my_last); // `w->next` can't be NULL
+      set_last = 1;
+    }
+
+    if (!their_first)
+      their_first = (node *)channel_get_first(w->ch, level);
+
+    if (their_first && !my_first)
+      my_first = their_first;
+
+    if (!their_last)
+      their_last = (node *)channel_get_last(w->ch, level);
+
+    if (their_last && !my_last)
+      my_last = their_last;
+  }
+
+  // record boundary nodes for later work redistribution
+  w->their_last  = their_last;
+  w->my_first    = my_first;
+  w->my_last     = my_last;
+  w->their_first = their_first;
 }
 
 void init_path_iter(path_iter *iter, worker *w)
