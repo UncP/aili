@@ -17,6 +17,7 @@
 #include "../src/worker.h"
 #include "../src/bounded_queue.h"
 #include "../src/thread_pool.h"
+#include "../src/clock.h"
 #include "../src/metric.h"
 
 const static uint64_t value = 3190;
@@ -39,7 +40,8 @@ long long mstime()
 // benchmark single thread performance without thread pool
 void test_single_thread_palm_tree()
 {
-  palm_tree *pt = new_palm_tree();
+  init_metric(1);
+  palm_tree *pt = new_palm_tree(1);
   worker *w = new_worker(0, 1, NULL);
   batch *b = new_batch();
 
@@ -144,13 +146,14 @@ void test_single_thread_palm_tree()
   free_batch(b);
   free_worker(w);
   free_palm_tree(pt);
+  free_metric();
 }
 
 // benchmark single thread performance with thread pool
 void test_palm_tree_with_thread_pool()
 {
-  init_metric();
-  palm_tree *pt = new_palm_tree();
+  init_metric(thread_number);
+  palm_tree *pt = new_palm_tree(thread_number);
   bounded_queue *queue = new_bounded_queue(queue_size);
   batch *batches[queue_size + 1];
   thread_pool *tp = new_thread_pool(thread_number, pt, queue);
@@ -207,7 +210,7 @@ void test_palm_tree_with_thread_pool()
   thread_pool_stop(tp);
   long long after = mstime();
   printf("\033[31mtotal: %d\033[0m\n\033[32mput time: %f  s\033[0m\n", total_keys, (float)(after - before) / 1000);
-  show_metric();
+  show_metric(clock_print);
 
   free_bounded_queue(queue);
   free_thread_pool(tp);
@@ -282,6 +285,10 @@ void test_palm_tree_with_thread_pool()
   after = mstime();
   printf("\033[34mget time: %f  s\033[0m\n", (float)(after - before) / 1000);
 
+  close(fd);
+
+  show_metric(clock_print);
+
   free_bounded_queue(queue);
   free_thread_pool(tp);
 
@@ -289,10 +296,7 @@ void test_palm_tree_with_thread_pool()
     free_batch(batches[i]);
   free_palm_tree(pt);
 
-  show_metric();
   free_metric();
-
-  close(fd);
 }
 
 int main(int argc, char **argv)
