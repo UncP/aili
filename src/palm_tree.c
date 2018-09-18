@@ -261,9 +261,6 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
   // descend to leaf for each key that belongs to this worker in this batch
   descend_to_leaf(pt->root, b, beg, end, w);
 
-  // TODO: point-to-point synchronization
-  // wait until all the worker collected the path information
-  // if (w->bar) barrier_wait(w->bar);
   worker_sync(w, 0);
 
   struct clock c1 = clock_get(), d1 = clock_get_duration(&c, &c1);
@@ -274,13 +271,11 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
   // try to find overlap nodes in previoud worker and next worker,
   // if there is a previous worker owns the same leaf node in current worker,
   // it will be processed by previous worker
-  worker_redistribute_work(w);
+  worker_redistribute_work(w, 0);
 
   // now we process all the paths that belong to this worker
   execute_on_leaf_nodes(b, w);
 
-  // wait until all the workers finish leaf node operation
-  // if (w->bar) barrier_wait(w->bar);
   worker_sync(w, 1);
 
   struct clock c2 = clock_get(), d2 = clock_get_duration(&c1, &c2);
@@ -292,13 +287,12 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
   // TODO: early termination
   uint32_t level = 1;
   while (level <= root_level) {
-    worker_redistribute_split_work(w, level);
+    worker_redistribute_work(w, level);
 
     execute_on_branch_nodes(w, level);
 
     ++level;
 
-    // if (w->bar) barrier_wait(w->bar);
     worker_sync(w, level);
 
     // this is a very fucking smart and elegant optimization, we use `level` as an external

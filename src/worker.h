@@ -67,8 +67,7 @@ uint32_t worker_insert_fence(worker *w, uint32_t level, fence *f);
 void worker_update_fence(worker *w, uint32_t level, fence *f, uint32_t i);
 void worker_switch_fence(worker *w, uint32_t level);
 void worker_get_fences(worker *w, uint32_t level, fence **fences, uint32_t *number);
-void worker_redistribute_work(worker *w);
-void worker_redistribute_split_work(worker *w, uint32_t level);
+void worker_redistribute_work(worker *w, uint32_t level);
 void worker_reset(worker *w);
 void worker_sync(worker *w, uint32_t level);
 

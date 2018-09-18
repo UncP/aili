@@ -13,7 +13,7 @@
 #include "worker.h"
 
 // a magic number for pointer, no pointer will be equal with it
-#define magic_pointer 913
+#define magic_pointer (node *)913
 
 // a channel specially tailored for palm tree algorithm, not the channel you see in Go or Rust
 struct _channel
@@ -103,6 +103,10 @@ worker* new_worker(uint32_t id, uint32_t total, barrier *b)
   w->next = 0;
 
   w->ch = new_channel(max_descend_depth);
+  w->their_last  = 0;
+  w->my_first    = 0;
+  w->my_last     = 0;
+  w->their_first = 0;
 
   return w;
 }
@@ -228,143 +232,6 @@ void worker_get_fences(worker *w, uint32_t level, fence **fences, uint32_t *numb
 }
 
 /**
- *  since two paths may descend to the same leaf node, but only one worker
- *  can write that node, so this function is to find out the paths that
- *  this worker should process. there are modifications to worker's path that
- *  may cause concurrency problems since this function is called by each worker
- *  at the same time, but we use some trick to avoid it.
- *  there is a chance that this worker will not have any path to process,
- *  especially when sequential insertion happens
- *
- *  this function is actually very neat :), it does not only avoid the concurrency
- *  problem, but also avoids the memory allocation problem
-**/
-void worker_redistribute_work(worker *w)
-{
-  // this worker does not have any path
-  if (w->cur_path == 0) {
-    w->tot_path = 0;
-    return ;
-  }
-
-  // we don't modify `cur_path` in this function because this is visible to other workers
-  // but we can safely modify `beg_path`
-
-  // decide which path we start to process in this worker
-  if (w->prev) {
-    // we set `beg_path` to `cur_path` because there is a chance that no path in this worker
-    // will be processed by this worker
-    w->beg_path = w->cur_path;
-
-    // `w->prev->cur_path` can't be 0 if this worker has non-zero path
-    path *lp = &w->prev->paths[w->prev->cur_path - 1];
-    node *ln = path_get_node_at_level(lp, 0);
-    for (uint32_t i = 0; i < w->cur_path; ++i) {
-      path *cp = &w->paths[i];
-      node *cn = path_get_node_at_level(cp, 0);
-      if (ln != cn) {
-        w->beg_path = i;
-        break;
-      }
-    }
-  } else {
-    // since there is no previous worker, all the paths in this worker are processed by this worker
-    w->beg_path = 0;
-  }
-
-  // calculate the paths needs to process in this worker
-  w->tot_path = w->cur_path - w->beg_path;
-
-  // if we don't have any path for this worker, we can return directly since
-  // there will not be any path for this worker in next workers
-  if (w->tot_path == 0) return ;
-
-  path *lp = &w->paths[w->cur_path - 1];
-  node *ln = path_get_node_at_level(lp, 0);
-  // calculate the paths needs to process in other workers, it may cover several workers
-  // escpecially when sequential insertion happens
-  worker *next = w->next;
-  while (next && next->cur_path) {
-    for (uint32_t i = 0; i < next->cur_path; ++i) {
-      path *np = &next->paths[i];
-      node *nn = path_get_node_at_level(np, 0);
-      if (nn != ln)
-        // once there is a path leaf node not the same with this worker's last path leaf node, return
-        return ;
-      else
-        // we have another path in next workers to process
-        ++w->tot_path;
-    }
-    next = next->next;
-  }
-}
-
-// this function does exactly the same work as `worker_redistribute_work`
-// but with some critical difference
-void worker_redistribute_split_work(worker *w, uint32_t level)
-{
-  // at this point, we are in `level`, but the split information is in `level-1`
-  uint32_t idx = (level - 1) % 2;
-  uint32_t cur_fence = w->cur_fence[idx];
-  // no split, return directly
-  if (cur_fence == 0) {
-    w->tot_fence = 0;
-    return ;
-  }
-
-  w->beg_fence = 0;
-  worker *prev = w->prev;
-  // we need to loop here because previous worker may not have any split, but
-  // previous previous worker may do, they might land on the same internal node
-  while (prev) {
-    int compared = 0;
-    if (prev->cur_fence[idx]) {
-      compared = 1;
-      w->beg_fence = cur_fence;
-      path *lp = prev->fences[idx][prev->cur_fence[idx] - 1].pth;
-      node *ln = path_get_node_at_level(lp, level);
-
-      for (uint32_t i = 0; i < cur_fence; ++i) {
-        path *cp = w->fences[idx][i].pth;
-        node *cn = path_get_node_at_level(cp, level);
-        if (ln != cn) {
-          w->beg_fence = i;
-          break;
-        }
-      }
-    }
-    if (compared)
-      break;
-    prev = prev->prev;
-  }
-
-  w->tot_fence = cur_fence - w->beg_fence;
-
-  if (w->tot_fence == 0) return ;
-
-  path *lp = w->fences[idx][cur_fence - 1].pth;
-  node *ln = path_get_node_at_level(lp, level);
-
-  worker *next = w->next;
-  // we can't do an early termination like the function above because
-  // it's possible that next worker does not has split, but next next worker
-  // does, they might land on the same internal node
-  while (next) {
-    uint32_t next_fence = next->cur_fence[idx];
-    fence *fences = next->fences[idx];
-    for (uint32_t i = 0; i < next_fence; ++i) {
-      path *np = fences[i].pth;
-      node *nn = path_get_node_at_level(np, level);
-      if (nn != ln)
-        return ;
-      else
-        ++w->tot_fence;
-    }
-    next = next->next;
-  }
-}
-
-/**
  *   point to point synchronization pseudo code
  *
  *   sent-first,  sent-last  = false
@@ -399,6 +266,7 @@ void worker_redistribute_split_work(worker *w, uint32_t level)
  *     their-last  my-first  my-last  their-first
  *   they can be overlapped
 **/
+// TODO: save more info for later redistribute work
 void worker_sync(worker *w, uint32_t level)
 {
   int set_first = 0, set_last = 0;
@@ -409,11 +277,11 @@ void worker_sync(worker *w, uint32_t level)
   // handle worker boundary case
   if (w->id == 0) {
     set_first = 1;
-    their_last = (node *)magic_pointer; // as long as it's not zero
+    their_last = magic_pointer; // as long as it's not zero
   }
   if (w->id == w->total - 1) {
     set_last = 1;
-    their_first = (node *)magic_pointer; // as long as it's not zero
+    their_first = magic_pointer; // as long as it's not zero
   }
 
   // initialize `my` node info
@@ -430,6 +298,8 @@ void worker_sync(worker *w, uint32_t level)
     }
   }
 
+  // we don't use sched_yield() or functions like that,
+  // we just keep each thread busy
   while (!(set_first && set_last && their_first && their_last)) {
     if (my_first && !set_first) {
       channel_set_first(w->prev->ch, level, (void *)my_first); // `w->prev` can't be NULL
@@ -459,6 +329,85 @@ void worker_sync(worker *w, uint32_t level)
   w->my_first    = my_first;
   w->my_last     = my_last;
   w->their_first = their_first;
+}
+
+void worker_redistribute_work(worker *w, uint32_t level)
+{
+  if (level == 0) {
+    if (w->cur_path == 0) {
+      w->tot_path = 0;
+      return ;
+    }
+    if (w->their_last != magic_pointer) {
+      w->beg_path = w->cur_path;
+      for (uint32_t i = 0; i < w->cur_path; ++i) {
+        path *cp = &w->paths[i];
+        node *cn = path_get_node_at_level(cp, level);
+        if (cn != w->their_last) {
+          w->beg_path = i;
+          break;
+        }
+      }
+    } else {
+      w->beg_path = 0;
+    }
+
+    w->tot_path = w->cur_path - w->beg_path;
+
+    if (w->tot_path == 0 || w->my_last != w->their_first) return ;
+
+    worker *next = w->next;
+    while (next && next->cur_path) {
+      for (uint32_t i = 0; i < next->cur_path; ++i) {
+        path *np = &next->paths[i];
+        node *nn = path_get_node_at_level(np, level);
+        if (nn != w->my_last)
+          return ;
+        else
+          ++w->tot_path;
+      }
+      next = next->next;
+    }
+  } else {
+    uint32_t idx = (level - 1) % 2;
+    uint32_t cur_fence = w->cur_fence[idx];
+    if (cur_fence == 0) {
+      w->tot_fence = 0;
+      return ;
+    }
+    if (w->their_last != magic_pointer) {
+      w->beg_fence = cur_fence;
+      for (uint32_t i = 0; i < cur_fence; ++i) {
+        path *cp = w->fences[idx][i].pth;
+        node *cn = path_get_node_at_level(cp, level);
+        if (cn != w->their_last) {
+          w->beg_fence = i;
+          break;
+        }
+      }
+    } else {
+      w->beg_fence = 0;
+    }
+
+    w->tot_fence = cur_fence - w->beg_fence;
+
+    if (w->tot_fence == 0 || w->my_last != w->their_first) return ;
+
+    worker *next = w->next;
+    while (next) {
+      uint32_t next_fence = next->cur_fence[idx];
+      fence *fences = next->fences[idx];
+      for (uint32_t i = 0; i < next_fence; ++i) {
+        path *np = fences[i].pth;
+        node *nn = path_get_node_at_level(np, level);
+        if (nn != w->my_last)
+          return ;
+        else
+          ++w->tot_fence;
+      }
+      next = next->next;
+    }
+  }
 }
 
 void init_path_iter(path_iter *iter, worker *w)
