@@ -16,6 +16,7 @@
 #define magic_pointer (node *)913
 
 // a channel specially tailored for palm tree algorithm, not the channel you see in Go or Rust
+// used for atomic set & get
 struct _channel
 {
   int    total;

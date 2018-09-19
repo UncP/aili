@@ -31,7 +31,7 @@ int main(int argc, char **argv)
   if (key_len > 255) key_len = 255;
 
   const char *string = "abcdefghijklmnopqrstuvwxyz0123456789";
-  const size_t str_len = strlen(string);
+  const int str_len = strlen(string);
 
   const char *dir = "./data";
 
