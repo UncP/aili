@@ -54,6 +54,7 @@ node* new_node(uint8_t type, uint8_t level)
   n->type  = type;
   n->level = level;
   n->pre   = 0;
+  // two or more threads can be creating new node at the same time, increase node-id atomically
   n->id    = __sync_fetch_and_add(&node_id, 1);
   n->keys  = 0;
   n->off   = 0;
@@ -68,7 +69,7 @@ void free_node(node *n)
   free((void *)n);
 }
 
-// dfs free each node
+// DFS free each node
 void free_btree_node(node *n)
 {
   if (n == 0) return ;
@@ -127,6 +128,7 @@ node* node_descend(node *n, const void *key, uint32_t len)
 // find the key in the leaf, return its pointer, if no such key, return null
 void* node_search(node *n, const void *key, uint32_t len)
 {
+  // TODO: remove this
   assert(n->level == 0);
 
   if (n->keys == 0) return 0;
@@ -391,6 +393,7 @@ uint32_t path_get_kv_id(path *p)
 
 void path_push_node(path *p, node *n)
 {
+  // TODO: remove this
   assert(p->depth < max_descend_depth);
   p->nodes[p->depth++] = n;
 }

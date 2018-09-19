@@ -10,9 +10,9 @@
 #include <pthread.h>
 
 #include "worker.h"
-#include "palm_tree.h"
 #include "barrier.h"
 #include "bounded_queue.h"
+#include "palm_tree.h"
 
 typedef struct thread_pool
 {
@@ -21,8 +21,6 @@ typedef struct thread_pool
   pthread_t *ids;
 
   bounded_queue *queue;
-
-  palm_tree *pt;
 
   worker **workers;
   barrier *bar;

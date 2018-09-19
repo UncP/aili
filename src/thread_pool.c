@@ -75,7 +75,6 @@ thread_pool* new_thread_pool(int num, palm_tree *pt, bounded_queue *queue)
 
   tp->num = num;
   tp->queue = queue;
-  tp->pt = pt;
   tp->ids = (pthread_t *)malloc(sizeof(pthread_t) * tp->num);
   tp->workers = (worker **)malloc(sizeof(worker *) * tp->num);
 
@@ -88,7 +87,7 @@ thread_pool* new_thread_pool(int num, palm_tree *pt, bounded_queue *queue)
   }
 
   for (int i = 0; i < tp->num; ++i) {
-    thread_arg *j = new_thread_arg(tp->pt, tp->workers[i], tp->queue, tp->bar);
+    thread_arg *j = new_thread_arg(pt, tp->workers[i], tp->queue, tp->bar);
     assert(pthread_create(&tp->ids[i], 0, run, (void *)j) == 0);
   }
 

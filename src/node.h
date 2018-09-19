@@ -8,8 +8,8 @@
  *   B+ tree node is k-v storage unit & internal index unit
  *
  *   layout of a node in bytes:
- *       type    level   prefix             id         keys        offset    next node  first child
- *     |   1   |   1   |   1   |   1   |     4     |     4     |     4     |     8     |     8     |
+ *       type    level    prefix        id         keys        offset     next node    first child
+ *     |   1   |   1   |     2     |     4     |     4     |     4     |      8      |      8      |
  *     |        prefix data        |                          kv paris                             |
  *     |                                     kv pairs                                              |
  *     |                                     kv pairs                                              |
@@ -72,8 +72,8 @@ typedef struct node
   uint32_t     keys;    // number of keys
   uint32_t     off;     // current data offset
   struct node *next;    // pointer to the right child
-  struct node *first;   // pointer to the first child if it's level > 0
-  char         data[0];
+  struct node *first;   // pointer to the first child if level > 0, otherwise NULL
+  char         data[0]; // to palce the prefix & the index & all the k-v pairs
 }node;
 
 void set_node_size(uint32_t size);
@@ -88,8 +88,7 @@ void* node_search(node *n, const void *key, uint32_t len);
 void node_split(node *old, node *new, char *pkey, uint32_t *plen);
 
 /**
- *   batch is a wrapper for node with some differences,
- *   key may be duplicated, also it does not support prefix compression
+ *   batch is a wrapper for node with some difference, key may be duplicated
  *
  *   layout of kv pair in batch:
  *            op       key len                           ptr
@@ -109,8 +108,8 @@ int batch_read_at(batch *b, uint32_t idx, uint32_t *op, void **key, uint32_t *le
 
 // the root to leaf descending path of one kv
 typedef struct path {
-  uint32_t  id;                       // id of the kv in a batch
-  uint32_t  depth;                    // current levels
+  uint32_t  id;                       // id of the kv in the batch
+  uint32_t  depth;                    // node number in this path
   node     *nodes[max_descend_depth]; // nodes[0] is root
 }path;
 

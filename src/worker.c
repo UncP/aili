@@ -363,8 +363,7 @@ void worker_redistribute_work(worker *w, uint32_t level)
 
     w->tot_path = w->cur_path - w->beg_path;
 
-    if (w->tot_path == 0)
-      return ;
+    if (w->tot_path == 0) return ;
 
     worker *next = w->next;
     while (next && next->cur_path) {
