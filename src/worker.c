@@ -291,6 +291,7 @@ void worker_sync(worker *w, uint32_t level)
       my_last  = path_get_node_at_level(&w->paths[w->cur_path - 1], level);
     }
   } else { // we are promoting split
+    --level;
     uint32_t idx = (level - 1) % 2;
     if (w->cur_fence[idx]) {
       my_first = path_get_node_at_level(w->fences[idx][0].pth, level);
@@ -354,7 +355,8 @@ void worker_redistribute_work(worker *w, uint32_t level)
 
     w->tot_path = w->cur_path - w->beg_path;
 
-    if (w->tot_path == 0 || w->their_first == magic_pointer || w->my_last != w->their_first) return ;
+    if (w->tot_path == 0 || w->their_first == magic_pointer || w->my_last != w->their_first)
+      return ;
 
     worker *next = w->next;
     while (next && next->cur_path) {
@@ -391,7 +393,8 @@ void worker_redistribute_work(worker *w, uint32_t level)
 
     w->tot_fence = cur_fence - w->beg_fence;
 
-    if (w->tot_fence == 0 || w->their_first == magic_pointer || w->my_last != w->their_first) return ;
+    if (w->tot_fence == 0 || w->their_first == magic_pointer || w->my_last != w->their_first)
+      return ;
 
     worker *next = w->next;
     while (next) {
