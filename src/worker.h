@@ -70,6 +70,8 @@ void worker_get_fences(worker *w, uint32_t level, fence **fences, uint32_t *numb
 void worker_redistribute_work(worker *w, uint32_t level);
 void worker_reset(worker *w);
 void worker_sync(worker *w, uint32_t level);
+void worker_execute_on_leaf_nodes(worker *w, batch *b);
+void worker_execute_on_branch_nodes(worker *w, uint32_t level);
 
 // used to iterate the paths processed by one worker, but path may be in several workers
 typedef struct path_iter

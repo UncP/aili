@@ -83,7 +83,7 @@ static void handle_root_split(palm_tree *pt, worker *w)
 }
 
 // for each key in [beg, end), we descend to leaf node, and store each key's descending path
-static void descend_to_leaf(node *root, batch *b, uint32_t beg, uint32_t end, worker *w)
+static void descend_to_leaf(palm_tree *pt, batch *b, uint32_t beg, uint32_t end, worker *w)
 {
   for (uint32_t i = beg; i < end; ++i) {
     uint32_t  op;
@@ -97,8 +97,8 @@ static void descend_to_leaf(node *root, batch *b, uint32_t beg, uint32_t end, wo
     path_set_kv_id(p, i);
 
     // loop until we reach level 0 node, push all the node to `p` along the way
-    uint32_t level = root->level;
-    node *cur = root;
+    uint32_t level = pt->root->level;
+    node *cur = pt->root;
     while (level--) {
       node *pre = cur;
       cur = node_descend(cur, key, len);
@@ -110,133 +110,6 @@ static void descend_to_leaf(node *root, batch *b, uint32_t beg, uint32_t end, wo
     assert(cur && cur->level == 0);
 
     path_push_node(p, cur);
-  }
-}
-
-// process keys assigned to this worker in leaf nodes, worker has already obtained the path information
-static void execute_on_leaf_nodes(batch *b, worker *w)
-{
-  fence fnc;
-  node *pn   = 0; // previous path node
-  node *curr = 0; // node actually to process the key
-
-  path_iter iter;
-  path *cp;
-  init_path_iter(&iter, w);
-  // iterate all the path and write or read the key in the leaf node
-  while ((cp = next_path(&iter))) {
-    node *cn = path_get_node_at_level(cp, 0);
-    // TODO: remove this
-    assert(cn);
-
-    uint32_t  op;
-    void    *key;
-    uint32_t len;
-    void    *val;
-    assert(batch_read_at(b, path_get_kv_id(cp), &op, &key, &len, &val));
-
-    if (cn != pn) {
-      curr = cn;
-      fnc.ptr = 0; // previous split has no influence on current key
-    } else if (fnc.ptr && compare_key(key, len, fnc.key, fnc.len) >= 0) { // equal is possible
-      curr = fnc.ptr;
-      fnc.ptr = 0;
-    }
-
-    if (op == Write) {
-      switch (node_insert(curr, key, len, (const void *)*(val_t *)val)) {
-        case 1:  // key insert succeed, we set value to 1
-          set_val(val, 1);
-          break;
-        case 0:  // key already inserted, we set value to 0
-          set_val(val, 0);
-          break;
-        case -1: { // node does not have enough space, needs to split
-          node *nn = new_node(Leaf, curr->level);
-          node_split(curr, nn, fnc.key, &fnc.len);
-          fnc.pth = cp;
-          fnc.ptr = nn;
-          uint32_t idx = worker_insert_fence(w, 0, &fnc);
-
-          // compare current key with fence key to determine which node to insert
-          if (compare_key(key, len, fnc.key, fnc.len) > 0) { // equal is not possible
-            curr = nn;
-            // we need to update fence because the next key may fall into the next split node
-            worker_update_fence(w, 0, &fnc, idx);
-          }
-          assert(node_insert(curr, key, len, (const void *)*(val_t *)val) == 1);
-          set_val(val, 1);
-          break;
-        }
-        default:
-          assert(0);
-      }
-    } else { // Read
-      set_val(val, (val_t)node_search(curr, key, len));
-    }
-
-    pn = cn; // record previous node
-  }
-}
-
-// this function does exactly the same work as `execute_on_leaf_nodes`,
-// but with some critical difference
-// TODO: maybe they can be combined?
-static void execute_on_branch_nodes(worker *w, uint32_t level)
-{
-  fence fnc;
-  node *pn   = 0; // previous path node
-  node *curr = 0; // node actually to process the key
-
-  fence_iter iter;
-  fence *cf;
-  init_fence_iter(&iter, w, level);
-  // iterate all the fence and insert key in the branch node
-  while ((cf = next_fence(&iter))) {
-    path *cp = cf->pth;
-    node *cn = path_get_node_at_level(cp, level);
-    // TODO: remove this
-    assert(cn);
-
-    void    *key = (void *)cf->key;
-    uint32_t len = cf->len;
-    void    *val = cf->ptr;
-
-    if (cn != pn) {
-      curr = cn;
-      fnc.ptr = 0; // previous split has no influence on current key
-    } else if (fnc.ptr && compare_key(key, len, fnc.key, fnc.len) >= 0) {  // equal is possible
-      curr = fnc.ptr;
-      fnc.ptr = 0;
-    }
-
-    switch (node_insert(curr, key, len, val)) {
-      case 1:  // key insert succeed
-        break;
-      case 0:  // key already inserted, it's not possible
-        assert(0);
-        break;
-      case -1: { // node does not have enough space, needs to split
-        node *nn = new_node(Branch, curr->level);
-        node_split(curr, nn, fnc.key, &fnc.len);
-        fnc.pth = cp;
-        fnc.ptr = nn;
-        uint32_t idx = worker_insert_fence(w, level, &fnc);
-
-        // compare current key with fence key to determine which node to insert
-        if (compare_key(key, len, fnc.key, fnc.len) > 0) { // equal is not possible
-          curr = nn;
-          // we need to update fence because next key may fall into the next split node
-          worker_update_fence(w, level, &fnc, idx);
-        }
-        assert(node_insert(curr, key, len, val) == 1);
-        break;
-      }
-      default:
-        assert(0);
-    }
-
-    pn = cn; // record previous node
   }
 }
 
@@ -259,7 +132,7 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
   uint32_t end = beg + part > b->keys ? b->keys : beg + part;
 
   // descend to leaf for each key that belongs to this worker in this batch
-  descend_to_leaf(pt->root, b, beg, end, w);
+  descend_to_leaf(pt, b, beg, end, w);
 
   worker_sync(w, 0);
 
@@ -274,7 +147,7 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
   worker_redistribute_work(w, 0);
 
   // now we process all the paths that belong to this worker
-  execute_on_leaf_nodes(b, w);
+  worker_execute_on_leaf_nodes(w, b);
 
   worker_sync(w, 1);
 
@@ -289,7 +162,7 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
   while (level <= root_level) {
     worker_redistribute_work(w, level);
 
-    execute_on_branch_nodes(w, level);
+    worker_execute_on_branch_nodes(w, level);
 
     ++level;
 
