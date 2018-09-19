@@ -144,12 +144,12 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
   // try to find overlap nodes in previoud worker and next worker,
   // if there is a previous worker owns the same leaf node in current worker,
   // it will be processed by previous worker
-  worker_redistribute_work(w, 0);
+  worker_redistribute_work(w, 0 /* level */);
 
   // now we process all the paths that belong to this worker
   worker_execute_on_leaf_nodes(w, b);
 
-  worker_sync(w, 1);
+  worker_sync(w, 1 /* level */);
 
   struct clock c2 = clock_get(), d2 = clock_get_duration(&c1, &c2);
   update_metric(w->id, stage_2, &d2, clock_update);

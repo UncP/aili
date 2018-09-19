@@ -238,7 +238,10 @@ void worker_get_fences(worker *w, uint32_t level, fence **fences, uint32_t *numb
  *   sent-first,  sent-last  = false
  *   their-first, their-last = NULL
  *
- *   initialize my-first, my-last
+ *   let t = number of DIFFERENT nodes this worker collects
+ *   if t >  1: my-first = nodes[0] my-last = nodes[t-1]
+ *   if t == 1: my-first = NULL     my-last = nodes[0]
+ *   if t == 0: my-first = my-last = NULL
  *
  *   while ¬ ∧ {their-first, their-last, sent-first, sent-last} {
  *       if my-first ∧ ¬sent-first
@@ -300,6 +303,10 @@ void worker_sync(worker *w, uint32_t level)
     }
   }
 
+  // if all the modification in this worker lands on only one node, we must set `my_first` to NULL,
+  // otherwise there is a concurrency problem, but I don't want to explain why, LOL
+  if (my_first == my_last) my_first = 0;
+
   // we don't use sched_yield() or functions like that,
   // we just keep each thread busy
   while (!(set_first && set_last && their_first && their_last)) {
@@ -356,7 +363,7 @@ void worker_redistribute_work(worker *w, uint32_t level)
 
     w->tot_path = w->cur_path - w->beg_path;
 
-    if (w->tot_path == 0 || w->their_first == magic_pointer || w->my_last != w->their_first)
+    if (w->tot_path == 0)
       return ;
 
     worker *next = w->next;
@@ -394,7 +401,7 @@ void worker_redistribute_work(worker *w, uint32_t level)
 
     w->tot_fence = cur_fence - w->beg_fence;
 
-    if (w->tot_fence == 0 || w->their_first == magic_pointer || w->my_last != w->their_first)
+    if (w->tot_fence == 0)
       return ;
 
     worker *next = w->next;
