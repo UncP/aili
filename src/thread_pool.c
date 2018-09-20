@@ -81,7 +81,7 @@ thread_pool* new_thread_pool(int num, palm_tree *pt, bounded_queue *queue)
   tp->bar = tp->num > 1 ? new_barrier(tp->num) : 0;
 
   for (int i = 0; i < tp->num; ++i) {
-    tp->workers[i] = new_worker(i, tp->num, tp->bar);
+    tp->workers[i] = new_worker(i, tp->num);
     if (i > 0)
       worker_link(tp->workers[i - 1], tp->workers[i]);
   }

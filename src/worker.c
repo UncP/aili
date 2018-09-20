@@ -12,7 +12,7 @@
 
 #include "worker.h"
 
-// a magic number for pointer, no pointer will be equal with it
+// a magic number for pointer, no valid pointer will be equal with it
 #define magic_pointer (node *)913
 
 // a channel specially tailored for palm tree algorithm, not the channel you see in Go or Rust
@@ -73,14 +73,13 @@ void* channel_get_last(channel *c, uint32_t idx)
   return (void *)__sync_val_compare_and_swap(&c->last[idx], 0, 0);
 }
 
-worker* new_worker(uint32_t id, uint32_t total, barrier *b)
+worker* new_worker(uint32_t id, uint32_t total)
 {
   assert(id < total);
 
   worker *w = (worker *)malloc(sizeof(worker));
   w->id = id;
   w->total = total;
-  w->bar = b;
 
   // for a 4kb node, 16 bytes key, there will be about 256 keys,
   // if there are 4 workers, 64 should be enough

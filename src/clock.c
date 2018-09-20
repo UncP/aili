@@ -50,7 +50,7 @@ void clock_update(void *a, void *b)
 void clock_print(void *a)
 {
   struct clock *c = (struct clock *)a;
-  printf("cpu:%llu   tot:%llu\n", c->cpu, c->tot);
+  printf("cpu:%llu   total:%llu\n", c->cpu, c->tot);
   c->cpu = 0;
   c->tot = 0;
 }

@@ -8,7 +8,6 @@
 #define _worker_h_
 
 #include "node.h"
-#include "barrier.h"
 
 typedef struct _channel channel;
 
@@ -33,7 +32,6 @@ typedef struct worker
 {
   uint32_t  id;        // my id
   uint32_t  total;     // total workers
-  barrier  *bar;       // barrier of the worker pool
 
   uint32_t  max_path;  // maximum path number
   uint32_t  cur_path;  // current path number
@@ -60,7 +58,7 @@ typedef struct worker
   node    *their_first;
 }worker;
 
-worker* new_worker(uint32_t id, uint32_t total, barrier *b);
+worker* new_worker(uint32_t id, uint32_t total);
 void free_worker(worker* w);
 void worker_link(worker *a, worker *b);
 path* worker_get_new_path(worker *w);
