@@ -20,6 +20,7 @@ typedef struct bounded_queue
   void **array;
 
   pthread_mutex_t mutex;
+
   pthread_cond_t  cond;
 }bounded_queue;
 

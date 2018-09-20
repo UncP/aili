@@ -19,9 +19,9 @@
 // used for atomic set & get
 struct _channel
 {
-  int    total;
-  void **last;
-  void **first;
+  int       total;
+  uint64_t *last;
+  uint64_t *first;
 };
 
 channel* new_channel(int total)
@@ -29,8 +29,8 @@ channel* new_channel(int total)
   channel *c = (channel *)malloc(sizeof(channel));
 
   c->total = total;
-  c->first = (void **)calloc(c->total, sizeof(void *));
-  c->last  = (void **)calloc(c->total, sizeof(void *));
+  c->first = (uint64_t *)calloc(c->total, sizeof(uint64_t));
+  c->last  = (uint64_t *)calloc(c->total, sizeof(uint64_t));
 
   return c;
 }
@@ -45,32 +45,32 @@ void free_channel(channel *c)
 
 void channel_reset(channel *c)
 {
-  memset(c->first, 0, c->total * sizeof(void *));
-  memset(c->last,  0, c->total * sizeof(void *));
+  memset(c->first, 0, c->total * sizeof(uint64_t));
+  memset(c->last,  0, c->total * sizeof(uint64_t));
 }
 
 void channel_set_first(channel *c, uint32_t idx, void *ptr)
 {
   assert(idx < c->total);
-  __sync_val_compare_and_swap((uint64_t *)c->first[idx], 0, (uint64_t)ptr);
+  __sync_val_compare_and_swap(&c->first[idx], 0, (uint64_t)ptr);
 }
 
 void channel_set_last(channel *c, uint32_t idx, void *ptr)
 {
   assert(idx < c->total);
-  __sync_val_compare_and_swap((uint64_t *)c->last[idx], 0, (uint64_t)ptr);
+  __sync_val_compare_and_swap(&c->last[idx], 0, (uint64_t)ptr);
 }
 
 void* channel_get_first(channel *c, uint32_t idx)
 {
   assert(idx < c->total);
-  return (void *)__sync_val_compare_and_swap((uint64_t *)c->first[idx], 0, 0);
+  return (void *)__sync_val_compare_and_swap(&c->first[idx], 0, 0);
 }
 
 void* channel_get_last(channel *c, uint32_t idx)
 {
   assert(idx < c->total);
-  return (void *)__sync_val_compare_and_swap((uint64_t *)c->last[idx], 0, 0);
+  return (void *)__sync_val_compare_and_swap(&c->last[idx], 0, 0);
 }
 
 worker* new_worker(uint32_t id, uint32_t total, barrier *b)
@@ -136,7 +136,10 @@ void worker_reset(worker *w)
 
   w->cur_fence[0] = 0;
   w->cur_fence[1] = 0;
+}
 
+void worker_reset_channel(worker *w)
+{
   channel_reset(w->ch);
 }
 
@@ -270,8 +273,8 @@ void worker_get_fences(worker *w, uint32_t level, fence **fences, uint32_t *numb
  *     their-last  my-first  my-last  their-first
  *   they can be overlapped
 **/
-// TODO: save more info for later redistribute work
-void worker_sync(worker *w, uint32_t level)
+// TODO: record more info for later work redistribution
+void worker_sync(worker *w, uint32_t level, uint32_t root_level)
 {
   int set_first = 0, set_last = 0;
   node *their_first = 0, *their_last = 0;
@@ -288,27 +291,28 @@ void worker_sync(worker *w, uint32_t level)
     their_first = magic_pointer; // as long as it's not zero
   }
 
-  // initialize `my` node info
-  if (level == 0) { // we are descending to leaf
-    if (w->cur_path) {
-      my_first = path_get_node_at_level(&w->paths[0], level);
-      my_last  = path_get_node_at_level(&w->paths[w->cur_path - 1], level);
+  // initialize `my_first` and `my_last`,
+  // if leve > root_level, we fall into global synchronization
+  if (level <= root_level) {
+    if (level == 0) { // we are descending to leaf
+      if (w->cur_path) {
+        my_first = path_get_node_at_level(&w->paths[0], level);
+        my_last  = path_get_node_at_level(&w->paths[w->cur_path - 1], level);
+      }
+    } else { // we are promoting split
+      uint32_t idx = (level - 1) % 2;
+      if (w->cur_fence[idx]) {
+        my_first = path_get_node_at_level(w->fences[idx][0].pth, level);
+        my_last  = path_get_node_at_level(w->fences[idx][w->cur_fence[idx] - 1].pth, level);
+      }
     }
-  } else { // we are promoting split
-    --level;
-    uint32_t idx = (level - 1) % 2;
-    if (w->cur_fence[idx]) {
-      my_first = path_get_node_at_level(w->fences[idx][0].pth, level);
-      my_last  = path_get_node_at_level(w->fences[idx][w->cur_fence[idx] - 1].pth, level);
-    }
+
+    // if all the modification in this worker lands on only one node, we must set `my_first` to NULL,
+    // otherwise there is a concurrency problem, but I don't want to explain why, LOL
+    if (w->id > 0 && my_first == my_last) my_first = 0;
   }
 
-  // if all the modification in this worker lands on only one node, we must set `my_first` to NULL,
-  // otherwise there is a concurrency problem, but I don't want to explain why, LOL
-  if (my_first == my_last) my_first = 0;
-
-  // we don't use sched_yield() or functions like that,
-  // we just keep each thread busy
+  // we don't use pthread_yield() or functions like that, we just keep each thread busy
   while (!(set_first && set_last && their_first && their_last)) {
     if (my_first && !set_first) {
       channel_set_first(w->prev->ch, level, (void *)my_first); // `w->prev` can't be NULL
@@ -340,6 +344,7 @@ void worker_sync(worker *w, uint32_t level)
   w->their_first = their_first;
 }
 
+// TODO: optimize using `worker_sync` info
 void worker_redistribute_work(worker *w, uint32_t level)
 {
   if (level == 0) {
@@ -347,7 +352,7 @@ void worker_redistribute_work(worker *w, uint32_t level)
       w->tot_path = 0;
       return ;
     }
-    if (w->their_last != magic_pointer && w->my_first == w->their_last) {
+    if (w->their_last != magic_pointer) {
       w->beg_path = w->cur_path;
       for (uint32_t i = 0; i < w->cur_path; ++i) {
         path *cp = &w->paths[i];
@@ -384,7 +389,7 @@ void worker_redistribute_work(worker *w, uint32_t level)
       w->tot_fence = 0;
       return ;
     }
-    if (w->their_last != magic_pointer && w->my_first == w->their_last) {
+    if (w->their_last != magic_pointer) {
       w->beg_fence = cur_fence;
       for (uint32_t i = 0; i < cur_fence; ++i) {
         path *cp = w->fences[idx][i].pth;

@@ -134,7 +134,7 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
   // descend to leaf for each key that belongs to this worker in this batch
   descend_to_leaf(pt, b, beg, end, w);
 
-  worker_sync(w, 0);
+  worker_sync(w, 0 /* level */, root_level);
 
   struct clock c1 = clock_get(), d1 = clock_get_duration(&c, &c1);
   update_metric(w->id, stage_1, &d1, clock_update);
@@ -149,7 +149,7 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
   // now we process all the paths that belong to this worker
   worker_execute_on_leaf_nodes(w, b);
 
-  worker_sync(w, 1 /* level */);
+  worker_sync(w, 1 /* level */, root_level);
 
   struct clock c2 = clock_get(), d2 = clock_get_duration(&c1, &c2);
   update_metric(w->id, stage_2, &d2, clock_update);
@@ -157,7 +157,6 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
   /*  ---  Stage 3  --- */
 
   // fix the split level by level
-  // TODO: early termination
   uint32_t level = 1;
   while (level <= root_level) {
     worker_redistribute_work(w, level);
@@ -166,12 +165,13 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
 
     ++level;
 
-    worker_sync(w, level);
+    worker_sync(w, level, root_level);
 
     // this is a very fucking smart and elegant optimization, we use `level` as an external
-    // synchronization value, although `level` is on each thread's stack, it is
-    // globally equal at each stage, so it can be used to avoid concurrency problems and
-    // save a lot of small but frequent memory allocation for split information at the same time
+    // switch value, although `level` is on each thread's stack, it is globally equal for
+    // workers in the same synchronization group at each stage, so it can be used to avoid
+    // concurrency problems and save a lot of small but frequent memory allocation for
+    // split information at the same time
     worker_switch_fence(w, level);
   }
 
@@ -185,4 +185,7 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
 
   struct clock c4 = clock_get(), d4 = clock_get_duration(&c3, &c4);
   update_metric(w->id, stage_4, &d4, clock_update);
+
+  // reset channel here not in `worker_reset` to avoid concurrency problems
+  worker_reset_channel(w);
 }

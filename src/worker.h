@@ -47,6 +47,7 @@ typedef struct worker
   uint32_t  tot_fence;    // total fences that this worker needs to process
   fence    *fences[2];    // to place the fence key info, there are 2 groups for switch
                           // each of them are sorted according to the key
+                          // this is a very cool optimization
 
   struct worker *prev; // previous worker with smaller id
   struct worker *next; // next worker with bigger id
@@ -69,7 +70,8 @@ void worker_switch_fence(worker *w, uint32_t level);
 void worker_get_fences(worker *w, uint32_t level, fence **fences, uint32_t *number);
 void worker_redistribute_work(worker *w, uint32_t level);
 void worker_reset(worker *w);
-void worker_sync(worker *w, uint32_t level);
+void worker_reset_channel(worker *w);
+void worker_sync(worker *w, uint32_t level, uint32_t root_level);
 void worker_execute_on_leaf_nodes(worker *w, batch *b);
 void worker_execute_on_branch_nodes(worker *w, uint32_t level);
 
