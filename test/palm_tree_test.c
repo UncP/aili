@@ -42,7 +42,7 @@ void test_single_thread_palm_tree()
 {
   init_metric(1);
   palm_tree *pt = new_palm_tree(1);
-  worker *w = new_worker(0, 1, NULL);
+  worker *w = new_worker(0, 1);
   batch *b = new_batch();
 
   char file_name[32];

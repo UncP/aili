@@ -11,4 +11,4 @@
 | 版本 |           备注             |
 |:------:|:---------------------------:|
 | [1.0.0](https://github.com/UncP/aili/tree/1.0.0)  | Palm Tree |
-| [1.1.0](https://github.com/UncP/aili/tree/1.1.0)  | Palm Tree with point to point synchronization |
+| [1.1.0](https://github.com/UncP/aili/tree/1.1.0)  | Palm Tree with point-to-point synchronization |
