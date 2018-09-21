@@ -209,7 +209,7 @@ void test_palm_tree_with_thread_pool()
   // wait until all keys in the batches have been executed
   thread_pool_stop(tp);
   long long after = mstime();
-  printf("\033[31mtotal: %d\033[0m\n\033[32mput time: %f  s\033[0m\n", total_keys, (float)(after - before) / 1000);
+  printf("\033[31mtotal: %d\033[0m\n\033[32mput time: %.4f  s\033[0m\n", total_keys, (float)(after - before) / 1000);
   show_metric(clock_print);
 
   free_bounded_queue(queue);
@@ -283,7 +283,7 @@ void test_palm_tree_with_thread_pool()
   }
 
   after = mstime();
-  printf("\033[34mget time: %f  s\033[0m\n", (float)(after - before) / 1000);
+  printf("\033[34mget time: %.4f  s\033[0m\n", (float)(after - before) / 1000);
 
   close(fd);
 

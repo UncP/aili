@@ -23,11 +23,11 @@ palm_tree_test: test/palm_tree_test.c src/barrier.o src/node.o src/worker.o src/
 	src/thread_pool.o src/clock.o src/metric.o
 	$(AFLAGS) -o $@ $^ $(LFLAGS)
 
-gen_data: ./test_data.c
+generate_data: ./generate_data.c
 	$(AFLAGS) -o $@ $^
 
 third_party: third_party/c_hashmap
 	cd third_party/c_hashmap && $(CC) $(CFLAGS) -c hashmap.c -o hashmap.o && ar rcs libhashmap.a hashmap.o
 
 clean:
-	rm src/*.o *_test gen_data
+	rm src/*.o *_test generate_data
