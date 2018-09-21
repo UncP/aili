@@ -119,8 +119,6 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
   // get root level to prevent dead lock bug when promoting node modifications
   uint32_t root_level = pt->root->level;
 
-  worker_reset(w);
-
   struct clock c = clock_get();
 
   /*  ---  Stage 1  --- */
@@ -186,6 +184,6 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
   struct clock c4 = clock_get(), d4 = clock_get_duration(&c3, &c4);
   update_metric(w->id, stage_4, &d4, clock_update);
 
-  // reset channel here not in `worker_reset` to avoid concurrency problems
-  worker_reset_channel(w);
+  // reset worker here to avoid concurrency problems
+  worker_reset(w);
 }

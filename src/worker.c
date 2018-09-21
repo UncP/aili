@@ -13,6 +13,7 @@
 #include "worker.h"
 
 // a magic number for pointer, no valid pointer will be equal with it
+// used in point-to-point synchronization
 #define magic_pointer (node *)913
 
 // a channel specially tailored for palm tree algorithm, not the channel you see in Go or Rust
@@ -89,6 +90,8 @@ worker* new_worker(uint32_t id, uint32_t total)
   w->beg_path = 0;
   w->tot_path = 0;
   w->paths = (path *)malloc(sizeof(path) * w->max_path);
+  for (uint32_t i = 0; i < w->max_path; ++i)
+    path_clear(&w->paths[i]);
 
   // 4 is enough even in extreme situations, so it's not likely
   // more memory will be required
@@ -102,7 +105,7 @@ worker* new_worker(uint32_t id, uint32_t total)
   w->prev = 0;
   w->next = 0;
 
-  w->ch = new_channel(max_descend_depth);
+  w->ch = new_channel(max_descend_depth + 1);
   w->their_last  = 0;
   w->my_first    = 0;
   w->my_last     = 0;
@@ -129,16 +132,13 @@ void worker_link(worker *a, worker *b)
 
 void worker_reset(worker *w)
 {
-  for (uint32_t i = 0; i < w->max_path; ++i)
+  for (uint32_t i = 0; i < w->cur_path; ++i)
     path_clear(&w->paths[i]);
   w->cur_path = 0;
 
   w->cur_fence[0] = 0;
   w->cur_fence[1] = 0;
-}
 
-void worker_reset_channel(worker *w)
-{
   channel_reset(w->ch);
 }
 

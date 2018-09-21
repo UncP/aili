@@ -70,8 +70,8 @@ thread_pool* new_thread_pool(int num, palm_tree *pt, bounded_queue *queue)
   thread_pool *tp = (thread_pool *)malloc(sizeof(thread_pool));
 
   if (num <= 0) num = 1;
-  // before having a machine that supports more cores, 4 is enough for my mbp 13'
-  if (num >= 4) num = 4;
+  // before having a machine that supports more cores, 3 is max for my mbp 13'
+  if (num >= 3) num = 3;
 
   tp->num = num;
   tp->queue = queue;

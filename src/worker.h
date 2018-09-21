@@ -68,7 +68,6 @@ void worker_switch_fence(worker *w, uint32_t level);
 void worker_get_fences(worker *w, uint32_t level, fence **fences, uint32_t *number);
 void worker_redistribute_work(worker *w, uint32_t level);
 void worker_reset(worker *w);
-void worker_reset_channel(worker *w);
 void worker_sync(worker *w, uint32_t level, uint32_t root_level);
 void worker_execute_on_leaf_nodes(worker *w, batch *b);
 void worker_execute_on_branch_nodes(worker *w, uint32_t level);
