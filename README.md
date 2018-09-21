@@ -14,7 +14,7 @@
 | [1.1.0](https://github.com/UncP/aili/tree/1.1.0)  | Palm Tree with point-to-point synchronization |
 
 
-#### Have a try
+#### 试一下
 ```bash
 1. make third_party
                                        # key_num  key_len  file_name
@@ -25,3 +25,7 @@
 # if your machine supports N threads, thread_num can be 1, 2, ..., (N-1), not N
 # key_num can be [1, infinity), depending on how many test keys you generate
 ```
+
+
+#### 其他
++ 你可以关注我的[知乎专栏](https://zhuanlan.zhihu.com/b-tree)，这个仓库的相关内容会在知乎上面介绍
