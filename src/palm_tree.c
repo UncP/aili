@@ -13,20 +13,23 @@
 
 #include "palm_tree.h"
 #include "metric.h"
-#include "clock.h"
 
-static const char *stage_1 = "stage1: descend to leaf";
-static const char *stage_2 = "stage2: redistribute work & modify leaves";
-static const char *stage_3 = "stage3: promote split & modify braches";
-static const char *stage_4 = "stage4: modify root";
+static const char *stage_descend  = "descend to leaf";
+static const char *stage_sync     = "worker sync";
+static const char *stage_redis    = "redistribute work";
+static const char *stage_leaves   = "modify leaves";
+static const char *stage_branches = "modify braches";
+static const char *stage_root     = "modify root";
 
 palm_tree* new_palm_tree(int worker_num)
 {
   for (int i = 0; i < worker_num; ++i) {
-    register_metric(i, stage_1, (void *)new_clock());
-    register_metric(i, stage_2, (void *)new_clock());
-    register_metric(i, stage_3, (void *)new_clock());
-    register_metric(i, stage_4, (void *)new_clock());
+    register_metric(i, stage_descend, (void *)new_clock());
+    register_metric(i, stage_sync, (void *)new_clock());
+    register_metric(i, stage_redis, (void *)new_clock());
+    register_metric(i, stage_leaves, (void *)new_clock());
+    register_metric(i, stage_branches, (void *)new_clock());
+    register_metric(i, stage_root, (void *)new_clock());
   }
 
   palm_tree *pt = (palm_tree *)malloc(sizeof(palm_tree));
@@ -130,40 +133,34 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
   uint32_t end = beg + part > b->keys ? b->keys : beg + part;
 
   // descend to leaf for each key that belongs to this worker in this batch
-  descend_to_leaf(pt, b, beg, end, w);
+  descend_to_leaf(pt, b, beg, end, w); update_metric(w->id, stage_descend, &c);
 
-  worker_sync(w, 0 /* level */, root_level);
-
-  struct clock c1 = clock_get(), d1 = clock_get_duration(&c, &c1);
-  update_metric(w->id, stage_1, &d1, clock_update);
+  worker_sync(w, 0 /* level */, root_level); update_metric(w->id, stage_sync, &c);
 
   /*  ---  Stage 2  --- */
 
   // try to find overlap nodes in previoud worker and next worker,
   // if there is a previous worker owns the same leaf node in current worker,
   // it will be processed by previous worker
-  worker_redistribute_work(w, 0 /* level */);
+  worker_redistribute_work(w, 0 /* level */); update_metric(w->id, stage_redis, &c);
 
   // now we process all the paths that belong to this worker
-  worker_execute_on_leaf_nodes(w, b);
+  worker_execute_on_leaf_nodes(w, b); update_metric(w->id, stage_leaves, &c);
 
-  worker_sync(w, 1 /* level */, root_level);
-
-  struct clock c2 = clock_get(), d2 = clock_get_duration(&c1, &c2);
-  update_metric(w->id, stage_2, &d2, clock_update);
+  worker_sync(w, 1 /* level */, root_level); update_metric(w->id, stage_sync, &c);
 
   /*  ---  Stage 3  --- */
 
   // fix the split level by level
   uint32_t level = 1;
   while (level <= root_level) {
-    worker_redistribute_work(w, level);
+    worker_redistribute_work(w, level); update_metric(w->id, stage_redis, &c);
 
-    worker_execute_on_branch_nodes(w, level);
+    worker_execute_on_branch_nodes(w, level); update_metric(w->id, stage_branches, &c);
 
     ++level;
 
-    worker_sync(w, level, root_level);
+    worker_sync(w, level, root_level); update_metric(w->id, stage_sync, &c);
 
     // this is a very fucking smart and elegant optimization, we use `level` as an external
     // switch value, although `level` is on each thread's stack, it is globally equal for
@@ -173,16 +170,11 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
     worker_switch_fence(w, level);
   }
 
-  struct clock c3 = clock_get(), d3 = clock_get_duration(&c2, &c3);
-  update_metric(w->id, stage_3, &d3, clock_update);
-
   /*  ---  Stage 4  --- */
 
-  if (w->id == 0)
-    handle_root_split(pt, w);
-
-  struct clock c4 = clock_get(), d4 = clock_get_duration(&c3, &c4);
-  update_metric(w->id, stage_4, &d4, clock_update);
+  if (w->id == 0) {
+    handle_root_split(pt, w); update_metric(w->id, stage_root, &c);
+  }
 
   // reset worker here to avoid concurrency problems
   worker_reset(w);

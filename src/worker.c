@@ -20,12 +20,12 @@
 // used for atomic set & get
 struct _channel
 {
-  int       total;
+  uint32_t  total;
   uint64_t *last;
   uint64_t *first;
 };
 
-channel* new_channel(int total)
+channel* new_channel(uint32_t total)
 {
   channel *c = (channel *)malloc(sizeof(channel));
 
