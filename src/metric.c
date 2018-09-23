@@ -105,10 +105,8 @@ void show_metric()
 {
   metric *m = _get_metric(0);
   struct clock clocks[m->len];
-  for (int i = 0; i < m->len; ++i) {
-    clocks[i].cpu = 0;
-    clocks[i].tot = 0;
-  }
+  for (int i = 0; i < m->len; ++i)
+    clock_reset(&clocks[i]);
 
   for (int i = 0; i < m->len; ++i) {
     for (int j = 0; j < metric_num; ++j) {

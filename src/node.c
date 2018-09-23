@@ -7,6 +7,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+// TODO: remove this
+#include <stdio.h>
 
 #include "node.h"
 
@@ -240,6 +242,8 @@ void node_split(node *old, node *new, char *pkey, uint32_t *plen)
   *plen = 0;
 
   if (old->pre) { // copy prefix
+    // TODO: remove this
+    assert(0);
     memcpy(new->data, old->data, old->pre);
     new->pre = old->pre;
     new->off = new->pre;
@@ -247,10 +251,21 @@ void node_split(node *old, node *new, char *pkey, uint32_t *plen)
     *plen = old->pre;
   }
 
-  // copy promote key data
   get_kv_info(old, l_idx[left], fkey, flen, fval);
-  memcpy(pkey + *plen, fkey, flen);
-  *plen += flen;
+  // if we are at level 0, try to get prefix key
+  if (old->level == 0) {
+    assert(left);
+    get_kv_info(old, l_idx[left - 1], lkey, llen, lval);
+    (void)lval;
+    for (uint32_t i = 0; i < llen && i < flen; ++i) {
+      pkey[(*plen)++] = ((char *)fkey)[i];
+      if (((char *)lkey)[i] != ((char *)fkey)[i])
+        break;
+    }
+  } else {
+    memcpy(pkey + *plen, fkey, flen);
+    *plen += flen;
+  }
 
   if (old->level) { // assign first child if it's not a level 0 node
     new->first = fval;
