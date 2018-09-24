@@ -431,7 +431,7 @@ uint32_t get_node_size()
 
 static char* format_kv(char *ptr, char *end, node* n, uint32_t off)
 {
-  ptr += snprintf(ptr, end - ptr, "%4u  ", off);
+  // ptr += snprintf(ptr, end - ptr, "%4u  ", off);
   uint32_t len = get_len(n, off);
   ptr += snprintf(ptr, end - ptr, "%u  ", len);
   snprintf(ptr, len + 1, "%s", get_key(n, off));
@@ -442,7 +442,7 @@ static char* format_kv(char *ptr, char *end, node* n, uint32_t off)
 
 static char* format_child(char *ptr, char *end, node* n, uint32_t off)
 {
-  ptr += snprintf(ptr, end - ptr, "%4u  ", off);
+  // ptr += snprintf(ptr, end - ptr, "%4u  ", off);
   uint32_t len = get_len(n, off);
   ptr += snprintf(ptr, end - ptr, "%u  ", len);
   snprintf(ptr, len + 1, "%s", get_key(n, off));

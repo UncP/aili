@@ -138,7 +138,10 @@ void worker_reset(worker *w)
 
   w->cur_fence[0] = 0;
   w->cur_fence[1] = 0;
+}
 
+void worker_reset_channel(worker *w)
+{
   channel_reset(w->ch);
 }
 

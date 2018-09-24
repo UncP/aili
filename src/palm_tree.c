@@ -119,6 +119,8 @@ static void descend_to_leaf(palm_tree *pt, batch *b, uint32_t beg, uint32_t end,
 // this is the entrance for all the write/read operations
 void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
 {
+  worker_reset(w);
+
   // get root level to prevent dead lock bug when promoting node modifications
   uint32_t root_level = pt->root->level;
   struct clock c = clock_get();
@@ -175,6 +177,6 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
     handle_root_split(pt, w); update_metric(w->id, stage_root, &c);
   }
 
-  // reset worker here to avoid concurrency problems
-  worker_reset(w);
+  // reset worker channel here to avoid concurrency problems
+  worker_reset_channel(w);
 }
