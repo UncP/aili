@@ -300,18 +300,22 @@ void test_palm_tree_with_thread_pool()
 
 int main(int argc, char **argv)
 {
-  if (argc < 5) {
-    printf("file_name thread_number queue_size key_number\n");
+  if (argc < 7) {
+    printf("file_name node_size batch_size thread_number queue_size key_number\n");
     exit(1);
   }
 
   file_str = argv[1];
-  thread_number = atoi(argv[2]);
-  queue_size = atoi(argv[3]);
-  total_keys = atoi(argv[4]);
+  int node_size = atoi(argv[2]);
+  int batch_size = atoi(argv[3]);
+  thread_number = atoi(argv[4]);
+  queue_size = atoi(argv[5]);
+  total_keys = atoi(argv[6]);
   if (total_keys <= 0) total_keys = 1;
   if (queue_size <= 0) queue_size = 1;
   if (thread_number <= 0) queue_size = 1;
+  set_node_size(node_size);
+  set_batch_size(batch_size);
 
   // test_single_thread_palm_tree();
   test_palm_tree_with_thread_pool();

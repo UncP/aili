@@ -18,6 +18,16 @@
   for (uint32_t i = 0; i < len; ++i) \
     k[i] = '0';                      \
 
+void test_set_batch_size()
+{
+  printf("test set batch size\n");
+
+  set_batch_size(node_min_size + 1);
+  assert(get_batch_size() == node_min_size);
+  set_batch_size(node_max_size + 1);
+  assert(get_batch_size() == node_max_size);
+}
+
 void test_new_batch()
 {
   printf("test new batch\n");
@@ -157,6 +167,7 @@ void test_print_batch()
 
 int main()
 {
+  test_set_batch_size();
   test_new_batch();
   test_batch_clear();
   test_batch_write();

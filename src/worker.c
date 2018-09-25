@@ -82,10 +82,11 @@ worker* new_worker(uint32_t id, uint32_t total)
   w->id = id;
   w->total = total;
 
-  // for a 4kb node, 16 bytes key, there will be about 256 keys,
-  // if there are 4 workers, 64 should be enough
-  // TODO: dynamically change this in account of batch size and worker number
-  w->max_path = 64;
+  // we assume average key size is 16 bytes
+  // max path should be 128, ...
+  uint32_t base = 128;
+  uint32_t max_path = (get_batch_size() / (16 * total)) & (~(base - 1));
+  w->max_path = max_path < base ? base : max_path;
   w->cur_path = 0;
   w->beg_path = 0;
   w->tot_path = 0;
@@ -93,9 +94,7 @@ worker* new_worker(uint32_t id, uint32_t total)
   for (uint32_t i = 0; i < w->max_path; ++i)
     path_clear(&w->paths[i]);
 
-  // 4 is enough even in extreme situations, so it's not likely
-  // more memory will be required
-  // TODO: change this to `max_descend_depth`?
+  // 4 is a reasonable number
   w->max_fence = 4;
   w->cur_fence[0] = 0;
   w->cur_fence[1] = 0;

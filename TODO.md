@@ -1,6 +1,7 @@
 ### TODO
-- [ ] batch_size 与 node_size 不同
+- [x] batch_size 与 node_size 不同
 - [ ] descend_to_leaf 优化，不存储根节点？
+- [x] 根据 batch_size 和 worker 数量来进行 worker 初始化
 - [ ] 前缀压缩
 - [x] 更细粒度的 metric
 - [x] simple prefix B+ Tree

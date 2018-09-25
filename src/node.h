@@ -34,6 +34,7 @@
 #define Root   0
 #define Branch 1
 #define Leaf   2
+#define Batch  3
 
 // op type
 #define Read  0
@@ -77,6 +78,8 @@ typedef struct node
 }node;
 
 void set_node_size(uint32_t size);
+void set_batch_size(uint32_t size);
+uint32_t get_batch_size();
 int compare_key(const void *key1, uint32_t len1, const void *key2, uint32_t len2);
 
 node* new_node(uint8_t type, uint8_t level);

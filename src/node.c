@@ -12,14 +12,27 @@
 
 #include "node.h"
 
-static uint32_t node_size = node_min_size;
+static uint32_t node_size  = node_min_size;
+static uint32_t batch_size = node_min_size;
 static uint32_t node_id = 0;
+
+#define node_size_mask ((uint64_t)~0xfff)
 
 void set_node_size(uint32_t size)
 {
-  const uint64_t node_size_mask = (uint64_t)~0xfff;
   node_size = size < node_min_size ? node_min_size : size > node_max_size ? node_max_size : size;
   node_size &= node_size_mask;
+}
+
+void set_batch_size(uint32_t size)
+{
+  batch_size = size < node_min_size ? node_min_size : size > node_max_size ? node_max_size : size;
+  batch_size &= node_size_mask;
+}
+
+uint32_t get_batch_size()
+{
+  return batch_size;
 }
 
 // get the ptr to the key length byte
@@ -52,7 +65,11 @@ int compare_key(const void *key1, uint32_t len1, const void *key2, uint32_t len2
 
 node* new_node(uint8_t type, uint8_t level)
 {
-  node* n  = (node *)malloc(node_size);
+  node *n;
+  if (type < Batch)
+    n = (node *)malloc(node_size);
+  else
+    n = (node *)malloc(batch_size);
   n->type  = type;
   n->level = level;
   n->pre   = 0;
@@ -252,14 +269,15 @@ void node_split(node *old, node *new, char *pkey, uint32_t *plen)
   }
 
   get_kv_info(old, l_idx[left], fkey, flen, fval);
-  // if we are at level 0, try to get prefix key
-  if (old->level == 0) {
+  if (old->level == 0) { // if we are at level 0, try to get prefix key
+    // Reference: Prefix B-Trees
     assert(left);
     get_kv_info(old, l_idx[left - 1], lkey, llen, lval);
     (void)lval;
+    char *lptr = (char *)lkey, *rptr = (char *)fkey;
     for (uint32_t i = 0; i < llen && i < flen; ++i) {
-      pkey[(*plen)++] = ((char *)fkey)[i];
-      if (((char *)lkey)[i] != ((char *)fkey)[i])
+      pkey[(*plen)++] = rptr[i];
+      if (lptr[i] != rptr[i])
         break;
     }
   } else {
@@ -317,7 +335,7 @@ void node_split(node *old, node *new, char *pkey, uint32_t *plen)
 
 batch* new_batch()
 {
-  return new_node(Leaf, 0);
+  return new_node(Batch, 0);
 }
 
 void free_batch(batch *b)

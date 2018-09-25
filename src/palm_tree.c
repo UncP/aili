@@ -116,6 +116,7 @@ static void descend_to_leaf(palm_tree *pt, batch *b, uint32_t beg, uint32_t end,
   }
 }
 
+// Reference: Parallel Architecture-Friendly Latch-Free Modifications to B+ Trees on Many-Core Processors
 // this is the entrance for all the write/read operations
 void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
 {
