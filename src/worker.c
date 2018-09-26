@@ -7,11 +7,11 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
+
 // TODO: remove this
 #include <stdio.h>
 
 #include "worker.h"
-
 // a magic number for pointer, no valid pointer will be equal with it
 // used in point-to-point synchronization
 #define magic_pointer (node *)913
@@ -53,25 +53,29 @@ void channel_reset(channel *c)
 void channel_set_first(channel *c, uint32_t idx, void *ptr)
 {
   assert(idx < c->total);
-  __sync_val_compare_and_swap(&c->first[idx], 0, (uint64_t)ptr);
+  __atomic_store(&c->first[idx], (uint64_t *)&ptr, __ATOMIC_RELEASE);
 }
 
 void channel_set_last(channel *c, uint32_t idx, void *ptr)
 {
   assert(idx < c->total);
-  __sync_val_compare_and_swap(&c->last[idx], 0, (uint64_t)ptr);
+  __atomic_store(&c->last[idx], (uint64_t *)&ptr, __ATOMIC_RELEASE);
 }
 
 void* channel_get_first(channel *c, uint32_t idx)
 {
   assert(idx < c->total);
-  return (void *)__sync_val_compare_and_swap(&c->first[idx], 0, 0);
+  uint64_t ret;
+  __atomic_load(&c->first[idx], &ret, __ATOMIC_ACQUIRE);
+  return (void *)ret;
 }
 
 void* channel_get_last(channel *c, uint32_t idx)
 {
   assert(idx < c->total);
-  return (void *)__sync_val_compare_and_swap(&c->last[idx], 0, 0);
+  uint64_t ret;
+  __atomic_load(&c->last[idx], &ret, __ATOMIC_ACQUIRE);
+  return (void *)ret;
 }
 
 worker* new_worker(uint32_t id, uint32_t total)

@@ -65,11 +65,8 @@ int compare_key(const void *key1, uint32_t len1, const void *key2, uint32_t len2
 
 node* new_node(uint8_t type, uint8_t level)
 {
-  node *n;
-  if (type < Batch)
-    n = (node *)malloc(node_size);
-  else
-    n = (node *)malloc(batch_size);
+  uint32_t size = type < Batch ? node_size : batch_size;
+  node *n = (node *)malloc(size);
   n->type  = type;
   n->level = level;
   n->pre   = 0;
@@ -94,9 +91,9 @@ void free_btree_node(node *n)
   if (n == 0) return ;
 
   if (n->level) {
+    free_btree_node(n->first);
     assert(n->keys);
     index_t *index = node_index(n);
-    free_btree_node(n->first);
     for (uint32_t i = 0; i < n->keys; ++i) {
       node *child = (node *)get_val(n, index[i]);
       free_btree_node(child);

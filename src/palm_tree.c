@@ -122,7 +122,7 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
 {
   worker_reset(w);
 
-  // get root level to prevent dead lock bug when promoting node modifications
+  // get root level here to prevent dead lock bug when promoting node modifications
   uint32_t root_level = pt->root->level;
   struct clock c = clock_get();
 

@@ -7,3 +7,5 @@
 - [x] simple prefix B+ Tree
 - [ ] early termination
 - [x] 更详细的 metric 信息输出
+- [ ] 顺序插入优化
+- [x] worker 同步时的 memory order 优化
