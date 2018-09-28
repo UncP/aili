@@ -50,6 +50,7 @@ void channel_reset(channel *c)
   memset(c->last,  0, c->total * sizeof(uint64_t));
 }
 
+// use acquire-release for the next 4 functions instead of seq_cst
 void channel_set_first(channel *c, uint32_t idx, void *ptr)
 {
   assert(idx < c->total);
@@ -313,7 +314,7 @@ void worker_sync(worker *w, uint32_t level, uint32_t root_level)
     }
 
     // if all the modification in this worker lands on only one node, we must set `my_first` to NULL,
-    // otherwise there is a concurrency problem, but I don't want to explain why, LOL
+    // worker 0 does not set `my_first` to NULL, it always owns every path in itself
     if (w->id > 0 && my_first == my_last) my_first = 0;
   }
 
