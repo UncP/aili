@@ -178,6 +178,6 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
     handle_root_split(pt, w); update_metric(w->id, stage_root, &c);
   }
 
-  // reset worker channel here to avoid concurrency problems
-  worker_reset_channel(w);
+  // do a global synchronization
+  worker_sync(w, level + 1, root_level);
 }

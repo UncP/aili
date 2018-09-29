@@ -79,6 +79,14 @@ void* channel_get_last(channel *c, uint32_t idx)
   return (void *)ret;
 }
 
+void channel_reset_at(channel *c, uint32_t idx)
+{
+  assert(idx < c->total);
+  // atomic operation is not necessary here
+  c->first[idx] = 0;
+  c->last[idx] = 0;
+}
+
 worker* new_worker(uint32_t id, uint32_t total)
 {
   assert(id < total);
@@ -109,7 +117,7 @@ worker* new_worker(uint32_t id, uint32_t total)
   w->prev = 0;
   w->next = 0;
 
-  w->ch = new_channel(max_descend_depth + 1);
+  w->ch = new_channel(max_descend_depth + 2); // we need 2 more channel to do extra worker_sync
   w->their_last  = 0;
   w->my_first    = 0;
   w->my_last     = 0;
@@ -142,11 +150,6 @@ void worker_reset(worker *w)
 
   w->cur_fence[0] = 0;
   w->cur_fence[1] = 0;
-}
-
-void worker_reset_channel(worker *w)
-{
-  channel_reset(w->ch);
 }
 
 path* worker_get_new_path(worker *w)
@@ -343,6 +346,9 @@ void worker_sync(worker *w, uint32_t level, uint32_t root_level)
       my_last = their_last;
   }
 
+  // we can safely reset this level's channel since this level's synchronization is done
+  channel_reset_at(w->ch, level);
+
   // record boundary nodes for later work redistribution
   w->their_last  = their_last;
   w->my_first    = my_first;
@@ -499,7 +505,6 @@ void worker_execute_on_leaf_nodes(worker *w, batch *b)
 
 // this function does exactly the same work as `execute_on_leaf_nodes`,
 // but with some critical difference
-// TODO: maybe they can be combined?
 void worker_execute_on_branch_nodes(worker *w, uint32_t level)
 {
   fence fnc;

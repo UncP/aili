@@ -193,7 +193,7 @@ void test_palm_tree_with_thread_pool()
       }
 
       if (batch_add_write(cb, key, len, (void *)value) == -1) {
-        bounded_queue_push(queue, cb);
+        bounded_queue_enqueue(queue, cb);
         idx = idx == queue_size ? 0 : idx + 1;
         cb = batches[idx];
         batch_clear(cb);
@@ -203,7 +203,7 @@ void test_palm_tree_with_thread_pool()
   }
 
   // finish remained work
-  bounded_queue_push(queue, cb);
+  bounded_queue_enqueue(queue, cb);
 
   // wait until all keys in the batches have been executed
   thread_pool_stop(tp);
@@ -246,7 +246,7 @@ void test_palm_tree_with_thread_pool()
       }
 
       if (batch_add_read(cb, key, len) == -1) {
-        bounded_queue_push(queue, cb);
+        bounded_queue_enqueue(queue, cb);
         idx = idx == queue_size ? 0 : idx + 1;
         cb = batches[idx];
         for (uint32_t j = 0; j < cb->keys; ++j) {
@@ -264,7 +264,7 @@ void test_palm_tree_with_thread_pool()
   }
 
   // finish remained work
-  bounded_queue_push(queue, cb);
+  bounded_queue_enqueue(queue, cb);
 
   // wait until all keys in the batches have been executed
   thread_pool_stop(tp);

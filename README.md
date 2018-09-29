@@ -1,7 +1,7 @@
 # aili
 
 [![Author](https://img.shields.io/badge/Author-UncP-brightgreen.svg)](https://github.com/UncP)
-[![Version](https://img.shields.io/badge/Version-1.2.0-blue.svg)](https://github.com/UncP/aili)
+[![Version](https://img.shields.io/badge/Version-1.2.1-blue.svg)](https://github.com/UncP/aili)
 
 #### References
 * [Parallel Architecture-Friendly Latch-Free Modifications to B+ Trees on Many-Core Processors](http://www.vldb.org/pvldb/vol4/p795-sewall.pdf)
@@ -14,6 +14,7 @@
 | [1.0.0](https://github.com/UncP/aili/tree/1.0.0)  | Palm Tree |
 | [1.1.0](https://github.com/UncP/aili/tree/1.1.0)  | Palm Tree with point-to-point synchronization |
 | [1.2.0](https://github.com/UncP/aili/tree/1.2.0)  | Simple Prefix Palm Tree |
+| [1.2.1](https://github.com/UncP/aili/tree/1.2.1)  | Synchronization Optimization & Remove Barrier |
 
 
 #### 试一下
