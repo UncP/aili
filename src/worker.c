@@ -50,7 +50,7 @@ void channel_reset(channel *c)
   memset(c->last,  0, c->total * sizeof(uint64_t));
 }
 
-// use acquire-release for the next 4 functions instead of seq_cst
+// use acquire-release for the next 4 functions instead of full memory barrier
 void channel_set_first(channel *c, uint32_t idx, void *ptr)
 {
   assert(idx < c->total);

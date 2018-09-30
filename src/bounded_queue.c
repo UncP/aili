@@ -74,7 +74,7 @@ void bounded_queue_enqueue(bounded_queue *q, void *element)
   pthread_mutex_unlock(&q->mutex);
 }
 
-// return the element but don't proceed `q->head`
+// return the element at `idx` but don't proceed `q->head`
 void* bounded_queue_get_at(bounded_queue *q, int *idx)
 {
   pthread_mutex_lock(&q->mutex);
