@@ -179,5 +179,5 @@ void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
   }
 
   // do a global synchronization
-  worker_sync(w, level + 1, root_level);
+  worker_sync(w, level + 1, root_level); update_metric(w->id, stage_sync, &c);
 }
