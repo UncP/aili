@@ -45,7 +45,7 @@ static void* run(void *arg)
     // TODO: optimization?
     batch *bth = bounded_queue_get_at(q, &q_idx); // q_idx will be updated in the queue
 
-    if (bth)
+    if (likely(bth))
       palm_tree_execute(pt, bth, w);
     else
       break;

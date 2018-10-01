@@ -139,6 +139,9 @@ void node_validate(node *n);
 void batch_validate(batch *n);
 void btree_node_validate(node *n);
 
+#define likely(x)   (__builtin_expect(!!(x), 1))
+#define unlikely(x) (__builtin_expect(!!(x), 0))
+
 #endif /* Test */
 
 #endif /* _node_h_ */

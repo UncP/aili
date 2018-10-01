@@ -155,7 +155,7 @@ void worker_reset(worker *w)
 path* worker_get_new_path(worker *w)
 {
   // TODO: optimize memory allocation?
-  if (w->cur_path == w->max_path) {
+  if (unlikely(w->cur_path == w->max_path)) {
     w->max_path = w->max_path * 2;
     assert(w->paths = (path *)realloc(w->paths, sizeof(path) * w->max_path));
   }
@@ -173,7 +173,7 @@ fence* worker_get_new_fence(worker *w, uint32_t level)
 {
   uint32_t idx = level % 2;
   // TODO: optimize memory allocation?
-  if (w->cur_fence[idx] == w->max_fence) {
+  if (unlikely(w->cur_fence[idx] == w->max_fence)) {
     w->max_fence = w->max_fence * 2;
     assert(w->fences[idx] = (fence *)realloc(w->fences[idx], sizeof(fence) * w->max_fence));
   }
@@ -188,7 +188,7 @@ uint32_t worker_insert_fence(worker *w, uint32_t level, fence *f)
 {
   uint32_t idx = level % 2;
   uint32_t cur = w->cur_fence[idx];
-  if (cur == w->max_fence) {
+  if (unlikely(cur == w->max_fence)) {
     w->max_fence = w->max_fence * 2;
     assert(w->fences[idx] = (fence *)realloc(w->fences[idx], sizeof(fence) * w->max_fence));
   }

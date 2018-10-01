@@ -65,7 +65,7 @@ int compare_key(const void *key1, uint32_t len1, const void *key2, uint32_t len2
 
 node* new_node(uint8_t type, uint8_t level)
 {
-  uint32_t size = type < Batch ? node_size : batch_size;
+  uint32_t size = likely(type < Batch) ? node_size : batch_size;
   node *n = (node *)malloc(size);
   n->type  = type;
   n->level = level;
@@ -138,7 +138,7 @@ node* node_descend(node *n, const void *key, uint32_t len)
       count = half;
     }
   }
-  return first ? (node *)get_val(n, index[first - 1]) : n->first;
+  return likely(first) ? (node *)get_val(n, index[first - 1]) : n->first;
 }
 
 // find the key in the leaf, return its pointer, if no such key, return null
@@ -147,7 +147,7 @@ void* node_search(node *n, const void *key, uint32_t len)
   // TODO: remove this
   assert(n->level == 0);
 
-  if (n->keys == 0) return 0;
+  if (unlikely(n->keys == 0)) return 0;
 
   if (n->pre && compare_key(key, len, n->data, n->pre)) // compare with node prefix
     return 0;
@@ -181,7 +181,7 @@ static void node_insert_kv(node *n, const void *key, uint32_t len, const void *v
   n->off += key_byte;
   memcpy(n->data + n->off, key, len);
   n->off += len;
-  if (val)
+  if (likely(val))
     *((val_t *)(n->data + n->off)) = *(val_t *)(&val);
   else
     *((val_t *)(n->data + n->off)) = 0;
@@ -208,7 +208,7 @@ int node_insert(node *n, const void *key, uint32_t len, const void *val)
   }
 
   // find the index which to insert the key
-  if (pos == -1) {
+  if (likely(pos == -1)) {
     int low = 0, high = (int)n->keys - 1;
     index_t *index = node_index(n);
     const void *key1 = key + n->pre;
@@ -236,11 +236,11 @@ int node_insert(node *n, const void *key, uint32_t len, const void *val)
   index_t *index = node_index(n) - 1;
 
   // check if there is enough space
-  if ((char *)n->data + (n->off + key_byte + klen + value_bytes) > (char *)index)
+  if (unlikely((char *)n->data + (n->off + key_byte + klen + value_bytes) > (char *)index))
     return -1;
 
   // update index
-  if (pos) memmove(&index[0], &index[1], pos * index_byte);
+  if (likely(pos)) memmove(&index[0], &index[1], pos * index_byte);
   index[pos] = n->off;
 
   node_insert_kv(n, key + n->pre, klen, val);
@@ -266,7 +266,7 @@ void node_split(node *old, node *new, char *pkey, uint32_t *plen)
   }
 
   get_kv_info(old, l_idx[left], fkey, flen, fval);
-  if (old->level == 0) { // if we are at level 0, try to get prefix key
+  if (likely(old->level == 0)) { // if we are at level 0, try to get prefix key
     // Reference: Prefix B-Trees
     assert(left);
     get_kv_info(old, l_idx[left - 1], lkey, llen, lval);
@@ -282,7 +282,7 @@ void node_split(node *old, node *new, char *pkey, uint32_t *plen)
     *plen += flen;
   }
 
-  if (old->level) { // assign first child if it's not a level 0 node
+  if (unlikely(old->level)) { // assign first child if it's not a level 0 node
     new->first = fval;
     --right;        // one key will be promoted to upper level
     flen += key_byte + value_bytes;
@@ -367,14 +367,14 @@ static int batch_write(batch *b, uint32_t op, const void *key1, uint32_t len1, c
   --index;
 
   // check if there is enough space
-  if ((char *)b->data + (b->off + sizeof(uint8_t) /* op */ + key_byte + len1 + value_bytes) > (char *)index)
+  if (unlikely((char *)b->data + (b->off + sizeof(uint8_t) /* op */ + key_byte + len1 + value_bytes) > (char *)index))
     return -1;
 
   // set op type before kv
   *((uint8_t *)(b->data + b->off)) = (uint8_t)op;
   b->off += sizeof(uint8_t);
 
-  if (low) memmove(&index[0], &index[1], low * index_byte);
+  if (likely(low)) memmove(&index[0], &index[1], low * index_byte);
   index[low] = b->off;
 
   node_insert_kv(b, key1, len1, val);

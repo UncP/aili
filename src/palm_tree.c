@@ -69,7 +69,7 @@ static void handle_root_split(palm_tree *pt, worker *w)
   fence *fences;
   worker_get_fences(w, pt->root->level, &fences, &number);
 
-  if (number == 0) return ;
+  if (likely(number == 0)) return ;
 
   node *new_root = new_node(Root, pt->root->level + 1);
   // adjust old root type
