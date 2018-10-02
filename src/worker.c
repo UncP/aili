@@ -490,7 +490,7 @@ void worker_execute_on_leaf_nodes(worker *w, batch *b)
           // also the key after will probably fall into the new node,
           // this is especially useful for sequential insertion.
           // also we want to avoid certain situation where too many one-key nodes
-          // are allocated, that's `n->sopt` is used for
+          // are allocated, that's `n->sopt` used for
           int move_right = 0;
           uint32_t flen;
           if (curr->sopt == 0 && unlikely(flen = node_is_before_key(curr, key, len))) {
