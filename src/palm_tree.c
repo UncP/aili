@@ -89,30 +89,32 @@ static void handle_root_split(palm_tree *pt, worker *w)
 static void descend_to_leaf(palm_tree *pt, batch *b, uint32_t beg, uint32_t end, worker *w)
 {
   for (uint32_t i = beg; i < end; ++i) {
-    uint32_t  op;
-    void    *key;
-    uint32_t len;
-    void    *val;
-    // get kv info
-    assert(batch_read_at(b, i, &op, &key, &len, &val));
-
     path* p = worker_get_new_path(w);
     path_set_kv_id(p, i);
+    path_push_node(p, pt->root);
+  }
 
-    // loop until we reach level 0 node, push all the node to `p` along the way
-    uint32_t level = pt->root->level;
-    node *cur = pt->root;
-    while (level--) {
-      node *pre = cur;
+  // previously, for each key, from root we descend until reach leaf node,
+  // now, we loop each level, so for each key, descends just one level at a time,
+  // so that we can obtain better cache performance
+  // TODO: lazy descend
+  for (uint32_t level = pt->root->level, idx = 0; level; --level, ++idx) {
+    for (uint32_t i = beg, j = 0; i < end; ++i, ++j) {
+      uint32_t  op;
+      void    *key;
+      uint32_t len;
+      void    *val;
+      // get kv info
+      assert(batch_read_at(b, i, &op, &key, &len, &val));
+
+      path *p = worker_get_path_at(w, j);
+      node *cur = path_get_node_at_index(p, idx);
+
       cur = node_descend(cur, key, len);
+      // TODO: remove this
       assert(cur);
-      path_push_node(p, pre);
+      path_push_node(p, cur);
     }
-
-    // TODO: remove this
-    assert(cur && cur->level == 0);
-
-    path_push_node(p, cur);
   }
 }
 

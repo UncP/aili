@@ -164,6 +164,12 @@ path* worker_get_new_path(worker *w)
   return &w->paths[w->cur_path++];
 }
 
+path* worker_get_path_at(worker *w, uint32_t idx)
+{
+  assert(idx < w->cur_path);
+  return &w->paths[idx];
+}
+
 void worker_switch_fence(worker *w, uint32_t level)
 {
   w->cur_fence[level % 2] = 0;

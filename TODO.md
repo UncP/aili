@@ -11,3 +11,4 @@
 - [x] worker 同步时的 memory order 优化
 - [x] 减小同步粒度
 - [x] 移除 barrier
+- [x] 修改下降策略

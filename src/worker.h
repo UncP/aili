@@ -62,6 +62,7 @@ worker* new_worker(uint32_t id, uint32_t total);
 void free_worker(worker* w);
 void worker_link(worker *a, worker *b);
 path* worker_get_new_path(worker *w);
+path* worker_get_path_at(worker *w, uint32_t idx);
 uint32_t worker_insert_fence(worker *w, uint32_t level, fence *f);
 void worker_update_fence(worker *w, uint32_t level, fence *f, uint32_t i);
 void worker_switch_fence(worker *w, uint32_t level);
