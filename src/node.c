@@ -70,6 +70,7 @@ node* new_node(uint8_t type, uint8_t level)
   n->type  = type;
   n->level = level;
   n->pre   = 0;
+  n->sopt  = 0;
   // two or more threads can be creating new node at the same time, increase node-id atomically
   n->id    = __sync_fetch_and_add(&node_id, 1);
   n->keys  = 0;
@@ -101,6 +102,31 @@ void free_btree_node(node *n)
   }
 
   free_node(n);
+}
+
+int node_is_before_key(node *n, const void *key, uint32_t len)
+{
+  assert(n->keys);
+  index_t *index = node_index(n);
+
+  get_key_info(n, index[n->keys - 1], key1, len1);
+
+  if (n->pre) {
+    // TODO: remove this
+    assert(0);
+  }
+
+  // equal is not possible
+  if (compare_key(key1, len1, key, len) > 0)
+    return 0;
+
+  char *lptr = (char *)key1, *rptr = (char *)key;
+  for (uint32_t i = 0; i < len1 && i < len; ++i) {
+    if (lptr[i] != rptr[i])
+      return i + 1;
+  }
+
+  return len;
 }
 
 node* node_descend(node *n, const void *key, uint32_t len)
@@ -269,8 +295,7 @@ void node_split(node *old, node *new, char *pkey, uint32_t *plen)
   if (likely(old->level == 0)) { // if we are at level 0, try to get prefix key
     // Reference: Prefix B-Trees
     assert(left);
-    get_kv_info(old, l_idx[left - 1], lkey, llen, lval);
-    (void)lval;
+    get_key_info(old, l_idx[left - 1], lkey, llen);
     char *lptr = (char *)lkey, *rptr = (char *)fkey;
     for (uint32_t i = 0; i < llen && i < flen; ++i) {
       pkey[(*plen)++] = rptr[i];
@@ -384,11 +409,13 @@ static int batch_write(batch *b, uint32_t op, const void *key1, uint32_t len1, c
 
 int batch_add_write(batch *b, const void *key, uint32_t len, const void *val)
 {
+  if (key == 0 || len == 0) return 1;
   return batch_write(b, Write, key, len, val);
 }
 
 int batch_add_read(batch *b, const void *key, uint32_t len)
 {
+  if (key == 0 || len == 0) return 1;
   return batch_write(b, Read, key, len, 0);
 }
 

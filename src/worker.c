@@ -7,7 +7,6 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
-
 // TODO: remove this
 #include <stdio.h>
 
@@ -483,17 +482,35 @@ void worker_execute_on_leaf_nodes(worker *w, batch *b)
           break;
         case -1: { // node does not have enough space, needs to split
           node *nn = new_node(Leaf, curr->level);
-          node_split(curr, nn, fnc.key, &fnc.len);
           fnc.pth = cp;
           fnc.ptr = nn;
-          uint32_t idx = worker_insert_fence(w, 0, &fnc);
 
-          // compare current key with fence key to determine which node to insert
-          if (compare_key(key, len, fnc.key, fnc.len) > 0) { // equal is not possible
+          // if the key we are going to insert is the last key in this node,
+          // we don't have to split the node, we just put this kv into the new node,
+          // also the key after will probably fall into the new node,
+          // this is especially useful for sequential insertion.
+          // also we want to avoid certain situation where too many one-key nodes
+          // are allocated, that's `n->sopt` is used for
+          int move_right = 0;
+          uint32_t flen;
+          if (curr->sopt == 0 && unlikely(flen = node_is_before_key(curr, key, len))) {
+            curr->sopt = 1;
+            memcpy(fnc.key, key, flen);
+            fnc.len = flen;
+            move_right = 1;
+          } else {
+            curr->sopt = 0;
+            node_split(curr, nn, fnc.key, &fnc.len);
+            move_right = compare_key(key, len, fnc.key, fnc.len) > 0; // equal is not possible
+          }
+
+          uint32_t idx = worker_insert_fence(w, 0, &fnc);
+          if (move_right) {
             curr = nn;
             // we need to update fence because the next key may fall into the next split node
             worker_update_fence(w, 0, &fnc, idx);
           }
+
           assert(node_insert(curr, key, len, (const void *)*(val_t *)val) == 1);
           set_val(val, 1);
           break;

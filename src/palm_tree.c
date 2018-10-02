@@ -94,9 +94,10 @@ static void descend_to_leaf(palm_tree *pt, batch *b, uint32_t beg, uint32_t end,
     path_push_node(p, pt->root);
   }
 
-  // previously, for each key, from root we descend until reach leaf node,
+  // previously, for each key, we descend from root until reach leaf node,
   // now, we loop each level, so for each key, descends just one level at a time,
-  // so that we can obtain better cache performance
+  // so that we can obtain better cache performance, the percentage of descending
+  // drops about 10%
   // TODO: lazy descend
   for (uint32_t level = pt->root->level, idx = 0; level; --level, ++idx) {
     for (uint32_t i = beg, j = 0; i < end; ++i, ++j) {
