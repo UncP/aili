@@ -462,7 +462,7 @@ void worker_execute_on_leaf_nodes(worker *w, batch *b)
     void    *key;
     uint32_t len;
     void    *val;
-    assert(batch_read_at(b, path_get_kv_id(cp), &op, &key, &len, &val));
+    batch_read_at(b, path_get_kv_id(cp), &op, &key, &len, &val);
 
     if (cn != pn) {
       curr = cn;

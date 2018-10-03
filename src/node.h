@@ -107,7 +107,7 @@ void free_batch(batch *b);
 void batch_clear(batch *b);
 int batch_add_write(batch *b, const void *key, uint32_t len, const void *val);
 int batch_add_read(batch *b, const void *key, uint32_t len);
-int batch_read_at(batch *b, uint32_t idx, uint32_t *op, void **key, uint32_t *len, void **val);
+void batch_read_at(batch *b, uint32_t idx, uint32_t *op, void **key, uint32_t *len, void **val);
 
 #define max_descend_depth 7 // should be enough levels for a b+ tree
 
@@ -119,6 +119,7 @@ typedef struct path {
 }path;
 
 void path_clear(path *p);
+void path_copy(const path *src, path *dst);
 void path_set_kv_id(path *p, uint32_t id);
 uint32_t path_get_kv_id(path *p);
 void path_push_node(path *p, node *n);

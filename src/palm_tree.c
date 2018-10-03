@@ -85,34 +85,75 @@ static void handle_root_split(palm_tree *pt, worker *w)
   pt->root = new_root;
 }
 
-// for each key in [beg, end), we descend to leaf node, and store each key's descending path
+// descend to leaf node for key at `kidx`, using path at `pidx`
+static void descend_to_leaf_single(node *r, batch *b, worker *w, uint32_t kidx, uint32_t pidx)
+{
+  uint32_t  op;
+  void    *key;
+  uint32_t len;
+  void    *val;
+  // get kv info
+  batch_read_at(b, kidx, &op, &key, &len, &val);
+
+  path* p = worker_get_path_at(w, pidx);
+
+  // loop until we reach level 0, push all the node to `p` along the way
+  uint32_t level = r->level;
+  node *cur = r;
+  while (level--) {
+    node *pre = cur;
+    cur = node_descend(cur, key, len);
+    // TODO: remove this
+    assert(pre && pre->level);
+    path_push_node(p, pre);
+  }
+
+  // TODO: remove this
+  assert(cur && !cur->level);
+  path_push_node(p, cur);
+}
+
+// this function is used for lazy descending, for key range [key_a, key_b],
+// if path a and path b falls into the same leaf node, all the keys between them
+// must fall into the same leaf node since they are sorted,
+// so we can avoid descending for each key, this is especially useful
+// when the palm tree is small or the key is close to each other
+// TODO: use loop to replace recursion
+static void descend_for_range(node *r, batch *b, worker *w, uint32_t kbeg, uint32_t kend, uint32_t pidx)
+{
+  if ((kbeg + 1) >= kend) return;
+
+  path *lp = worker_get_path_at(w, pidx);
+  path *rp = worker_get_path_at(w, pidx + kend - kbeg);
+  if (path_get_node_at_level(lp, 0) != path_get_node_at_level(rp, 0)) {
+    uint32_t kmid = (kbeg + kend) / 2;
+    descend_to_leaf_single(r, b, w, kmid, pidx + kmid - kbeg);
+    descend_for_range(r, b, w, kbeg, kmid, pidx);
+    descend_for_range(r, b, w, kmid, kend, pidx + kmid - kbeg);
+  } else {
+    // all the keys in [kbeg, kend] fall into the same leaf node,
+    // they must all have the exact same path, so copy path for keys in (kbeg, kend)
+    uint32_t between = kend - kbeg - 1;
+    for (uint32_t i = 1; i <= between; ++i)
+      path_copy(lp, worker_get_path_at(w, pidx + i));
+  }
+}
+
+// we descend to leaf node for each key in [beg, end), and store each key's descending path
 static void descend_to_leaf(palm_tree *pt, batch *b, uint32_t beg, uint32_t end, worker *w)
 {
-  for (uint32_t i = beg; i < end; ++i) {
-    uint32_t  op;
-    void    *key;
-    uint32_t len;
-    void    *val;
-    // get kv info
-    assert(batch_read_at(b, i, &op, &key, &len, &val));
+  if (beg == end) return ;
 
+  for (uint32_t i = beg; i < end; ++i) {
     path* p = worker_get_new_path(w);
     path_set_kv_id(p, i);
+  }
 
-    // loop until we reach level 0 node, push all the node to `p` along the way
-    uint32_t level = pt->root->level;
-    node *cur = pt->root;
-    while (level--) {
-      node *pre = cur;
-      cur = node_descend(cur, key, len);
-      assert(cur);
-      path_push_node(p, pre);
-    }
-
-    // TODO: remove this
-    assert(cur && cur->level == 0);
-
-    path_push_node(p, cur);
+  uint32_t pidx = 0;
+  descend_to_leaf_single(pt->root, b, w, beg, pidx);
+  if (--end > beg) {
+    descend_to_leaf_single(pt->root, b, w, end, pidx + end - beg);
+    descend_for_range(pt->root, b, w, beg, end, pidx);
   }
 }
 

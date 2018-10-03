@@ -420,22 +420,27 @@ int batch_add_read(batch *b, const void *key, uint32_t len)
 }
 
 // read a kv at index
-int batch_read_at(batch *b, uint32_t idx, uint32_t *op, void **key, uint32_t *len, void **val)
+void batch_read_at(batch *b, uint32_t idx, uint32_t *op, void **key, uint32_t *len, void **val)
 {
   // TODO: remove this
-  if (idx >= b->keys) return 0;
+  assert(idx < b->keys);
   index_t *index = node_index(b);
   get_kv_ptr(b, index[idx], k, l, v);
   *op = get_op(b, index[idx]);
   *key = (void *)k;
   *len = l;
   *val = (void *)v;
-  return 1;
 }
 
 void path_clear(path *p)
 {
   p->depth = 0;
+}
+
+void path_copy(const path *src, path *dst)
+{
+  dst->depth = src->depth;
+  memcpy(dst->nodes, src->nodes, src->depth * sizeof(node *));
 }
 
 void path_set_kv_id(path *p, uint32_t id)

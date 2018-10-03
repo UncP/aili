@@ -128,14 +128,12 @@ void test_batch_read()
   void *val;
   for (uint32_t i = 0; i < 10; ++i) {
     key[len - i - 1] = '1';
-    assert(batch_read_at(b, i, &op, (void **)&key2, &len2, &val) == 1);
+    batch_read_at(b, i, &op, (void **)&key2, &len2, &val);
     assert((i % 2 == 0) ? op == Write : op == Read);
     assert(compare_key(key, len, key2, len2) == 0);
     assert((i % 2 == 0) ? (*(val_t *)val == i) : (*(val_t *)val == 0));
     key[len - i - 1] = '0';
   }
-
-  assert(batch_read_at(b, 10, &op, (void **)&key2, &len2, &val) == 0);
 
   free_batch(b);
 }
