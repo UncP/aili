@@ -268,6 +268,7 @@ void test_palm_tree_with_thread_pool()
 
   // wait until all keys in the batches have been executed
   thread_pool_stop(tp);
+  after = mstime();
 
   for (int i = 0; i < queue_size + 1; ++i) {
     cb = batches[i];
@@ -281,7 +282,6 @@ void test_palm_tree_with_thread_pool()
     }
   }
 
-  after = mstime();
   printf("\033[34mget time: %.4f  s\033[0m\n", (float)(after - before) / 1000);
 
   close(fd);

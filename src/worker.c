@@ -493,7 +493,7 @@ void worker_execute_on_leaf_nodes(worker *w, batch *b)
           // are allocated, that's `n->sopt` used for
           int move_right = 0;
           uint32_t flen;
-          if (curr->sopt == 0 && unlikely(flen = node_is_before_key(curr, key, len))) {
+          if (curr->sopt == 0 && (flen = node_is_before_key(curr, key, len))) {
             curr->sopt = 1;
             memcpy(fnc.key, key, flen);
             fnc.len = flen;

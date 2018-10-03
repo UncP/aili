@@ -68,7 +68,7 @@ typedef struct node
 {
   uint32_t    type:8;   // Root or Branch or Leaf
   uint32_t   level:8;   // level this node in
-  uint32_t    sopt:8;   // for sequential insertion optimization
+  uint32_t    sopt:8;   // for sequential insertion optimization, only for level 0
   uint32_t     pre:8;   // prefix length
   uint32_t     id;      // id of this node, mainly for debug
   uint32_t     keys;    // number of keys

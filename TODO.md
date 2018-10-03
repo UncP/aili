@@ -5,12 +5,11 @@
 - [ ] 前缀压缩
 - [x] 更细粒度的 metric
 - [x] simple prefix B+ Tree
-- [ ] early termination
 - [x] 更详细的 metric 信息输出
 - [ ] 顺序插入优化
 - [x] worker 同步时的 memory order 优化
 - [x] 减小同步粒度
 - [x] 移除 barrier
 - [x] 修改下降策略
-- [ ] 下降时更好利用 cache
-- [x] 顺序插入优化
+- [x] level 0 顺序插入优化
+- [ ] 修改下降策略2
