@@ -128,11 +128,9 @@ void show_metric()
 
   printf("cpu: %llu us    total: %llu us\n", all.cpu, all.tot);
   for (int i = 0; i < m->len; ++i) {
-    printf("%-24s:  cpu: %5.2f %%  tot: %5.2f %%  %llu  %llu\n", m->name[i],
+    printf("%-24s:  cpu: %5.2f %%  tot: %5.2f %%\n", m->name[i],
       (float)clocks[i].cpu / all.cpu * 100,
-      (float)clocks[i].tot / all.tot * 100,
-      clocks[i].cpu,
-      clocks[i].tot);
+      (float)clocks[i].tot / all.tot * 100);
   }
 }
 

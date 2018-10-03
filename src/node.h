@@ -133,6 +133,9 @@ typedef struct fence
   node     *ptr;                   // new node pointer
 }fence;
 
+#define likely(x)   (__builtin_expect(!!(x), 1))
+#define unlikely(x) (__builtin_expect(!!(x), 0))
+
 #ifdef Test
 
 uint32_t get_node_size();
@@ -141,9 +144,6 @@ void batch_print(batch *b, int detail);
 void node_validate(node *n);
 void batch_validate(batch *n);
 void btree_node_validate(node *n);
-
-#define likely(x)   (__builtin_expect(!!(x), 1))
-#define unlikely(x) (__builtin_expect(!!(x), 0))
 
 #endif /* Test */
 
