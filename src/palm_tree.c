@@ -121,7 +121,7 @@ static void descend_to_leaf_single(node *r, batch *b, worker *w, uint32_t kidx, 
 // TODO: use loop to replace recursion
 static void descend_for_range(node *r, batch *b, worker *w, uint32_t kbeg, uint32_t kend, uint32_t pidx)
 {
-  if ((kbeg + 1) >= kend) return;
+  if ((kbeg + 1) >= kend) return ;
 
   path *lp = worker_get_path_at(w, pidx);
   path *rp = worker_get_path_at(w, pidx + kend - kbeg);

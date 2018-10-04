@@ -467,13 +467,6 @@ node* path_get_node_at_level(path *p, uint32_t level)
   return p->nodes[p->depth - level - 1];
 }
 
-node* path_get_node_at_index(path *p, uint32_t idx)
-{
-  // TODO: remove this
-  assert(p->depth > idx);
-  return p->nodes[idx];
-}
-
 #ifdef Test
 
 #include <stdio.h>
