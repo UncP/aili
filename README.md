@@ -22,12 +22,13 @@
 #### 试一下
 ```bash
 1. make third_party
-                                       # key_num  key_len  file_name
-2. make generate_data && ./generate_data 10000000    10       0      # test data will be in ./data
+                                       #  key_num   key_len
+2. make generate_data && ./generate_data  10000000    10    # test data will be in ./data
                                            # file_name  thread_num  queue_num  key_num
-3. make palm_tree_test && ./palm_tree_test     0           3            8      10000000
+3. make palm_tree_test && ./palm_tree_test       1         3            8      10000000
 
-# if your machine supports N threads, thread_num can be 1, 2, ..., (N-1), not N
+# file_name can be 0 (sequential data) or 1 (random data);
+# if your machine supports N threads, thread_num can be 1, 2, ..., (N-1), not N;
 # key_num can be [1, infinity), depending on how many test keys you generate
 ```
 
