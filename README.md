@@ -1,7 +1,7 @@
 # aili
 
 [![Author](https://img.shields.io/badge/Author-UncP-brightgreen.svg)](https://github.com/UncP)
-[![Version](https://img.shields.io/badge/Version-1.2.3-blue.svg)](https://github.com/UncP/aili)
+[![Version](https://img.shields.io/badge/Version-1.3.0-blue.svg)](https://github.com/UncP/aili)
 
 #### References
 * [Parallel Architecture-Friendly Latch-Free Modifications to B+ Trees on Many-Core Processors](http://www.vldb.org/pvldb/vol4/p795-sewall.pdf)
@@ -17,6 +17,7 @@
 | [1.2.1](https://github.com/UncP/aili/tree/1.2.1)  | synchronization optimization & remove barrier |
 | [1.2.2](https://github.com/UncP/aili/tree/1.2.2)  | adjust Palm Tree descending policy (level descend, not ideal) & sequential insertion optimization |
 | [1.2.3](https://github.com/UncP/aili/tree/1.2.3)  | adjust Palm Tree descending policy (lazy descend, great for sequential operation) |
+| [1.3.0](https://github.com/UncP/aili/tree/1.3.0)  | a major refactor |
 
 
 #### 试一下
@@ -25,7 +26,7 @@
                                        #  key_num   key_len
 2. make generate_data && ./generate_data  10000000    10    # test data will be in ./data
                                         #  f_name  n_size  b_size  t_num  q_num  k_num
-3. make palm_tree_test && ./palm_tree_test   1      4096    16384     2      8    1000000
+3. make palm_tree_test && ./palm_tree_test   1      4096    16384     2      8   1000000
 
 # f_name can be 0 (sequential data) or 1 (random data);
 # if your machine supports N threads, t_num can be 1, 2, ..., (N-1), not N;
