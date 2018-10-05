@@ -10,10 +10,14 @@ AILI_OBJ=src/node.o src/bounded_queue.o src/worker.o src/palm_tree.o src/metric.
 %.o: %.c
 	$(AFLAGS) -c $^ -o $@
 
-default: palm_tree_test
+default: lib
+
+third_party: third_party/c_hashmap
+	cd third_party/c_hashmap && $(CC) $(CFLAGS) -c hashmap.c -o hashmap.o && ar rcs libhashmap.a hashmap.o
 
 lib:$(AILI_OBJ)
-	ar rcs libaili.a $(AILI_OBJ)
+	make third_party
+	ar rcs libaili.a $(AILI_OBJ) third_party/c_hashmap/hashmap.o
 
 test: node_test batch_test barrier_test palm_tree_test
 
@@ -31,9 +35,6 @@ palm_tree_test: test/palm_tree_test.c src/node.o src/worker.o src/bounded_queue.
 
 generate_data: ./generate_data.c
 	$(AFLAGS) -o $@ $^
-
-third_party: third_party/c_hashmap
-	cd third_party/c_hashmap && $(CC) $(CFLAGS) -c hashmap.c -o hashmap.o && ar rcs libhashmap.a hashmap.o
 
 clean:
 	rm src/*.o *_test generate_data libaili.a
