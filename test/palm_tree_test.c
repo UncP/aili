@@ -12,8 +12,8 @@
 #include <fcntl.h>
 #include <sys/time.h>
 
-#include "../src/palm_tree.h"
-#include "../src/metric.h"
+#include "../palm/palm_tree.h"
+#include "../palm/metric.h"
 
 const static uint64_t value = 3190;
 static char *file_str;

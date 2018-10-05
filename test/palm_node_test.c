@@ -9,7 +9,7 @@
 #include <time.h>
 #include <stdlib.h>
 
-#include "../src/node.h"
+#include "../palm/node.h"
 
 #define key_buf(k, l)                \
   uint32_t len = l;                  \

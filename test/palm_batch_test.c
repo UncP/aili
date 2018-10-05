@@ -10,7 +10,7 @@
 #include <assert.h>
 #include <string.h>
 
-#include "../src/node.h"
+#include "../palm/node.h"
 
 #define key_buf(k, l)                \
   uint32_t len = l;                  \

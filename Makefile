@@ -5,7 +5,7 @@ IFLAGS=-I./third_party
 LFLAGS=./third_party/c_hashmap/libhashmap.a -lpthread
 AFLAGS=$(CC) $(CFLAGS) $(DFLAGS) $(IFLAGS)
 
-AILI_OBJ=src/node.o src/bounded_queue.o src/worker.o src/palm_tree.o src/metric.o
+AILI_OBJ=palm/node.o palm/bounded_queue.o palm/worker.o palm/palm_tree.o palm/metric.o
 
 %.o: %.c
 	$(AFLAGS) -c $^ -o $@
@@ -21,20 +21,17 @@ lib:$(AILI_OBJ)
 
 test: node_test batch_test barrier_test palm_tree_test
 
-node_test: test/node_test.c src/node.o
+palm_node_test: test/palm_node_test.c palm/node.o
 	$(AFLAGS) -o $@ $^
 
-batch_test: test/batch_test.c src/node.o
+palm_batch_test: test/palm_batch_test.c palm/node.o
 	$(AFLAGS) -o $@ $^
 
-barrier_test: test/barrier_test.c src/barrier.o
-	$(AFLAGS) -o $@ $^
-
-palm_tree_test: test/palm_tree_test.c src/node.o src/worker.o src/bounded_queue.o src/palm_tree.o src/metric.o
+palm_tree_test: test/palm_tree_test.c palm/node.o palm/worker.o palm/bounded_queue.o palm/palm_tree.o palm/metric.o
 	$(AFLAGS) -o $@ $^ $(LFLAGS)
 
 generate_data: ./generate_data.c
 	$(AFLAGS) -o $@ $^
 
 clean:
-	rm src/*.o *_test generate_data libaili.a
+	rm src/*.o *_test generate_data libaili.a; cd example && make clean
