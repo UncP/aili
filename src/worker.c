@@ -11,6 +11,7 @@
 #include <stdio.h>
 
 #include "worker.h"
+
 // a magic number for pointer, no valid pointer will be equal with it
 // used in point-to-point synchronization
 #define magic_pointer (node *)913
@@ -95,7 +96,7 @@ worker* new_worker(uint32_t id, uint32_t total)
   w->total = total;
 
   // we assume average key size is 16 bytes
-  // max path should be 128, ...
+  // max path should be 128, 256, ...
   uint32_t base = 128;
   uint32_t max_path = (get_batch_size() / (16 * total)) & (~(base - 1));
   w->max_path = max_path < base ? base : max_path;

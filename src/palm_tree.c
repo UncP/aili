@@ -21,8 +21,62 @@ static const char *stage_leaves   = "modify leaves";
 static const char *stage_branches = "modify braches";
 static const char *stage_root     = "modify root";
 
-palm_tree* new_palm_tree(int worker_num)
+static void do_palm_tree_execute(palm_tree *pt, batch *b, worker *w);
+
+typedef struct thread_arg
 {
+  palm_tree *pt;
+  worker    *wrk;
+  bounded_queue *que;
+}thread_arg;
+
+static thread_arg* new_thread_arg(palm_tree *pt, worker *w, bounded_queue *q)
+{
+  thread_arg *j = (thread_arg *)malloc(sizeof(thread_arg));
+  j->pt  = pt;
+  j->wrk = w;
+  j->que = q;
+
+  return j;
+}
+
+static void free_thread_arg(thread_arg *j)
+{
+  free((void *)j);
+}
+
+static void* run(void *arg)
+{
+  thread_arg *j = (thread_arg *)arg;
+  palm_tree *pt = j->pt;
+  worker *w= j->wrk;
+  bounded_queue *q = j->que;
+  int q_idx = 0;
+
+  while (1) {
+    // TODO: optimization?
+    batch *bth = bounded_queue_get_at(q, &q_idx); // q_idx will be updated in the queue
+
+    if (likely(bth))
+      do_palm_tree_execute(pt, bth, w);
+    else
+      break;
+
+    // let worker 0 do the dequeue
+    if (w->id == 0)
+      bounded_queue_dequeue(q);
+  }
+
+  free_thread_arg(j);
+  return 0;
+}
+
+palm_tree* new_palm_tree(int worker_num, int queue_size)
+{
+  if (worker_num <= 0) worker_num = 1;
+
+  init_metric(worker_num);
+
   for (int i = 0; i < worker_num; ++i) {
     register_metric(i, stage_descend, (void *)new_clock());
     register_metric(i, stage_sync, (void *)new_clock());
@@ -35,13 +89,59 @@ palm_tree* new_palm_tree(int worker_num)
   palm_tree *pt = (palm_tree *)malloc(sizeof(palm_tree));
   pt->root = new_node(Root, 0);
 
+  pt->worker_num = worker_num;
+  pt->queue = new_bounded_queue(queue_size);
+  pt->ids = (pthread_t *)malloc(sizeof(pthread_t) * pt->worker_num);
+  pt->workers = (worker **)malloc(sizeof(worker *) * pt->worker_num);
+
+  for (int i = 0; i < pt->worker_num; ++i) {
+    pt->workers[i] = new_worker(i, pt->worker_num);
+    if (i > 0)
+      worker_link(pt->workers[i - 1], pt->workers[i]);
+  }
+
+  for (int i = 0; i < pt->worker_num; ++i) {
+    thread_arg *arg = new_thread_arg(pt, pt->workers[i], pt->queue);
+    assert(pthread_create(&pt->ids[i], 0, run, (void *)arg) == 0);
+  }
+
   return pt;
 }
 
-// free the entire palm tree recursively
 void free_palm_tree(palm_tree *pt)
 {
+  bounded_queue_clear(pt->queue);
+
+  // collect all the child threads
+  for (int i = 0; i < pt->worker_num; ++i)
+    assert(pthread_join(pt->ids[i], 0) == 0);
+
+  free_bounded_queue(pt->queue);
+
+  for (int i = 0; i < pt->worker_num; ++i)
+    free_worker(pt->workers[i]);
+
+  free((void *)pt->workers);
+  free((void *)pt->ids);
+
+  // free the entire palm tree recursively
   free_btree_node(pt->root);
+
+  free((void *)pt);
+
+  free_metric();
+}
+
+// finish all the task batch in the queue
+void palm_tree_flush(palm_tree *pt)
+{
+  bounded_queue_wait_empty(pt->queue);
+}
+
+// put task batch in the queue
+void palm_tree_execute(palm_tree *pt, batch *b)
+{
+  bounded_queue_enqueue(pt->queue, b);
 }
 
 #ifdef Test
@@ -159,7 +259,7 @@ static void descend_to_leaf(palm_tree *pt, batch *b, uint32_t beg, uint32_t end,
 
 // Reference: Parallel Architecture-Friendly Latch-Free Modifications to B+ Trees on Many-Core Processors
 // this is the entrance for all the write/read operations
-void palm_tree_execute(palm_tree *pt, batch *b, worker *w)
+static void do_palm_tree_execute(palm_tree *pt, batch *b, worker *w)
 {
   worker_reset(w);
 

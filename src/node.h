@@ -108,6 +108,7 @@ void batch_clear(batch *b);
 int batch_add_write(batch *b, const void *key, uint32_t len, const void *val);
 int batch_add_read(batch *b, const void *key, uint32_t len);
 void batch_read_at(batch *b, uint32_t idx, uint32_t *op, void **key, uint32_t *len, void **val);
+void* batch_get_value_at(batch *b, uint32_t idx);
 
 #define max_descend_depth 7 // should be enough levels for a b+ tree
 

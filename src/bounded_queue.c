@@ -40,6 +40,17 @@ void free_bounded_queue(bounded_queue *q)
   free((void *)q);
 }
 
+void bounded_queue_wait_empty(bounded_queue *q)
+{
+  pthread_mutex_lock(&q->mutex);
+
+  // wait until all the queue elements have been processed
+  while (q->array[q->head])
+    pthread_cond_wait(&q->cond, &q->mutex);
+
+  pthread_mutex_unlock(&q->mutex);
+}
+
 void bounded_queue_clear(bounded_queue *q)
 {
   pthread_mutex_lock(&q->mutex);

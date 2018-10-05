@@ -25,6 +25,7 @@ typedef struct bounded_queue
 
 bounded_queue* new_bounded_queue(int total);
 void free_bounded_queue(bounded_queue *q);
+void bounded_queue_wait_empty(bounded_queue *q);
 void bounded_queue_clear(bounded_queue *q);
 void bounded_queue_enqueue(bounded_queue *q, void *element);
 void* bounded_queue_get_at(bounded_queue *q, int *idx);

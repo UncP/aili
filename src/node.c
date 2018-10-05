@@ -432,6 +432,13 @@ void batch_read_at(batch *b, uint32_t idx, uint32_t *op, void **key, uint32_t *l
   *val = (void *)v;
 }
 
+void* batch_get_value_at(batch *b, uint32_t idx)
+{
+  if (idx >= b->keys || b->keys == 0) return 0;
+  index_t *index = node_index(b);
+  return get_val(b, index[idx]);
+}
+
 void path_clear(path *p)
 {
   p->depth = 0;

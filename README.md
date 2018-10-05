@@ -34,4 +34,5 @@
 
 
 #### 其他
++ 查看 `example/` 获取使用例子
 + 你可以关注我的[知乎专栏](https://zhuanlan.zhihu.com/b-tree)，这个仓库的相关内容会在知乎上面介绍
