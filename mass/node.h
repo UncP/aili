@@ -25,7 +25,7 @@ typedef struct border_node
 {
   uint32_t version;
 
-  uint8_t  nkeys;
+  uint8_t  nremoved;
   uint8_t  keylen[15];
   uint64_t permutation;
   uint64_t keys[15];
@@ -35,7 +35,7 @@ typedef struct border_node
   struct border_node *prev;
   struct border_node *next;
 
-  interior_node *parent;
+  struct interior_node *parent;
 }border_node;
 
 #endif /* _node_h_ */
