@@ -33,5 +33,8 @@ palm_tree_test: test/palm_tree_test.c palm/node.o palm/worker.o palm/bounded_que
 generate_data: ./generate_data.c
 	$(AFLAGS) -o $@ $^
 
+mass_node_test: test/mass_node_test.c mass/node.o
+	$(AFLAGS) -o $@ $^
+
 clean:
-	rm palm/*.o *_test generate_data libaili.a; cd example && make clean
+	rm palm/*.o mass/*.o *_test generate_data libaili.a; cd example && make clean

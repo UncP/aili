@@ -8,24 +8,27 @@
 
 #include "node.h"
 
-interior_node* new_interior_node()
+static interior_node* new_interior_node()
 {
-  interior_node in = (interior_node *)malloc(sizeof(interior_node));
+  interior_node *in = (interior_node *)malloc(sizeof(interior_node));
 
   in->version = 0;
+
   in->nkeys   = 0;
   in->parent  = 0;
 
   return in;
 }
 
-border_node* new_border_node()
+static border_node* new_border_node()
 {
   border_node *bn = (border_node *)malloc(sizeof(border_node));
 
-  bn->version = 0;
+  uint32_t version = 0;
 
-  bn->nkeys = 0;
+  bn->version = set_border(version);
+
+  bn->nremoved = 0;
 
   bn->permutation = 0;
 
@@ -36,3 +39,15 @@ border_node* new_border_node()
 
   return bn;
 }
+
+node* new_node(int type)
+{
+  return likely(type == Border) ? (node *)new_border_node() : (node *)new_interior_node();
+}
+
+void free_node(node *n)
+{
+  // node type does not matter
+  free((void *)n);
+}
+
