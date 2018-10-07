@@ -91,6 +91,7 @@ int node_insert(node *n, const void *key, uint32_t len, const void *val);
 void* node_search(node *n, const void *key, uint32_t len);
 void node_split(node *old, node *new, char *pkey, uint32_t *plen);
 int node_is_before_key(node *n, const void *key, uint32_t len);
+void node_prefetch(node *n);
 
 /**
  *   batch is a wrapper for node with some difference, key may be duplicated
@@ -125,6 +126,7 @@ void path_set_kv_id(path *p, uint32_t id);
 uint32_t path_get_kv_id(path *p);
 void path_push_node(path *p, node *n);
 node* path_get_node_at_level(path *p, uint32_t level);
+node* path_get_node_at_index(path *p, uint32_t idx);
 
 typedef struct fence
 {

@@ -14,6 +14,7 @@ typedef struct bounded_queue
   int total;
   int head; // point to the slot which to enqueue
   int tail; // point to the slot which to dequeue
+  int size;
   int clear;
 
   void **array;

@@ -86,6 +86,14 @@ void free_node(node *n)
   free((void *)n);
 }
 
+void node_prefetch(node *n)
+{
+  // 0 means for read,
+  // 3 means node has a high degree of temporal locality to stay in all levels of cache if possible
+  // TODO: change locality according to level?
+  __builtin_prefetch(n, 0 /* rw */, 3 /* locality */);
+}
+
 // DFS free each node
 void free_btree_node(node *n)
 {
@@ -472,6 +480,13 @@ node* path_get_node_at_level(path *p, uint32_t level)
   // TODO: remove this
   assert(p->depth > level);
   return p->nodes[p->depth - level - 1];
+}
+
+node* path_get_node_at_index(path *p, uint32_t idx)
+{
+  // TODO: remove this
+  assert(p->depth > idx);
+  return p->nodes[idx];
 }
 
 #ifdef Test

@@ -185,6 +185,7 @@ static void handle_root_split(palm_tree *pt, worker *w)
   pt->root = new_root;
 }
 
+#ifndef Level
 // descend to leaf node for key at `kidx`, using path at `pidx`
 static void descend_to_leaf_single(node *r, batch *b, worker *w, uint32_t kidx, uint32_t pidx)
 {
@@ -238,6 +239,7 @@ static void descend_for_range(node *r, batch *b, worker *w, uint32_t kbeg, uint3
       path_copy(lp, worker_get_path_at(w, pidx + i));
   }
 }
+#endif /* Level */
 
 // we descend to leaf node for each key in [beg, end), and store each key's descending path
 static void descend_to_leaf(palm_tree *pt, batch *b, uint32_t beg, uint32_t end, worker *w)
@@ -247,14 +249,35 @@ static void descend_to_leaf(palm_tree *pt, batch *b, uint32_t beg, uint32_t end,
   for (uint32_t i = beg; i < end; ++i) {
     path* p = worker_get_new_path(w);
     path_set_kv_id(p, i);
+    path_push_node(p, pt->root);
   }
 
+#ifndef Level
+  // lazy descend
   uint32_t pidx = 0;
   descend_to_leaf_single(pt->root, b, w, beg, pidx);
   if (--end > beg) {
     descend_to_leaf_single(pt->root, b, w, end, pidx + end - beg);
     descend_for_range(pt->root, b, w, beg, end, pidx);
   }
+#else
+  // level descend
+  for (uint32_t level = pt->root->level, idx = 0; level; --level, ++idx) {
+    for (uint32_t i = beg, j = 0; i < end; ++i, ++j) {
+      uint32_t  op;
+      void    *key;
+      uint32_t len;
+      void    *val;
+      // get kv info
+      batch_read_at(b, i, &op, &key, &len, &val);
+      path *p = worker_get_path_at(w, j);
+      node *cur = path_get_node_at_index(p, idx);
+      cur = node_descend(cur, key, len);
+      node_prefetch(cur);
+      path_push_node(p, cur);
+    }
+  }
+#endif /* Level */
 }
 
 // Reference: Parallel Architecture-Friendly Latch-Free Modifications to B+ Trees on Many-Core Processors

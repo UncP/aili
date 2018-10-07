@@ -20,6 +20,7 @@ bounded_queue* new_bounded_queue(int total)
   q->total = total;
   q->head  = 0;
   q->tail  = 0;
+  q->size  = 0;
   q->clear = 0;
 
   q->array = (void **)calloc(q->total, sizeof(void *));
@@ -45,7 +46,7 @@ void bounded_queue_wait_empty(bounded_queue *q)
   pthread_mutex_lock(&q->mutex);
 
   // wait until all the queue elements have been processed
-  while (q->array[q->head])
+  while (q->size)
     pthread_cond_wait(&q->cond, &q->mutex);
 
   pthread_mutex_unlock(&q->mutex);
@@ -56,7 +57,7 @@ void bounded_queue_clear(bounded_queue *q)
   pthread_mutex_lock(&q->mutex);
 
   // wait until all the queue elements have been processed
-  while (q->array[q->head])
+  while (q->size)
     pthread_cond_wait(&q->cond, &q->mutex);
 
   q->clear = 1;
@@ -76,6 +77,7 @@ void bounded_queue_enqueue(bounded_queue *q, void *element)
 
   if (!q->clear) {
     q->array[q->tail++] = element;
+    ++q->size;
     if (q->tail == q->total)
       q->tail = 0;
     // wake up all the workers
@@ -113,6 +115,7 @@ void bounded_queue_dequeue(bounded_queue *q)
   assert(q->array[q->head]);
 
   q->array[q->head] = 0;
+  --q->size;
 
   if (++q->head == q->total)
     q->head = 0;
