@@ -1,6 +1,6 @@
 CC=gcc
 CFLAGS=-std=c99 -Wall -Werror -Wextra -O3
-DFLAGS=-DTest
+DFLAGS=-DTest -DLazy
 IFLAGS=-I./third_party
 LFLAGS=./third_party/c_hashmap/libhashmap.a -lpthread
 AFLAGS=$(CC) $(CFLAGS) $(DFLAGS) $(IFLAGS)
@@ -34,4 +34,4 @@ generate_data: ./generate_data.c
 	$(AFLAGS) -o $@ $^
 
 clean:
-	rm src/*.o *_test generate_data libaili.a; cd example && make clean
+	rm palm/*.o *_test generate_data libaili.a; cd example && make clean
