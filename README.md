@@ -38,5 +38,6 @@
 
 
 #### Other
-+ checkout `example/` to get use example
-+ follow my [知乎专栏](https://zhuanlan.zhihu.com/b-tree) for blog about this repo
++ checkout `example/` to get example
++ follow my [知乎专栏](https://zhuanlan.zhihu.com/b-tree) for blogs about this repository
++ please read Palm Tree paper to better understand the code in `palm/`
