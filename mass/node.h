@@ -34,14 +34,15 @@
 #define unset_insert(n) ((n) & (~INSERT_BIT))
 #define unset_split(n)  ((n) & (~SPLIT_BIT))
 
-#define node_is_locked(n)    (n->version & LOCK_BIT)
-#define node_is_inserting(n) (n->version & INSERT_BIT)
-#define node_is_spliting(n)  (n->version & SPLIT_BIT)
-#define node_is_deleted(n)   (n->version & DELETE_BIT)
-#define node_is_root(n)      (n->version & ROOT_BIT)
-#define node_is_border(n)    (n->version & BORDER_BIT)
-#define node_is_interior(n)  (!node_is_border(n))
+#define is_locked(n)    (n & LOCK_BIT)
+#define is_inserting(n) (n & INSERT_BIT)
+#define is_spliting(n)  (n & SPLIT_BIT)
+#define is_deleted(n)   (n & DELETE_BIT)
+#define is_root(n)      (n & ROOT_BIT)
+#define is_border(n)    (n & BORDER_BIT)
+#define is_interior(n)  (!is_border(n))
 
+// see Mass Tree paper figure 2 for detail
 typedef struct interior_node
 {
   uint32_t version;
@@ -54,6 +55,7 @@ typedef struct interior_node
   struct interior_node *parent;
 }interior_node;
 
+// see Mass Tree paper figure 2 for detail
 typedef struct border_node
 {
   uint32_t version;
@@ -80,5 +82,8 @@ typedef struct node
 
 node* new_node(int type);
 void free_node(node *n);
+uint32_t node_stable_version(node *n);
+void node_lock(node *n);
+void node_unlock(node *n);
 
 #endif /* _node_h_ */

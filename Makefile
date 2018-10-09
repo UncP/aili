@@ -34,7 +34,7 @@ generate_data: ./generate_data.c
 	$(AFLAGS) -o $@ $^
 
 mass_node_test: test/mass_node_test.c mass/node.o
-	$(AFLAGS) -o $@ $^
+	$(AFLAGS) -o $@ $^ -lpthread
 
 clean:
 	rm palm/*.o mass/*.o *_test generate_data libaili.a; cd example && make clean

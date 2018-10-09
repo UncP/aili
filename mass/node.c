@@ -5,6 +5,7 @@
 **/
 
 #include <stdlib.h>
+#include <assert.h>
 
 #include "node.h"
 
@@ -51,3 +52,38 @@ void free_node(node *n)
   free((void *)n);
 }
 
+uint32_t node_stable_version(node *n)
+{
+  uint32_t version;
+  do {
+    __atomic_load(&n->version, &version, __ATOMIC_ACQUIRE);
+  } while (is_inserting(version) || is_spliting(version));
+  return version;
+}
+
+void node_lock(node *n)
+{
+  uint32_t version;
+  uint32_t min, max = 128;
+  do {
+    min = 4;
+    again:
+    __atomic_load(&n->version, &version, __ATOMIC_ACQUIRE);
+    if (is_locked(version)) {
+      for (uint32_t i = 0; i != min; ++i)
+        __asm__ __volatile__("pause" ::: "memory");
+      if (min < max) min += min;
+      goto again;
+    }
+  } while (!__atomic_compare_exchange_n(&n->version, &version, set_lock(version),
+      1, __ATOMIC_ACQ_REL, __ATOMIC_RELAXED));
+}
+
+void node_unlock(node *n)
+{
+  uint32_t version;
+  __atomic_load(&n->version, &version, __ATOMIC_ACQUIRE);
+  assert(is_locked(version));
+  assert(__atomic_compare_exchange_n(&n->version, &version, unset_lock(version),
+      0, __ATOMIC_ACQ_REL, __ATOMIC_RELAXED));
+}
