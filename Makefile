@@ -1,6 +1,6 @@
 CC=gcc
 CFLAGS=-std=c99 -Wall -Werror -Wextra -O3
-DFLAGS=-DTest -DLazy
+DFLAGS=-DTest
 IFLAGS=-I./third_party
 LFLAGS=./third_party/c_hashmap/libhashmap.a -lpthread
 AFLAGS=$(CC) $(CFLAGS) $(DFLAGS) $(IFLAGS)
