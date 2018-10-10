@@ -61,13 +61,14 @@ uint32_t node_stable_version(node *n)
   return version;
 }
 
+// TODO: optimize
 void node_lock(node *n)
 {
   uint32_t version;
   uint32_t min, max = 128;
   do {
     min = 4;
-    again:
+  again:
     __atomic_load(&n->version, &version, __ATOMIC_ACQUIRE);
     if (is_locked(version)) {
       for (uint32_t i = 0; i != min; ++i)
@@ -75,15 +76,16 @@ void node_lock(node *n)
       if (min < max) min += min;
       goto again;
     }
-  } while (!__atomic_compare_exchange_n(&n->version, &version, set_lock(version),
-      1, __ATOMIC_ACQ_REL, __ATOMIC_RELAXED));
+  } while (!__atomic_compare_exchange_n(&n->version,
+    &version, set_lock(version), 1, __ATOMIC_ACQ_REL, __ATOMIC_RELAXED));
 }
 
+// TODO: optimize
 void node_unlock(node *n)
 {
   uint32_t version;
   __atomic_load(&n->version, &version, __ATOMIC_ACQUIRE);
   assert(is_locked(version));
-  assert(__atomic_compare_exchange_n(&n->version, &version, unset_lock(version),
-      0, __ATOMIC_ACQ_REL, __ATOMIC_RELAXED));
+  assert(__atomic_compare_exchange_n(&n->version,
+    &version, unset_lock(version), 0, __ATOMIC_ACQ_REL, __ATOMIC_RELAXED));
 }
