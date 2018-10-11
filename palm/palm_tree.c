@@ -293,9 +293,11 @@ static void descend_to_leaf(palm_tree *pt, batch *b, uint32_t beg, uint32_t end,
 
   int direction = 1; // 1 means left to right, -1 means right to left
   for (uint32_t level = pt->root->level, idx = 0; level; --level, ++idx, direction *= -1) {
-    int i = (direction == 1) ? beg : (end - 1);      // end > 1
-    int e = (direction == 1) ? end : ((int)beg - 1); // beg could be 0, so cast to `int`
-    int j = (direction == 1) ? 0 : (end - beg - 1);  // end > beg
+    int i, e, j;
+    if (direction == 1)
+      i = beg, e = end, j = 0;
+    else
+      i = end - 1, e = (int)beg - 1, j = end - beg - 1;
     for (; i != e; i += direction, j += direction) {
       uint32_t  op;
       void    *key;
