@@ -291,7 +291,9 @@ static void descend_to_leaf(palm_tree *pt, batch *b, uint32_t beg, uint32_t end,
     path_push_node(p, pt->root);
   }
 
-  int direction = 1; // 1 means left to right, -1 means right to left
+  // make sure that we process each key from left to right in level 0
+  // 1 means left to right, -1 means right to left
+  int direction = ((pt->root->level % 2) == 0) ? 1 : -1;
   for (uint32_t level = pt->root->level, idx = 0; level; --level, ++idx, direction *= -1) {
     int i, e, j;
     if (direction == 1)
