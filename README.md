@@ -1,7 +1,7 @@
 # aili
 
 [![Author](https://img.shields.io/badge/Author-UncP-brightgreen.svg)](https://github.com/UncP)
-[![Version](https://img.shields.io/badge/Version-1.3.1-blue.svg)](https://github.com/UncP/aili)
+[![Version](https://img.shields.io/badge/Version-1.3.2-blue.svg)](https://github.com/UncP/aili)
 
 #### References
 * Palm Tree : [Parallel Architecture-Friendly Latch-Free Modifications to B+ Trees on Many-Core Processors](http://www.vldb.org/pvldb/vol4/p795-sewall.pdf)
@@ -21,6 +21,7 @@
 | [1.2.3](https://github.com/UncP/aili/tree/1.2.3)  | adjust Palm Tree descending policy (lazy descend, great for sequential operation) |
 | [1.3.0](https://github.com/UncP/aili/tree/1.3.0)  | a major refactor |
 | [1.3.1](https://github.com/UncP/aili/tree/1.3.1)  | Prefetch Palm Tree |
+| [1.3.2](https://github.com/UncP/aili/tree/1.3.2)  | zigzag descending policy |
 
 
 #### Have a Try
@@ -40,4 +41,3 @@
 #### Other
 + checkout `example/` to get example
 + follow my [知乎专栏](https://zhuanlan.zhihu.com/b-tree) for blogs about this repository
-+ please read Palm Tree paper to better understand the code in `palm/`
