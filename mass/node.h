@@ -16,12 +16,27 @@
 #define Interior 0
 #define Border   1
 
+/**
+ *   layout of a node's version (32 bit):
+ *       lock   insert  split   delete   root   border  not-used    vinsert     vsplit
+ *     |   1   |  1   |   1   |   1   |   1   |   1   |    2    |     8     |     16     |
+ *
+**/
+
 #define LOCK_BIT   ((uint32_t)1 << 31)
 #define INSERT_BIT ((uint32_t)1 << 30)
 #define SPLIT_BIT  ((uint32_t)1 << 29)
 #define DELETE_BIT ((uint32_t)1 << 28)
 #define ROOT_BIT   ((uint32_t)1 << 27)
 #define BORDER_BIT ((uint32_t)1 << 26)
+
+// `vinsert` is a 8 bit field
+#define get_vinsert(n)  ((uint32_t)(((n) >> 16) & 0xff))
+#define incr_vinsert(n) ((n) + ((uint32_t)1 << 16))
+
+// `vsplit` is a 16 bit field
+#define get_vsplit(n)  ((n) & 0xffff)
+#define incr_vsplit(n) ((n) + 1)
 
 #define set_lock(n)   ((n) | LOCK_BIT)
 #define set_insert(n) ((n) | INSERT_BIT)
@@ -34,12 +49,12 @@
 #define unset_insert(n) ((n) & (~INSERT_BIT))
 #define unset_split(n)  ((n) & (~SPLIT_BIT))
 
-#define is_locked(n)    (n & LOCK_BIT)
-#define is_inserting(n) (n & INSERT_BIT)
-#define is_spliting(n)  (n & SPLIT_BIT)
-#define is_deleted(n)   (n & DELETE_BIT)
-#define is_root(n)      (n & ROOT_BIT)
-#define is_border(n)    (n & BORDER_BIT)
+#define is_locked(n)    ((n) & LOCK_BIT)
+#define is_inserting(n) ((n) & INSERT_BIT)
+#define is_spliting(n)  ((n) & SPLIT_BIT)
+#define is_deleted(n)   ((n) & DELETE_BIT)
+#define is_root(n)      ((n) & ROOT_BIT)
+#define is_border(n)    ((n) & BORDER_BIT)
 #define is_interior(n)  (!is_border(n))
 
 // see Mass Tree paper figure 2 for detail

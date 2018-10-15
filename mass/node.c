@@ -86,6 +86,15 @@ void node_unlock(node *n)
   uint32_t version;
   __atomic_load(&n->version, &version, __ATOMIC_ACQUIRE);
   assert(is_locked(version));
+
+  if (is_inserting(version)) {
+    version = incr_vinsert(version);
+    version = unset_insert(version);
+  } else if (is_spliting(version)) {
+    version = incr_vsplit(version);
+    version = unset_split(version);
+  }
+
   assert(__atomic_compare_exchange_n(&n->version,
     &version, unset_lock(version), 0 /* weak */, __ATOMIC_RELEASE, __ATOMIC_RELAXED));
 }
