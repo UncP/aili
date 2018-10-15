@@ -52,11 +52,32 @@ void free_node(node *n)
   free((void *)n);
 }
 
-uint32_t node_stable_version(node *n)
+static inline uint32_t node_get_version(node *n)
+{
+  uint32_t version;
+  __atomic_load(&n->version, &version, __ATOMIC_ACQUIRE);
+  return version;
+}
+
+static inline interior_node* node_get_parent(node *n)
+{
+  uint32_t version = node_get_version(n);
+  interior_node *parent;
+  if (is_border(version)) {
+    border_node *bn = (border_node *)n;
+    __atomic_load(&bn->parent, &parent, __ATOMIC_ACQUIRE);
+  } else {
+    interior_node *in = (interior_node *)n;
+    __atomic_load(&in->parent, &parent, __ATOMIC_ACQUIRE);
+  }
+  return parent;
+}
+
+static uint32_t node_get_stable_version(node *n)
 {
   uint32_t version;
   do {
-    __atomic_load(&n->version, &version, __ATOMIC_ACQUIRE);
+    version = node_get_version(n);
   } while (is_inserting(version) || is_spliting(version));
   return version;
 }
@@ -66,25 +87,27 @@ void node_lock(node *n)
 {
   uint32_t version;
   uint32_t min, max = 128;
-  do {
+  while (1) {
     min = 4;
-  again:
-    __atomic_load(&n->version, &version, __ATOMIC_ACQUIRE);
-    if (is_locked(version)) {
+    while (1) {
+      version = node_get_version(n);
+      if (!is_locked(version))
+        break;
       for (uint32_t i = 0; i != min; ++i)
         __asm__ __volatile__("pause" ::: "memory");
-      if (min < max) min += min;
-      goto again;
+      if (min < max)
+        min += min;
     }
-  } while (!__atomic_compare_exchange_n(&n->version,
-    &version, set_lock(version), 1 /* weak */, __ATOMIC_RELEASE, __ATOMIC_RELAXED));
+    if (__atomic_compare_exchange_n(&n->version, &version, set_lock(version),
+      1 /* weak */, __ATOMIC_RELEASE, __ATOMIC_RELAXED))
+      break;
+  }
 }
 
 // TODO: optimize
 void node_unlock(node *n)
 {
-  uint32_t version;
-  __atomic_load(&n->version, &version, __ATOMIC_ACQUIRE);
+  uint32_t version = node_get_version(n);
   assert(is_locked(version));
 
   if (is_inserting(version)) {
@@ -95,6 +118,19 @@ void node_unlock(node *n)
     version = unset_split(version);
   }
 
-  assert(__atomic_compare_exchange_n(&n->version,
-    &version, unset_lock(version), 0 /* weak */, __ATOMIC_RELEASE, __ATOMIC_RELAXED));
+  assert(__atomic_compare_exchange_n(&n->version, &version, unset_lock(version),
+    0 /* weak */, __ATOMIC_RELEASE, __ATOMIC_RELAXED));
+}
+
+interior_node* node_get_locked_parent(node *n)
+{
+  interior_node *parent;
+  while (1) {
+    parent = node_get_parent(n);
+    node_lock((node *)parent);
+    if (node_get_parent(n) == parent)
+      break;
+    node_unlock((node *)parent);
+  }
+  return parent;
 }

@@ -97,7 +97,6 @@ typedef struct node
 
 node* new_node(int type);
 void free_node(node *n);
-uint32_t node_stable_version(node *n);
 void node_lock(node *n);
 void node_unlock(node *n);
 
