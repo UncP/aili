@@ -12,7 +12,7 @@
 
 #include "worker.h"
 
-// a magic number for pointer, no valid pointer will be equal with it
+// a magic number for pointer, no valid pointer will be equal with it.
 // used in point-to-point synchronization
 #define magic_pointer (node *)913
 

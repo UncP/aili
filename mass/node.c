@@ -77,7 +77,7 @@ void node_lock(node *n)
       goto again;
     }
   } while (!__atomic_compare_exchange_n(&n->version,
-    &version, set_lock(version), 1, __ATOMIC_ACQ_REL, __ATOMIC_RELAXED));
+    &version, set_lock(version), 1 /* weak */, __ATOMIC_RELEASE, __ATOMIC_RELAXED));
 }
 
 // TODO: optimize
@@ -87,5 +87,5 @@ void node_unlock(node *n)
   __atomic_load(&n->version, &version, __ATOMIC_ACQUIRE);
   assert(is_locked(version));
   assert(__atomic_compare_exchange_n(&n->version,
-    &version, unset_lock(version), 0, __ATOMIC_ACQ_REL, __ATOMIC_RELAXED));
+    &version, unset_lock(version), 0 /* weak */, __ATOMIC_RELEASE, __ATOMIC_RELAXED));
 }
