@@ -134,3 +134,8 @@ interior_node* node_get_locked_parent(node *n)
   }
   return parent;
 }
+
+node* node_locate_child(node *n, const void *key, uint32_t len)
+{
+
+}

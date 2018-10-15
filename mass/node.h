@@ -99,5 +99,6 @@ node* new_node(int type);
 void free_node(node *n);
 void node_lock(node *n);
 void node_unlock(node *n);
+node* node_locate_child(node *n, const void *key, uint32_t len);
 
 #endif /* _node_h_ */
