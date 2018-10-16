@@ -57,35 +57,36 @@
 #define is_border(n)    ((n) & BORDER_BIT)
 #define is_interior(n)  (!is_border(n))
 
-// see Mass Tree paper figure 2 for detail
+// see Mass Tree paper figure 2 for detail, node structure is reordered for easy coding
 typedef struct interior_node
 {
   uint32_t version;
 
-  uint32_t nkeys;
+  uint64_t permutation; // this field is uint8_t in the paper,
+                        // but it will generate too many intermediate states,
+                        // so I changed it to uint64_t, same as in border_node
   uint64_t keyslice[15];
+  struct interior_node *parent;
 
   void    *child[16];
-
-  struct interior_node *parent;
 }interior_node;
 
-// see Mass Tree paper figure 2 for detail
+// see Mass Tree paper figure 2 for detail, node structure is reordered for easy coding
 typedef struct border_node
 {
   uint32_t version;
+  uint64_t permutation;
+  uint64_t keyslice[15];
+
+  struct interior_node *parent;
 
   uint8_t  nremoved;
   uint8_t  keylen[15];
-  uint64_t permutation;
-  uint64_t keyslice[15];
 
   void *lv[15];
 
   struct border_node *prev;
   struct border_node *next;
-
-  struct interior_node *parent;
 }border_node;
 
 // this is a little bit tricky, since both interior_node and border_node
@@ -93,12 +94,17 @@ typedef struct border_node
 typedef struct node
 {
   uint32_t version;
+  uint64_t permutation;
+  uint64_t keyslice[15];
+
+  struct interior_node *parent;
 }node;
 
 node* new_node(int type);
 void free_node(node *n);
 void node_lock(node *n);
 void node_unlock(node *n);
-node* node_locate_child(node *n, const void *key, uint32_t len);
+uint32_t node_get_stable_version(node *n);
+node* node_locate_child(node *n, const void *key, uint32_t len, uint32_t ptr);
 
 #endif /* _node_h_ */

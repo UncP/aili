@@ -15,8 +15,9 @@ static interior_node* new_interior_node()
 
   in->version = 0;
 
-  in->nkeys   = 0;
   in->parent  = 0;
+
+  in->permutation = 0;
 
   return in;
 }
@@ -59,21 +60,21 @@ static inline uint32_t node_get_version(node *n)
   return version;
 }
 
+static inline uint64_t node_get_permutation(node *n)
+{
+  uint64_t permutation;
+  __atomic_load(&n->permutation, &permutation, __ATOMIC_ACQUIRE);
+  return permutation;
+}
+
 static inline interior_node* node_get_parent(node *n)
 {
-  uint32_t version = node_get_version(n);
   interior_node *parent;
-  if (is_border(version)) {
-    border_node *bn = (border_node *)n;
-    __atomic_load(&bn->parent, &parent, __ATOMIC_ACQUIRE);
-  } else {
-    interior_node *in = (interior_node *)n;
-    __atomic_load(&in->parent, &parent, __ATOMIC_ACQUIRE);
-  }
+  __atomic_load(&n->parent, &parent, __ATOMIC_ACQUIRE);
   return parent;
 }
 
-static uint32_t node_get_stable_version(node *n)
+uint32_t node_get_stable_version(node *n)
 {
   uint32_t version;
   do {
@@ -135,7 +136,20 @@ interior_node* node_get_locked_parent(node *n)
   return parent;
 }
 
-node* node_locate_child(node *n, const void *key, uint32_t len)
+// find the child to descend to, must be an interior node
+node* node_locate_child(node *n, const void *key, uint32_t len, uint32_t ptr)
 {
+  // TODO: no need to use atomic operation
+  uint32_t version = node_get_version(n);
+  assert(is_interior(version));
 
+  // TODO: no need to use atomic operation?
+  uint64_t permutation = node_get_permutation(n);
+
+  if (ptr + sizeof(uint64_t) < len) {
+    // need to create a new border node to put this key
+
+  } else {
+
+  }
 }
