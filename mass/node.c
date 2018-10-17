@@ -5,9 +5,46 @@
 **/
 
 #include <stdlib.h>
+#include <string.h>
 #include <assert.h>
 
 #include "node.h"
+
+// `permutation` is uint64_t
+#define get_count(permutation) ((int)(((permutation) >> 60) & 0xf))
+#define get_index(permutation, index) ((int)(((permutation) >> (4 * (14 - index))) & 0xf))
+
+// see Mass Tree paper figure 2 for detail, node structure is reordered for easy coding
+typedef struct interior_node
+{
+  uint32_t version;
+
+  uint64_t permutation; // this field is uint8_t in the paper,
+                        // but it will generate too many intermediate states,
+                        // so I changed it to uint64_t, same as in border_node
+  uint64_t keyslice[15];
+  struct interior_node *parent;
+
+  void    *child[16];
+}interior_node;
+
+// see Mass Tree paper figure 2 for detail, node structure is reordered for easy coding
+typedef struct border_node
+{
+  uint32_t version;
+  uint64_t permutation;
+  uint64_t keyslice[15];
+
+  struct interior_node *parent;
+
+  uint8_t  nremoved;
+  uint8_t  keylen[15];
+
+  void *lv[15];
+
+  struct border_node *prev;
+  struct border_node *next;
+}border_node;
 
 static interior_node* new_interior_node()
 {
@@ -137,19 +174,38 @@ interior_node* node_get_locked_parent(node *n)
 }
 
 // find the child to descend to, must be an interior node
-node* node_locate_child(node *n, const void *key, uint32_t len, uint32_t ptr)
+node* node_locate_child(node *n, const void *key, uint32_t len, uint32_t *ptr)
 {
   // TODO: no need to use atomic operation
   uint32_t version = node_get_version(n);
   assert(is_interior(version));
 
+  uint64_t cur = 0;
+  if ((*ptr + sizeof(uint64_t)) < len) {
+    memcpy(&cur, key, len - *ptr); // other bytes will be 0
+    *ptr = len;
+  } else {
+    cur = *((uint64_t *)((char *)key + *ptr));
+    *ptr += sizeof(uint64_t);
+  }
+
   // TODO: no need to use atomic operation?
   uint64_t permutation = node_get_permutation(n);
 
-  if (ptr + sizeof(uint64_t) < len) {
-    // need to create a new border node to put this key
+  int first = 0, count = get_count(permutation);
+  while (count > 0) {
+    int half = count >> 1;
+    int middle = first + half;
 
-  } else {
+    int index = get_index(permutation, middle);
 
+    if (n->keyslice[index] <= cur) {
+      first = middle + 1;
+      count -= half + 1;
+    } else {
+      count = half;
+    }
   }
+
+  return (node *)(((interior_node *)n)->child[first]);
 }

@@ -243,7 +243,7 @@ static void descend_for_range(node *r, batch *b, worker *w, uint32_t kbeg, uint3
 
 // we descend to leaf node for each key in [beg, end), and store each key's descending path.
 // there are 3 descending policy to choose:
-//   1. lazy descend: like dfs, but with some amazing optimization
+//   1. lazy descend: like dfs, but with some amazing optimization, great for sequential insertion
 //   2. level descend: like bfs, good for cache locality
 //   3. zigzag descend: invented by myself, also good for cache locality
 static void descend_to_leaf(palm_tree *pt, batch *b, uint32_t beg, uint32_t end, worker *w)
@@ -284,14 +284,14 @@ static void descend_to_leaf(palm_tree *pt, batch *b, uint32_t beg, uint32_t end,
       path_push_node(p, cur);
     }
   }
-#else  // Zigzag descend
+#else  // zigzag descend
   for (uint32_t i = beg; i < end; ++i) {
     path* p = worker_get_new_path(w);
     path_set_kv_id(p, i);
     path_push_node(p, pt->root);
   }
 
-  // make sure that we process each key from left to right in level 0
+  // make sure that we process each key from left to right in level 0 for better cache locality
   // 1 means left to right, -1 means right to left
   int direction = ((pt->root->level % 2) == 0) ? 1 : -1;
   for (uint32_t level = pt->root->level, idx = 0; level; --level, ++idx, direction *= -1) {
