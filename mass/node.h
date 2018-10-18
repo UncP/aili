@@ -32,11 +32,11 @@
 
 // `vinsert` is a 8 bit field
 #define get_vinsert(n)  ((uint32_t)(((n) >> 16) & 0xff))
-#define incr_vinsert(n) ((n) + ((uint32_t)1 << 16))
+#define incr_vinsert(n) (((n) & 0xff00ffff) | (((n) + 0x10000) & 0xff0000)) // overflow is handled
 
 // `vsplit` is a 16 bit field
 #define get_vsplit(n)  ((n) & 0xffff)
-#define incr_vsplit(n) ((n) + 1)
+#define incr_vsplit(n) (((n) & 0xffff0000) | (((n) + 1) & 0xffff)) // overflow is handled
 
 #define set_lock(n)   ((n) | LOCK_BIT)
 #define set_insert(n) ((n) | INSERT_BIT)
@@ -74,5 +74,6 @@ void node_lock(node *n);
 void node_unlock(node *n);
 uint32_t node_get_stable_version(node *n);
 node* node_locate_child(node *n, const void *key, uint32_t len, uint32_t *ptr);
+int node_insert(node *n, const void *key, uint32_t len, uint32_t *ptr, const void *val);
 
 #endif /* _node_h_ */

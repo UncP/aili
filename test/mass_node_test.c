@@ -44,20 +44,24 @@ void test_node_marco()
   n1->version = set_delete(n1->version);
   assert(is_deleted(n1->version));
 
-  assert(get_vinsert(n1->version) == 0);
-  for (int i = 0; i < 100; ++i) {
-    n1->version = incr_vinsert(n1->version);
-    assert((int)get_vinsert(n1->version) == (i+1));
-  }
-
-  assert(get_vsplit(n1->version) == 0);
-  for (int i = 0; i < 100; ++i) {
-    n1->version = incr_vsplit(n1->version);
-    assert((int)get_vsplit(n1->version) == (i+1));
-  }
-
   node *n2 = new_node(Interior);
   assert(is_interior(n2->version));
+
+  assert(get_vinsert(n2->version) == 0);
+  for (int i = 0; i < 255; ++i) {
+    n2->version = incr_vinsert(n2->version);
+    assert((int)get_vinsert(n2->version) == (i+1));
+  }
+  n2->version = incr_vinsert(n2->version);
+  assert(n2->version == 0);
+
+  assert(get_vsplit(n2->version) == 0);
+  for (int i = 0; i < 65535; ++i) {
+    n2->version = incr_vsplit(n2->version);
+    assert((int)get_vsplit(n2->version) == (i+1));
+  }
+  n2->version = incr_vsplit(n2->version);
+  assert(n2->version == 0);
 
   free_node(n1);
   free_node(n2);

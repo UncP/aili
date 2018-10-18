@@ -12,7 +12,15 @@
 
 // `permutation` is uint64_t
 #define get_count(permutation) ((int)(((permutation) >> 60) & 0xf))
+#define incr_count(permutation) ((permutation) + ((uint64_t)1 << 60)) // will not overlow
 #define get_index(permutation, index) ((int)(((permutation) >> (4 * (14 - index))) & 0xf))
+#define update_permutation(permutation, index, value) {  \
+  uint64_t right = permutation << ((index + 1) * 4);     \
+  uint64_t left = permutation >> ((15 - index) * 4);     \
+  uint64_t middle = (value & 0xf) << ((14 - index) * 4); \
+  permutation = left | middle | right;                   \
+  permutation = incr_count(permutation);                 \
+}
 
 // see Mass Tree paper figure 2 for detail, node structure is reordered for easy coding
 typedef struct interior_node
@@ -45,6 +53,20 @@ typedef struct border_node
   struct border_node *prev;
   struct border_node *next;
 }border_node;
+
+// get current 8-byte key starting at `*ptr`, `*ptr` will be updated
+static uint64_t get_key_at(const void *key, uint64_t len, uint32_t *ptr)
+{
+  uint64_t cur = 0;
+  if ((*ptr + sizeof(uint64_t)) > len) {
+    memcpy(&cur, key, len - *ptr); // other bytes will be 0
+    *ptr = len;
+  } else {
+    cur = *((uint64_t *)((char *)key + *ptr));
+    *ptr += sizeof(uint64_t);
+  }
+  return cur;
+}
 
 static interior_node* new_interior_node()
 {
@@ -95,6 +117,11 @@ static inline uint32_t node_get_version(node *n)
   uint32_t version;
   __atomic_load(&n->version, &version, __ATOMIC_ACQUIRE);
   return version;
+}
+
+static inline void node_set_version(node *n, uint32_t version)
+{
+  __atomic_store(&n->version, &version, __ATOMIC_RELEASE);
 }
 
 static inline uint64_t node_get_permutation(node *n)
@@ -177,20 +204,13 @@ interior_node* node_get_locked_parent(node *n)
 node* node_locate_child(node *n, const void *key, uint32_t len, uint32_t *ptr)
 {
   // TODO: no need to use atomic operation
-  uint32_t version = node_get_version(n);
+  const uint32_t version = node_get_version(n);
   assert(is_interior(version));
 
-  uint64_t cur = 0;
-  if ((*ptr + sizeof(uint64_t)) < len) {
-    memcpy(&cur, key, len - *ptr); // other bytes will be 0
-    *ptr = len;
-  } else {
-    cur = *((uint64_t *)((char *)key + *ptr));
-    *ptr += sizeof(uint64_t);
-  }
+  // TODO: no need to use atomic operation
+  const uint64_t permutation = node_get_permutation(n);
 
-  // TODO: no need to use atomic operation?
-  uint64_t permutation = node_get_permutation(n);
+  const uint64_t cur = get_key_at(key, len, ptr);
 
   int first = 0, count = get_count(permutation);
   while (count > 0) {
@@ -208,4 +228,46 @@ node* node_locate_child(node *n, const void *key, uint32_t len, uint32_t *ptr)
   }
 
   return (node *)(((interior_node *)n)->child[first]);
+}
+
+int node_insert(node *n, const void *key, uint32_t len, uint32_t *ptr, const void *val)
+{
+  // TODO: no need to use atomic operation
+  uint32_t version = node_get_version(n);
+  assert(is_locked(version));
+
+  node_set_version(n, set_insert(version));
+
+  // TODO: no need to use atomic operation
+  uint64_t permutation = node_get_permutation(n);
+
+  const uint64_t cur = get_key_at(key, len, ptr);
+
+  int low = 0, count = get_count(permutation), high = count - 1;
+
+  while (low <= high) {
+    int mid = (low + high) / 2;
+
+    int index = get_index(permutation, mid);
+
+    if (n->keyslice[index] == cur)
+      return 0;
+    else if (n->keyslice[index] < cur)
+      low  = mid + 1;
+    else
+      high = mid - 1;
+  }
+
+  // node is full
+  if (count == 15) return -1;
+
+  if (is_border(version)) {
+    border_node *bn = (border_node *)n;
+    bn->lv[count] = (void *)val;
+  } else {
+    interior_node *in = (interior_node *)n;
+    in->child[count + 1] = (void *)val;
+  }
+  update_permutation(permutation, low, count);
+  return 1;
 }
