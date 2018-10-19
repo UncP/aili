@@ -47,25 +47,15 @@ typedef struct border_node
   uint8_t  nremoved;
   uint8_t  keylen[15];
 
+  // currently `suffix` stores the whole key,
+  // and if `lv` is not a link to next layer, it stores the length of the key in the first 4 bytes,
+  // and the offset in the next 4 bytes
+  void *suffix[15];
   void *lv[15];
 
   struct border_node *prev;
   struct border_node *next;
 }border_node;
-
-// get current 8-byte key starting at `*ptr`, `*ptr` will be updated
-static uint64_t get_key_at(const void *key, uint64_t len, uint32_t *ptr)
-{
-  uint64_t cur = 0;
-  if ((*ptr + sizeof(uint64_t)) > len) {
-    memcpy(&cur, key, len - *ptr); // other bytes will be 0
-    *ptr = len;
-  } else {
-    cur = *((uint64_t *)((char *)key + *ptr));
-    *ptr += sizeof(uint64_t);
-  }
-  return cur;
-}
 
 static interior_node* new_interior_node()
 {
@@ -88,7 +78,8 @@ static border_node* new_border_node()
 
   bn->version = set_border(version);
 
-  bn->nremoved = 0;
+  // set `nremoved` and `keylen[15]` to 0
+  memset(&bn->nremoved, 0, 16);
 
   bn->permutation = 0;
 
@@ -168,6 +159,7 @@ void node_lock(node *n)
   }
 }
 
+// require: n is locked
 // TODO: optimize
 void node_unlock(node *n)
 {
@@ -199,7 +191,7 @@ interior_node* node_get_locked_parent(node *n)
   return parent;
 }
 
-// find the child to descend to, must be an interior node
+// require: n is an interior node
 node* node_locate_child(node *n, const void *key, uint32_t len, uint32_t *ptr)
 {
   // TODO: no need to use atomic operation
@@ -209,7 +201,14 @@ node* node_locate_child(node *n, const void *key, uint32_t len, uint32_t *ptr)
   // TODO: no need to use atomic operation
   const uint64_t permutation = node_get_permutation(n);
 
-  const uint64_t cur = get_key_at(key, len, ptr);
+  uint64_t cur = 0;
+  if ((*ptr + sizeof(uint64_t)) > len) {
+    memcpy(&cur, key, len - *ptr); // other bytes will be 0
+    *ptr = len;
+  } else {
+    cur = *((uint64_t *)((char *)key + *ptr));
+    *ptr += sizeof(uint64_t);
+  }
 
   int first = 0, count = get_count(permutation);
   while (count > 0) {
@@ -229,6 +228,7 @@ node* node_locate_child(node *n, const void *key, uint32_t len, uint32_t *ptr)
   return (node *)(((interior_node *)n)->child[first]);
 }
 
+// require: n is locked
 int node_insert(node *n, const void *key, uint32_t len, uint32_t *ptr, const void *val)
 {
   // TODO: no need to use atomic operation
@@ -238,10 +238,17 @@ int node_insert(node *n, const void *key, uint32_t len, uint32_t *ptr, const voi
   // TODO: no need to use atomic operation
   uint64_t permutation = node_get_permutation(n);
 
-  const uint64_t cur = get_key_at(key, len, ptr);
-
-  // to make things easier, for now we just test keys that are 8x bytes, eg. 16, 24, ...
-  assert(*len == ptr);
+  uint8_t  keylen = 0;
+  uint64_t cur = 0;
+  if ((*ptr + sizeof(uint64_t)) > len) {
+    memcpy(&cur, key, len - *ptr); // other bytes will be 0
+    keylen = len - *ptr;
+    *ptr = len;
+  } else {
+    cur = *((uint64_t *)((char *)key + *ptr));
+    *ptr  += sizeof(uint64_t);
+    keylen = sizeof(uint64_t);
+  }
 
   int low = 0, count = get_count(permutation), high = count - 1;
 
@@ -250,12 +257,13 @@ int node_insert(node *n, const void *key, uint32_t len, uint32_t *ptr, const voi
 
     int index = get_index(permutation, mid);
 
-    if (n->keyslice[index] == cur)
+    if (n->keyslice[index] == cur) {
       return 0;
-    else if (n->keyslice[index] < cur)
+    } else if (n->keyslice[index] < cur) {
       low  = mid + 1;
-    else
+    } else {
       high = mid - 1;
+    }
   }
 
   // node is full
@@ -270,7 +278,7 @@ int node_insert(node *n, const void *key, uint32_t len, uint32_t *ptr, const voi
 
   if (is_border(version)) {
     border_node *bn = (border_node *)n;
-    bn->keylen[count] = 1; // 1 represents it's value
+    bn->keylen[count] = keylen; // 1 represents it's value
     bn->lv[count] = (void *)val;
   } else {
     interior_node *in = (interior_node *)n;
@@ -278,4 +286,27 @@ int node_insert(node *n, const void *key, uint32_t len, uint32_t *ptr, const voi
   }
 
   return 1;
+}
+
+// require: l is locked
+static void node_split_key(node *l, node *r)
+{
+
+}
+
+// require: l is locked
+void node_split(node *n, const void *key, uint32_t len, uint32_t *ptr, const void *val)
+{
+  uint32_t version = node_get_version(n);
+  assert(is_locked(n));
+
+  node *n1 = new_node(Border);
+
+  version = set_split(version);
+  node_set_version(n, version);
+  n1->version = version;
+
+
+
+
 }
