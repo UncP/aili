@@ -12,14 +12,13 @@
 
 // `permutation` is uint64_t
 #define get_count(permutation) ((int)(((permutation) >> 60) & 0xf))
-#define incr_count(permutation) ((permutation) + ((uint64_t)1 << 60)) // will not overlow
 #define get_index(permutation, index) ((int)(((permutation) >> (4 * (14 - index))) & 0xf))
-#define update_permutation(permutation, index, value) {  \
-  uint64_t right = permutation << ((index + 1) * 4);     \
-  uint64_t left = permutation >> ((15 - index) * 4);     \
-  uint64_t middle = (value & 0xf) << ((14 - index) * 4); \
-  permutation = left | middle | right;                   \
-  permutation = incr_count(permutation);                 \
+#define update_permutation(permutation, index, value) {                       \
+  uint64_t right = (permutation << ((index + 1) * 4)) >> ((index + 2) * 4);   \
+  uint64_t left = (permutation >> ((15 - index) * 4)) << ((15 - index) * 4);  \
+  uint64_t middle = (value & 0xf) << ((14 - index) * 4);                      \
+  permutation = left | middle | right;                                        \
+  permutation = permutation + ((uint64_t)1 << 60);                            \
 }
 
 // see Mass Tree paper figure 2 for detail, node structure is reordered for easy coding
@@ -236,12 +235,13 @@ int node_insert(node *n, const void *key, uint32_t len, uint32_t *ptr, const voi
   uint32_t version = node_get_version(n);
   assert(is_locked(version));
 
-  node_set_version(n, set_insert(version));
-
   // TODO: no need to use atomic operation
   uint64_t permutation = node_get_permutation(n);
 
   const uint64_t cur = get_key_at(key, len, ptr);
+
+  // to make things easier, for now we just test keys that are 8x bytes, eg. 16, 24, ...
+  assert(*len == ptr);
 
   int low = 0, count = get_count(permutation), high = count - 1;
 
@@ -261,13 +261,21 @@ int node_insert(node *n, const void *key, uint32_t len, uint32_t *ptr, const voi
   // node is full
   if (count == 15) return -1;
 
+  node_set_version(n, set_insert(version));
+
+  n->keyslice[count] = cur;
+
+  // update index and key count, do it after key is inserted
+  update_permutation(permutation, low, count);
+
   if (is_border(version)) {
     border_node *bn = (border_node *)n;
+    bn->keylen[count] = 1; // 1 represents it's value
     bn->lv[count] = (void *)val;
   } else {
     interior_node *in = (interior_node *)n;
     in->child[count + 1] = (void *)val;
   }
-  update_permutation(permutation, low, count);
+
   return 1;
 }
