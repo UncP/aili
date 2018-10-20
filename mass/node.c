@@ -47,6 +47,7 @@ typedef struct border_node
   uint8_t  nremoved;
   uint8_t  keylen[15];
 
+  // TODO: memory usage optimization
   // currently `suffix` stores the whole key,
   // and if `lv` is not a link to next layer, it stores the length of the key in the first 4 bytes,
   // and the offset in the next 4 bytes
@@ -182,7 +183,8 @@ interior_node* node_get_locked_parent(node *n)
 {
   interior_node *parent;
   while (1) {
-    parent = node_get_parent(n);
+    if ((parent = node_get_parent(n)) == 0)
+      return parent;
     node_lock((node *)parent);
     if (node_get_parent(n) == parent)
       break;
@@ -289,13 +291,7 @@ int node_insert(node *n, const void *key, uint32_t len, uint32_t *ptr, const voi
 }
 
 // require: l is locked
-static void node_split_key(node *l, node *r)
-{
-
-}
-
-// require: l is locked
-void node_split(node *n, const void *key, uint32_t len, uint32_t *ptr, const void *val)
+node* node_split(node *n)
 {
   uint32_t version = node_get_version(n);
   assert(is_locked(n));
@@ -304,7 +300,7 @@ void node_split(node *n, const void *key, uint32_t len, uint32_t *ptr, const voi
 
   version = set_split(version);
   node_set_version(n, version);
-  n1->version = version;
+  n1->version = version; // n1 is also locked
 
 
 
