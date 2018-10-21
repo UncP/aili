@@ -112,6 +112,7 @@ void free_btree_node(node *n)
   free_node(n);
 }
 
+// whether we should insert key into this node, if not, return (their common prefix length + 1)
 int node_is_before_key(node *n, const void *key, uint32_t len)
 {
   assert(n->keys);
