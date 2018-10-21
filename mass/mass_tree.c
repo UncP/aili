@@ -26,10 +26,10 @@ void free_mass_tree()
 
 static border_node* find_border_node(node *r, const void *key, uint32_t len, uint32_t *ptr)
 {
-  uint32_t version;
+  uint32_t version, ori = *ptr;
   node *n;
   retry:
-    *ptr = 0; // index to start comparation
+    *ptr = ori; // index to start comparation
     n = r;
     assert(n);
     version = node_get_stable_version(n);
@@ -69,19 +69,32 @@ static border_node* find_border_node(node *r, const void *key, uint32_t len, uin
 
 int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
 {
-	uint32_t ptr;
-  border_node *bn = find_border_node(mt->root, key, len, &ptr);
+  uint32_t ptr = 0;
+  node *n;
+  __atomic_load(&mt->root, &n, __ATOMIC_ACQUIRE);
 
+  again:
+  border_node *bn = find_border_node(n, key, len, &ptr);
   // before we write this node, a lock must be obtained
   node_lock(bn);
 
-  int r = node_insert((node *)bn, key, len, &ptr, val);
-  switch (r) {
+  void *r = node_insert((node *)bn, key, len, &ptr, val, 0 /* is_link */);
+  switch ((uint64_t)r) {
     case 1: // key inserted
     case 0: // key existed
       node_unlock(bn);
       return r;
-    case -1: // node full, need split
+    case -1: { // node is full, need split and promote
+      uint64_t fence = 0;
+      node *bn1 = node_split(bn, &fence);
+      assert(fence);
+      if (node_is_before_key(bn, key, len, &ptr))
+      break;
+    }
+    default: // need to go to a deeper layer
+      node_unlock(bn);
+      n = (node *)r;
+      goto again;
   }
 }
 

@@ -74,7 +74,7 @@ void node_lock(node *n);
 void node_unlock(node *n);
 uint32_t node_get_stable_version(node *n);
 node* node_locate_child(node *n, const void *key, uint32_t len, uint32_t *ptr);
-int node_insert(node *n, const void *key, uint32_t len, uint32_t *ptr, const void *val);
-node* node_split(node *n);
+void* node_insert(node *n, const void *key, uint32_t len, uint32_t *ptr, const void *val, int is_link);
+node* node_split(node *n, uint64_t *fence);
 
 #endif /* _node_h_ */
