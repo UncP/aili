@@ -39,6 +39,8 @@ void test_node_marco()
   assert(!is_root(n1->version));
   n1->version = set_root(n1->version);
   assert(is_root(n1->version));
+  n1->version = unset_root(n1->version);
+  assert(!is_root(n1->version));
 
   assert(!is_deleted(n1->version));
   n1->version = set_delete(n1->version);

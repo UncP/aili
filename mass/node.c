@@ -35,7 +35,7 @@ typedef struct interior_node
   uint64_t keyslice[15];
   struct interior_node *parent;
 
-  void    *child[16];
+  node    *child[16];
 }interior_node;
 
 // see Mass Tree paper figure 2 for detail, node structure is reordered for easy coding
@@ -106,14 +106,14 @@ void free_node(node *n)
   free((void *)n);
 }
 
-static inline uint32_t node_get_version(node *n)
+uint32_t node_get_version(node *n)
 {
   uint32_t version;
   __atomic_load(&n->version, &version, __ATOMIC_ACQUIRE);
   return version;
 }
 
-static inline void node_set_version(node *n, uint32_t version)
+void node_set_version(node *n, uint32_t version)
 {
   __atomic_store(&n->version, &version, __ATOMIC_RELEASE);
 }
@@ -130,11 +130,11 @@ static inline void node_set_permutation(node *n, uint64_t permutation)
   __atomic_store(&n->permutation, &permutation, __ATOMIC_RELEASE);
 }
 
-static inline interior_node* node_get_parent(node *n)
+node* node_get_parent(node *n)
 {
   interior_node *parent;
   __atomic_load(&n->parent, &parent, __ATOMIC_ACQUIRE);
-  return parent;
+  return (node *)parent;
 }
 
 uint32_t node_get_stable_version(node *n)
@@ -187,18 +187,31 @@ void node_unlock(node *n)
     0 /* weak */, __ATOMIC_RELEASE, __ATOMIC_RELAXED));
 }
 
-interior_node* node_get_locked_parent(node *n)
+node* node_get_locked_parent(node *n)
 {
-  interior_node *parent;
+  node *parent;
   while (1) {
     if ((parent = node_get_parent(n)) == 0)
-      return parent;
+      return 0;
     node_lock((node *)parent);
     if (node_get_parent(n) == parent)
       break;
     node_unlock((node *)parent);
   }
   return parent;
+}
+
+// require: `n` is locked
+int node_is_full(node *n)
+{
+  uint64_t permutation = node_get_permutation(n);
+  return get_count(permutation) == max_key_count;
+}
+
+void node_insert_first_child(node *n, node *c)
+{
+  interior_node *in = (interior_node *)n;
+  in->child[0] = c;
 }
 
 // require: `n` is an interior node
@@ -235,7 +248,7 @@ node* node_locate_child(node *n, const void *key, uint32_t len, uint32_t *ptr)
     }
   }
 
-  return (node *)(((interior_node *)n)->child[first]);
+  return ((interior_node *)n)->child[first];
 }
 
 // require: `n` is locked
@@ -310,7 +323,7 @@ void* node_insert(node *n, const void *key, uint32_t len, uint32_t *ptr, const v
   } else {
     assert(is_link == 0);
     interior_node *in = (interior_node *)n;
-    in->child[count + 1] = (void *)val;
+    in->child[count + 1] = (node *)val;
   }
 
   update_permutation(permutation, low, count);
@@ -383,12 +396,12 @@ uint64_t interior_node_split(interior_node *in, interior_node *in1)
 
   // then we move first half of the key from `bn1` to `bn`
   memcpy(in->keyslice, in1->keyslice, 7 * sizeof(uint64_t));
-  memcpy(&in->child[1], in1->child, 7 * sizeof(void *));
+  memcpy(&in->child[1], in1->child, 7 * sizeof(node *));
   uint64_t fence = in1->keyslice[7];
 
   // and move the other half
   memmove(in1->keyslice, &in1->keyslice[8], 7 * sizeof(uint64_t));
-  memmove(in1->child, &in1->child[7], 8 * sizeof(void *));
+  memmove(in1->child, &in1->child[7], 8 * sizeof(node *));
 
   // finally we set each node's `permutation` field
   permutation = 0;
@@ -413,9 +426,9 @@ node* node_split(node *n, uint64_t *fence)
   node_set_version(n, version);
   n1->version = version; // n1 is also locked
 
-  interior_node *parent = node_get_parent(n);
+  node *parent = node_get_parent(n);
   // TODO: is there any concurrency problem?
-  n1->parent = parent;
+  n1->parent = (interior_node *)parent;
 
   if (border)
     *fence = border_node_split((border_node *)n, (border_node *)n1);

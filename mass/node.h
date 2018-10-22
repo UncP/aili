@@ -48,6 +48,7 @@
 #define unset_lock(n)   ((n) & (~LOCK_BIT))
 #define unset_insert(n) ((n) & (~INSERT_BIT))
 #define unset_split(n)  ((n) & (~SPLIT_BIT))
+#define unset_root(n)  ((n) & (~ROOT_BIT))
 
 #define is_locked(n)    ((n) & LOCK_BIT)
 #define is_inserting(n) ((n) & INSERT_BIT)
@@ -72,7 +73,13 @@ node* new_node(int type);
 void free_node(node *n);
 void node_lock(node *n);
 void node_unlock(node *n);
+int node_is_full(node *n);
+uint32_t node_get_version(node *n);
+void node_set_version(node *n, uint32_t version);
 uint32_t node_get_stable_version(node *n);
+node* node_get_parent(node *n);
+node* node_get_locked_parent(node *n);
+void node_insert_first_child(node *n, node *c);
 node* node_locate_child(node *n, const void *key, uint32_t len, uint32_t *ptr);
 void* node_insert(node *n, const void *key, uint32_t len, uint32_t *ptr, const void *val, int is_link);
 node* node_split(node *n, uint64_t *fence);

@@ -5,16 +5,21 @@
 **/
 
 #include <stdlib.h>
+#include <assert.h>
+#include <string.h>
 
 #include "mass_tree.h"
-
-extern uint64_t get_key_at(const void *key, uint64_t len, uint64_t *ptr);
 
 mass_tree* new_mass_tree()
 {
   mass_tree *mt = (mass_tree *)malloc(sizeof(mass_tree));
 
-  mt->root = new_node(Border);
+  node *r = new_node(Border);
+  uint32_t version = node_get_version(r);
+  version = set_root(version);
+  node_set_version(r, version);
+
+  mt->root = r;
 
   return mt;
 }
@@ -24,7 +29,32 @@ void free_mass_tree()
   // TODO
 }
 
-static border_node* find_border_node(node *r, const void *key, uint32_t len, uint32_t *ptr)
+// require: `n` and `n1` are locked
+static void mass_tree_grow(mass_tree *mt, node *n, node *n1, uint64_t fence)
+{
+  node *r = new_node(Interior);
+
+  uint32_t version;
+  version = node_get_version(n);
+  version = unset_root(version);
+  node_set_version(n, version);
+
+  version = node_get_version(n1);
+  version = unset_root(version);
+  node_set_version(n1, version);
+
+  version = node_get_version(r);
+  version = set_root(version);
+  node_set_version(r, version);
+
+  node_insert_first_child(r, n);
+  uint32_t ptr = 0;
+  assert((int)node_insert(r, &fence, sizeof(uint64_t), &ptr, n1, 1 /* is_link */) == 1);
+
+  __atomic_store(&mt->root, &r, __ATOMIC_RELEASE);
+}
+
+static node* find_border_node(node *r, const void *key, uint32_t len, uint32_t *ptr)
 {
   uint32_t version, ori = *ptr;
   node *n;
@@ -35,7 +65,7 @@ static border_node* find_border_node(node *r, const void *key, uint32_t len, uin
     version = node_get_stable_version(n);
     // it's possible that a root has split
     if (!is_root(version)) {
-      n = (node *)node_get_parent(n);
+      n = node_get_parent(n);
       goto retry;
     }
 
@@ -48,7 +78,7 @@ static border_node* find_border_node(node *r, const void *key, uint32_t len, uin
     assert(n1);
     uint32_t version1 = node_get_stable_version(n1);
 
-    if (node_get_version(n) ^ version <= LOCK_BIT) {
+    if ((node_get_version(n) ^ version) <= LOCK_BIT) {
       // case 1: neither insert nor split happens between last stable version and current version,
       //         descend to child node
       n = n1;
@@ -70,30 +100,74 @@ static border_node* find_border_node(node *r, const void *key, uint32_t len, uin
 int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
 {
   uint32_t ptr = 0;
-  node *n;
-  __atomic_load(&mt->root, &n, __ATOMIC_ACQUIRE);
+  node *r, *n;
+  __atomic_load(&mt->root, &r, __ATOMIC_ACQUIRE);
 
   again:
-  border_node *bn = find_border_node(n, key, len, &ptr);
+  n = find_border_node(r, key, len, &ptr);
   // before we write this node, a lock must be obtained
-  node_lock(bn);
+  node_lock(n);
 
-  void *r = node_insert((node *)bn, key, len, &ptr, val, 0 /* is_link */);
-  switch ((uint64_t)r) {
+  void *v = node_insert(n, key, len, &ptr, val, 0 /* is_link */);
+  switch ((uint64_t)v) {
     case 1: // key inserted
     case 0: // key existed
-      node_unlock(bn);
-      return r;
+      node_unlock(n);
+      return (int)v;
     case -1: { // node is full, need split and promote
       uint64_t fence = 0;
-      node *bn1 = node_split(bn, &fence);
+      node *n1 = node_split(n, &fence);
       assert(fence);
-      if (node_is_before_key(bn, key, len, &ptr))
+      uint64_t cur = 0;
+      if ((ptr + sizeof(uint64_t)) > len)
+        memcpy(&cur, key, len - ptr); // other bytes will be 0
+      else
+        cur = *((uint64_t *)((char *)key + ptr));
+      // equal is not possible
+      if (cur < fence)
+        assert((int)node_insert(n, key, len, &ptr, val, 0 /* is_link */) == 1);
+      else
+        assert((int)node_insert(n1, key, len, &ptr, val, 0 /* is_link */) == 1);
+      node *p;
+      ascend:
+        p = node_get_locked_parent(n);
+        if (unlikely(p == 0)) {
+          mass_tree_grow(mt, n, n1, fence);
+          node_unlock(n);
+          node_unlock(n1);
+          return 1;
+        } else if (unlikely(node_is_full(p))) {
+          uint32_t tmp = 0;
+          assert((int)node_insert(p, &fence, sizeof(uint64_t), &tmp, n1, 1 /* is_link */) == 1);
+          node_unlock(n);
+          node_unlock(n1);
+          node_unlock(p);
+          return 1;
+        } else {
+          uint32_t version;
+          version = node_get_version(p);
+          version = set_split(version);
+          node_set_version(p, version);
+          node_unlock(n);
+          uint64_t fence1 = 0;
+          node *p1 = node_split(p, &fence1);
+          assert(fence1);
+          uint32_t tmp = 0;
+          if (fence < fence1)
+            assert((int)node_insert(p, &fence, sizeof(uint64_t), &tmp, n1, 1 /* is_link */) == 1);
+          else
+            assert((int)node_insert(p1, &fence, sizeof(uint64_t), &tmp, n1, 1 /* is_link */) == 1);
+          node_unlock(n1);
+          n = p;
+          fence = fence1;
+          n1 = p1;
+          goto ascend;
+        }
       break;
     }
     default: // need to go to a deeper layer
-      node_unlock(bn);
-      n = (node *)r;
+      node_unlock(n);
+      r = (node *)v;
       goto again;
   }
 }
@@ -101,4 +175,8 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
 void* mass_tree_get(mass_tree *mt, const void *key, uint32_t len)
 {
   // TODO
+  (void)mt;
+  (void)key;
+  (void)len;
+  return 0;
 }
