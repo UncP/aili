@@ -81,6 +81,7 @@ static node* find_border_node(node *r, const void *key, uint32_t len, uint32_t *
     assert(n1);
     uint32_t version1 = node_get_stable_version(n1);
 
+    // TODO: fix this
     if ((node_get_version(n) ^ version) <= LOCK_BIT) {
       // case 1: neither insert nor split happens between last stable version and current version,
       //         descend to child node
@@ -197,9 +198,38 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
 
 void* mass_tree_get(mass_tree *mt, const void *key, uint32_t len)
 {
-  // TODO
-  (void)mt;
-  (void)key;
-  (void)len;
-  return 0;
+  uint32_t ptr = 0;
+  node *r, *n;
+  __atomic_load(&mt->root, &r, __ATOMIC_ACQUIRE);
+
+  again:
+  n = find_border_node(r, key, len, &ptr);
+  uint32_t version = node_get_version(n);
+
+  forward:
+  if (is_deleted(version))
+    goto again;
+
+  void *suffix;
+  node *next_layer = node_search(n, key, len, &ptr, &suffix);
+
+  // TODO: fix this
+  if ((node_get_version(n) ^ version) > LOCK_BIT) {
+    version = node_get_stable_version(n);
+    node *next = node_get_next(n);
+    // there might be splits happened, traverse through the link
+    while (!is_deleted(version) && next && node_include_key(next, key, len, ptr)) {
+      n = next;
+      version = node_get_stable_version(n);
+      next = node_get_next(n);
+    }
+    goto forward;
+  }
+
+  if (suffix) return suffix; // key found
+  if (!next_layer) return 0; // key not exists
+  if ((int)next_layer == 1) goto forward; // unstable
+
+  n = next_layer;
+  goto again;
 }

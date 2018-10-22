@@ -33,10 +33,10 @@ palm_tree_test: test/palm_tree_test.c palm/node.o palm/worker.o palm/bounded_que
 generate_data: ./generate_data.c
 	$(AFLAGS) -o $@ $^
 
-mass_node_test: test/mass_node_test.c mass/node.o
+node_test: test/mass_node_test.c mass/node.o
 	$(AFLAGS) -o $@ $^ -lpthread
 
-mass_tree_test: test/mass_tree_test.c mass/node.o mass/mass_tree.o
+tree_test: test/mass_tree_test.c mass/node.o mass/mass_tree.o
 	$(AFLAGS) -o $@ $^ -lpthread
 
 clean:

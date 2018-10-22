@@ -66,7 +66,7 @@ typedef struct node
   uint64_t permutation;
   uint64_t keyslice[15];
 
-  struct node *parent;
+  struct node *parent; // interior node
 }node;
 
 node* new_node(int type);
@@ -75,16 +75,19 @@ void node_lock(node *n);
 void node_unlock(node *n);
 int node_is_full(node *n);
 uint32_t node_get_version(node *n);
+node *node_get_next(node *n);
 void node_set_version(node *n, uint32_t version);
 uint32_t node_get_stable_version(node *n);
 node* node_get_parent(node *n);
 void node_set_parent(node *n, node *p);
 node* node_get_locked_parent(node *n);
 void node_insert_first_child(node *n, node *c);
+int node_include_key(node *n, const void *key, uint32_t len, uint32_t ptr);
 node* node_locate_child(node *n, const void *key, uint32_t len, uint32_t *ptr);
 void* node_insert(node *n, const void *key, uint32_t len, uint32_t *ptr, const void *val, int is_link);
 node* node_split(node *n, uint64_t *fence);
 int node_get_conflict(node *n, const void *key, uint32_t len, uint32_t *ptr, void **ckey, uint32_t *clen);
 void node_update_at(node *n, int index, node *n1);
+node* node_search(node *n, const void *key, uint32_t len, uint32_t *ptr, void **suffix);
 
 #endif /* _node_h_ */
