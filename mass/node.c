@@ -33,7 +33,7 @@ typedef struct interior_node
                         // but it will generate too many intermediate states,
                         // so I changed it to uint64_t, same as in border_node
   uint64_t keyslice[15];
-  struct interior_node *parent;
+  node *parent;
 
   node    *child[16];
 }interior_node;
@@ -45,7 +45,7 @@ typedef struct border_node
   uint64_t permutation;
   uint64_t keyslice[15];
 
-  struct interior_node *parent;
+  node *parent;
 
   uint8_t  nremoved;
   uint8_t  keylen[15];
@@ -132,9 +132,14 @@ static inline void node_set_permutation(node *n, uint64_t permutation)
 
 node* node_get_parent(node *n)
 {
-  interior_node *parent;
+  node *parent;
   __atomic_load(&n->parent, &parent, __ATOMIC_ACQUIRE);
-  return (node *)parent;
+  return parent;
+}
+
+void node_set_parent(node *n, node *p)
+{
+  __atomic_store(&n->parent, &p, __ATOMIC_RELEASE);
 }
 
 uint32_t node_get_stable_version(node *n)
@@ -193,10 +198,10 @@ node* node_get_locked_parent(node *n)
   while (1) {
     if ((parent = node_get_parent(n)) == 0)
       return 0;
-    node_lock((node *)parent);
+    node_lock(parent);
     if (node_get_parent(n) == parent)
       break;
-    node_unlock((node *)parent);
+    node_unlock(parent);
   }
   return parent;
 }
@@ -251,6 +256,50 @@ node* node_locate_child(node *n, const void *key, uint32_t len, uint32_t *ptr)
   return ((interior_node *)n)->child[first];
 }
 
+// require: `n` is locked and is border node
+int node_get_conflict(node *n, const void *key, uint32_t len, uint32_t *ptr, void **ckey, uint32_t *clen)
+{
+  uint32_t version = node_get_version(n);
+  assert(is_locked(version) && is_border(version));
+
+  uint64_t cur = 0;
+  if ((*ptr + sizeof(uint64_t)) > len) {
+    memcpy(&cur, key, len - *ptr); // other bytes will be 0
+    *ptr = len;
+  } else {
+    cur = *((uint64_t *)((char *)key + *ptr));
+    *ptr  += sizeof(uint64_t);
+  }
+
+  uint64_t permutation = node_get_permutation(n);
+  int count = get_count(permutation);
+  // just do a linear search, does not hurt performance
+  int i = 0;
+  for (; i < count; ++i)
+    if (n->keyslice[i] == cur)
+      break;
+
+  // must have the same key slice
+  assert(i != count);
+
+  border_node *bn = (border_node *)n;
+  *ckey = bn->suffix[i];
+  *clen = *(uint32_t *)bn->lv[i];
+
+  return i;
+}
+
+// require: `n` is locked and is border node
+void node_update_at(node *n, int index, node *n1)
+{
+  uint32_t version = node_get_version(n);
+  assert(is_locked(version) && is_border(version));
+
+  border_node *bn = (border_node *)n;
+  bn->keylen[index] = link_value;
+  bn->lv[index] = n1;
+}
+
 // require: `n` is locked
 void* node_insert(node *n, const void *key, uint32_t len, uint32_t *ptr, const void *val, int is_link)
 {
@@ -270,8 +319,8 @@ void* node_insert(node *n, const void *key, uint32_t len, uint32_t *ptr, const v
     *ptr = len;
   } else {
     cur = *((uint64_t *)((char *)key + *ptr));
-    *ptr  += sizeof(uint64_t);
     keylen = sizeof(uint64_t);
+    *ptr  += sizeof(uint64_t);
   }
 
   int low = 0, count = get_count(permutation), high = count - 1;
@@ -281,26 +330,34 @@ void* node_insert(node *n, const void *key, uint32_t len, uint32_t *ptr, const v
 
     int index = get_index(permutation, mid);
 
-    if (n->keyslice[index] == cur) {
+    if (n->keyslice[index] < cur) {
+      low  = mid + 1;
+    } else if (n->keyslice[index] > cur) {
+      high = mid - 1;
+    } else {
       assert(is_border(version));
-      // need to go to a deeper layer
       border_node *bn = (border_node *)n;
       if (bn->keylen[index] == link_value) {
+        // need to go to a deeper layer
         return bn->lv[index];
       } else {
-        return (void *)0;
+        uint32_t clen = *(uint32_t *)(bn->lv[index]);
+        uint32_t cptr = *(((uint32_t *)(bn->lv[index])) + 1);
+        assert(cptr == *ptr);
+        if (clen == len && !memcmp((char *)key + *ptr, (char *)(bn->suffix[index]) + *ptr, len - *ptr))
+          // key existed
+          return (void *)0;
+        *ptr = pre;
+        // need to create a deeper layer
+        return (void *)-1;
       }
-    } else if (n->keyslice[index] < cur) {
-      low  = mid + 1;
-    } else {
-      high = mid - 1;
     }
   }
 
   // node is full
   if (count == max_key_count) {
     *ptr = pre;
-    return (void *)-1;
+    return (void *)-2;
   }
 
   node_set_version(n, set_insert(version));
@@ -312,8 +369,8 @@ void* node_insert(node *n, const void *key, uint32_t len, uint32_t *ptr, const v
     if (likely(!is_link)) {
       bn->keylen[count] = keylen;
       bn->suffix[count] = (void *)key;
-      uint32_t *len_ptr = (uint32_t *)&bn->lv[count];
-      uint32_t *off_ptr = ((uint32_t *)&bn->lv[count]) + 1;
+      uint32_t *len_ptr = (uint32_t *)(bn->lv[count]);
+      uint32_t *off_ptr = ((uint32_t *)(bn->lv[count])) + 1;
       *len_ptr =  len;
       *off_ptr = *ptr;
     } else {
@@ -428,7 +485,7 @@ node* node_split(node *n, uint64_t *fence)
 
   node *parent = node_get_parent(n);
   // TODO: is there any concurrency problem?
-  n1->parent = (interior_node *)parent;
+  n1->parent = parent;
 
   if (border)
     *fence = border_node_split((border_node *)n, (border_node *)n1);
