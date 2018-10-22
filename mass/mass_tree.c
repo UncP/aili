@@ -167,6 +167,7 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
       tmp = 0, ptr = pre;
       assert((int)node_insert(n1, key, len, &ptr, val, 0 /* is_link */) == 1);
 
+      // replace value with new layer `n1`
       node_update_at(n, index, n1);
       return 1;
     }

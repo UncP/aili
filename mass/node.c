@@ -289,6 +289,7 @@ int node_get_conflict(node *n, const void *key, uint32_t len, uint32_t *ptr, voi
   return i;
 }
 
+// replace value with new node
 // require: `n` is locked and is border node
 void node_update_at(node *n, int index, node *n1)
 {
