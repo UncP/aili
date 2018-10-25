@@ -13,8 +13,21 @@
 
 #include "../mass/node.h"
 
+static long long mstime()
+{
+  struct timeval tv;
+  long long ust;
+
+  gettimeofday(&tv, NULL);
+  ust = ((long long)tv.tv_sec)*1000000;
+  ust += tv.tv_usec;
+  return ust / 1000;
+}
+
 void test_node_marco()
 {
+  printf("test node marco\n");
+
   node* n1 = new_node(Border);
   assert(is_border(n1->version));
 
@@ -69,17 +82,6 @@ void test_node_marco()
   free_node(n2);
 }
 
-static long long mstime()
-{
-  struct timeval tv;
-  long long ust;
-
-  gettimeofday(&tv, NULL);
-  ust = ((long long)tv.tv_sec)*1000000;
-  ust += tv.tv_usec;
-  return ust / 1000;
-}
-
 struct node_arg
 {
   node *n;
@@ -110,15 +112,10 @@ void* _run(void *arg)
 
 void test_node_lock()
 {
+  printf("test node lock\n");
+
   node *n = new_node(Border);
 
-  // single thread
-  node_lock(n);
-  assert(is_locked(n->version));
-  node_unlock(n);
-  assert(!is_locked(n->version));
-
-  // multi thread
   int threads = 4, beg = 0, end = 0, milliseconds = 3000;
   pthread_t ids[threads];
   struct node_arg *args[threads];

@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <stdio.h>
 
 #include "node.h"
 
@@ -131,6 +132,22 @@ static inline void node_set_permutation(node *n, uint64_t permutation)
   __atomic_store(&n->permutation, &permutation, __ATOMIC_RELEASE);
 }
 
+void node_set_root(node *n)
+{
+  uint32_t version;
+  version = node_get_version(n);
+  version = set_root(version);
+  node_set_version(n, version);
+}
+
+void node_unset_root(node *n)
+{
+  uint32_t version;
+  version = node_get_version(n);
+  version = unset_root(version);
+  node_set_version(n, version);
+}
+
 node* node_get_parent(node *n)
 {
   node *parent;
@@ -246,11 +263,11 @@ void node_insert_first_child(node *n, node *c)
 node* node_locate_child(node *n, const void *key, uint32_t len, uint32_t *ptr)
 {
   // TODO: no need to use atomic operation
-  const uint32_t version = node_get_version(n);
+  uint32_t version = node_get_version(n);
   assert(is_interior(version));
 
   // TODO: no need to use atomic operation
-  const uint64_t permutation = node_get_permutation(n);
+  uint64_t permutation = node_get_permutation(n);
 
   uint64_t cur = 0;
   if ((*ptr + sizeof(uint64_t)) > len) {
@@ -296,7 +313,7 @@ int node_get_conflict(node *n, const void *key, uint32_t len, uint32_t *ptr, voi
 
   uint64_t permutation = node_get_permutation(n);
   int count = get_count(permutation);
-  // just do a linear search, does not hurt performance
+  // just do a linear search, should not hurt performance
   int i = 0;
   for (; i < count; ++i)
     if (n->keyslice[i] == cur)
@@ -323,7 +340,7 @@ void node_update_at(node *n, int index, node *n1)
   // TODO: fix concurrency problem
   bn->keylen[index] = magic_unstable;
   bn->lv[index] = n1;
-  bn->keylen[index] = magic_unstable;
+  bn->keylen[index] = magic_link;
 }
 
 // require: `n` is locked
@@ -470,7 +487,7 @@ node* node_search(node *n, const void *key, uint32_t len, uint32_t *ptr, void **
 }
 
 // require: `bn` and `bn1` is locked
-uint64_t border_node_split(border_node *bn, border_node *bn1)
+static uint64_t border_node_split(border_node *bn, border_node *bn1)
 {
   // TODO: no need to use atomic operation
   uint64_t permutation = node_get_permutation((node *)bn);
@@ -519,7 +536,7 @@ uint64_t border_node_split(border_node *bn, border_node *bn1)
 }
 
 // require: `in` and `in1` is locked
-uint64_t interior_node_split(interior_node *in, interior_node *in1)
+static uint64_t interior_node_split(interior_node *in, interior_node *in1)
 {
   // TODO: no need to use atomic operation
   uint64_t permutation = node_get_permutation((node *)in);
