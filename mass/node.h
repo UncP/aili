@@ -88,8 +88,9 @@ int node_include_key(node *n, const void *key, uint32_t len, uint32_t ptr);
 node* node_locate_child(node *n, const void *key, uint32_t len, uint32_t *ptr);
 void* node_insert(node *n, const void *key, uint32_t len, uint32_t *ptr, const void *val, int is_link);
 node* node_split(node *n, uint64_t *fence);
-int node_get_conflict(node *n, const void *key, uint32_t len, uint32_t *ptr, void **ckey, uint32_t *clen);
+int node_get_conflict_key(node *n, const void *key, uint32_t len, uint32_t *ptr, void **ckey, uint32_t *clen);
 void node_update_at(node *n, int index, node *n1);
+void node_swap_child(node *n, node *c, node *c1);
 node* node_search(node *n, const void *key, uint32_t len, uint32_t *ptr, void **suffix);
 
 #endif /* _node_h_ */

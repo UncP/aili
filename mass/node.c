@@ -136,6 +136,7 @@ void node_set_root(node *n)
 {
   uint32_t version;
   version = node_get_version(n);
+  assert(!is_root(version));
   version = set_root(version);
   node_set_version(n, version);
 }
@@ -144,6 +145,7 @@ void node_unset_root(node *n)
 {
   uint32_t version;
   version = node_get_version(n);
+  assert(is_root(version));
   version = unset_root(version);
   node_set_version(n, version);
 }
@@ -297,7 +299,7 @@ node* node_locate_child(node *n, const void *key, uint32_t len, uint32_t *ptr)
 }
 
 // require: `n` is locked and is border node
-int node_get_conflict(node *n, const void *key, uint32_t len, uint32_t *ptr, void **ckey, uint32_t *clen)
+int node_get_conflict_key(node *n, const void *key, uint32_t len, uint32_t *ptr, void **ckey, uint32_t *clen)
 {
   uint32_t version = node_get_version(n);
   assert(is_locked(version) && is_border(version));
@@ -337,10 +339,34 @@ void node_update_at(node *n, int index, node *n1)
   assert(is_locked(version) && is_border(version));
 
   border_node *bn = (border_node *)n;
-  // TODO: fix concurrency problem
-  bn->keylen[index] = magic_unstable;
+  uint8_t unstable = magic_unstable;
+  __atomic_store(&bn->keylen[index], &unstable, __ATOMIC_RELEASE);
+  // atomic operation is not needed here
   bn->lv[index] = n1;
-  bn->keylen[index] = magic_link;
+  uint8_t link = magic_link;
+  __atomic_store(&bn->keylen[index], &link, __ATOMIC_RELEASE);
+}
+
+// require: `n` is locked and is border
+void node_swap_child(node *n, node *c, node *c1)
+{
+  uint32_t version = node_get_version(n);
+  assert(is_locked(version) && is_border(version));
+
+  uint64_t permutation = node_get_permutation(n);
+  int count = get_count(permutation);
+
+  // just do a linear search, should not hurt performance
+  int i = 0;
+  border_node *bn = (border_node *)n;
+  for (; i < count; ++i)
+    if (bn->lv[i] == (void *)c)
+      break;
+
+  // must have the child
+  assert(i != count);
+
+  bn->lv[i] = c1;
 }
 
 // require: `n` is locked
@@ -380,8 +406,10 @@ void* node_insert(node *n, const void *key, uint32_t len, uint32_t *ptr, const v
     } else {
       assert(is_border(version));
       border_node *bn = (border_node *)n;
-      // TODO: fix concurrency problem
-      if (bn->keylen[index] == magic_link) {
+      // TODO: atomic operation seems not necessary
+      uint8_t link;
+      __atomic_load(&bn->keylen[index], &link, __ATOMIC_ACQUIRE);
+      if (link == magic_link) {
         // need to go to a deeper layer
         return bn->lv[index];
       } else {
@@ -464,11 +492,12 @@ node* node_search(node *n, const void *key, uint32_t len, uint32_t *ptr, void **
       high = mid - 1;
     } else {
       border_node *bn = (border_node *)n;
-      // TODO: fix concurrency problem
-      if (bn->keylen[index] == magic_link) {
+      uint8_t status;
+      __atomic_load(&bn->keylen[index], &status, __ATOMIC_ACQUIRE);
+      if (status == magic_link) {
         // need to go to a deeper layer
         return bn->lv[index];
-      } else if (bn->keylen[index] == magic_unstable) {
+      } else if (status == magic_unstable) {
         // restore offset for retry
         *ptr = pre;
         return (void *)1;
