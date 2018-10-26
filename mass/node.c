@@ -66,11 +66,7 @@ typedef struct border_node
   struct border_node *next;
 }border_node;
 
-static inline int node_get_count(node *n)
-{
-  uint64_t permutation = node_get_permutation(n);
-  return get_count(permutation);
-}
+static int node_get_count(node *n);
 
 static interior_node* new_interior_node()
 {
@@ -176,6 +172,12 @@ static inline void node_set_permutation(node *n, uint64_t permutation)
   __atomic_store(&n->permutation, &permutation, __ATOMIC_RELEASE);
 }
 
+static inline int node_get_count(node *n)
+{
+  uint64_t permutation = node_get_permutation(n);
+  return get_count(permutation);
+}
+
 node* node_get_parent(node *n)
 {
   node *parent;
@@ -204,6 +206,7 @@ uint32_t node_get_stable_version(node *n)
   return version;
 }
 
+// require: `n` is not root
 void node_set_root(node *n)
 {
   uint32_t version = node_get_version(n);
@@ -212,6 +215,7 @@ void node_set_root(node *n)
   node_set_version(n, version);
 }
 
+// require: `n` is root
 void node_unset_root(node *n)
 {
   uint32_t version = node_get_version(n);
@@ -318,41 +322,6 @@ void node_set_first_child(node *n, node *c)
   in->child[0] = c;
 }
 
-// require: `n` is interior node
-node* node_locate_child(node *n, const void *key, uint32_t len, uint32_t *ptr)
-{
-  uint32_t version = node_get_version(n);
-  assert(is_interior(version));
-
-  uint64_t permutation = node_get_permutation(n);
-
-  uint64_t cur = 0;
-  if ((*ptr + sizeof(uint64_t)) > len) {
-    memcpy(&cur, key, len - *ptr); // other bytes will be 0
-    *ptr = len;
-  } else {
-    cur = *((uint64_t *)((char *)key + *ptr));
-    *ptr += sizeof(uint64_t);
-  }
-
-  int first = 0, count = get_count(permutation);
-  while (count > 0) {
-    int half = count >> 1;
-    int middle = first + half;
-
-    int index = get_index(permutation, middle);
-
-    if (n->keyslice[index] <= cur) {
-      first = middle + 1;
-      count -= half + 1;
-    } else {
-      count = half;
-    }
-  }
-
-  return ((interior_node *)n)->child[first];
-}
-
 // require: `n` is locked and is border node
 int node_get_conflict_key(node *n, const void *key, uint32_t len, uint32_t *ptr, void **ckey, uint32_t *clen)
 {
@@ -423,6 +392,41 @@ void node_swap_child(node *n, node *c, node *c1)
   assert(i != count);
 
   bn->lv[i] = c1;
+}
+
+// require: `n` is interior node
+node* node_locate_child(node *n, const void *key, uint32_t len, uint32_t *ptr)
+{
+  uint32_t version = node_get_version(n);
+  assert(is_interior(version));
+
+  uint64_t permutation = node_get_permutation(n);
+
+  uint64_t cur = 0;
+  if ((*ptr + sizeof(uint64_t)) > len) {
+    memcpy(&cur, key, len - *ptr); // other bytes will be 0
+    *ptr = len;
+  } else {
+    cur = *((uint64_t *)((char *)key + *ptr));
+    *ptr += sizeof(uint64_t);
+  }
+
+  int first = 0, count = get_count(permutation);
+  while (count > 0) {
+    int half = count >> 1;
+    int middle = first + half;
+
+    int index = get_index(permutation, middle);
+
+    if (n->keyslice[index] <= cur) {
+      first = middle + 1;
+      count -= half + 1;
+    } else {
+      count = half;
+    }
+  }
+
+  return ((interior_node *)n)->child[first];
 }
 
 // require: `n` is locked
@@ -638,13 +642,19 @@ static uint64_t interior_node_split(interior_node *in, interior_node *in1)
   }
 
   // then we move first half of the key from `bn1` to `bn`
-  memcpy(in->keyslice, in1->keyslice, 7 * sizeof(uint64_t));
-  memcpy(&in->child[1], in1->child, 7 * sizeof(node *));
+  for (int i = 0; i < 7; ++i) {
+    in->keyslice[i] = in1->keyslice[i];
+    in->child[i+1]  = in1->child[i];
+  }
+
   uint64_t fence = in1->keyslice[7];
 
   // and move the other half
-  memmove(in1->keyslice, &in1->keyslice[8], 7 * sizeof(uint64_t));
-  memmove(in1->child, &in1->child[7], 8 * sizeof(node *));
+  for (int i = 0; i < 7; ++i) {
+    in1->keyslice[i] = in1->keyslice[i + 8];
+    in1->child[i]    = in1->child[i + 7];
+  }
+  in1->child[7] = in1->child[15];
 
   // finally we set each node's `permutation` field
   permutation = 0;
@@ -668,9 +678,6 @@ node* node_split(node *n, uint64_t *fence)
   version = set_split(version);
   node_set_version(n, version);
   node_set_version(n1, version);
-
-  node *parent = node_get_parent(n);
-  node_set_parent(n1, parent);
 
   if (border)
     *fence = border_node_split((border_node *)n, (border_node *)n1);

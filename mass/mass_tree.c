@@ -24,9 +24,10 @@ mass_tree* new_mass_tree()
   return mt;
 }
 
-void free_mass_tree()
+// require: no other threads is visiting or will visit this tree
+void free_mass_tree(mass_tree *mt)
 {
-  // TODO
+  free_node(mt->root);
 }
 
 // require: `n` and `n1` are locked
@@ -108,6 +109,9 @@ static void split_and_promote(mass_tree *mt, node *n, uint64_t fence, node *n1)
     return ;
   }
 
+  // need to set parent here instead of `node_split`
+  node_set_parent(n1, p);
+
   uint32_t version;
   node *p1;
   version = node_get_version(p);
@@ -117,7 +121,6 @@ static void split_and_promote(mass_tree *mt, node *n, uint64_t fence, node *n1)
     node_unlock(n);
     node_unlock(n1);
     node_unlock(p);
-    return ;
   } else if (unlikely(node_is_full(p))) {
     uint32_t tmp = 0;
     assert((int)node_insert(p, &fence, sizeof(uint64_t), &tmp, n1, 1 /* is_link */) == 1);

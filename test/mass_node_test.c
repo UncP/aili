@@ -13,6 +13,8 @@
 
 #include "../mass/node.h"
 
+#define magic_number 9130
+
 static long long mstime()
 {
   struct timeval tv;
@@ -82,6 +84,26 @@ void test_node_marco()
   free_node(n2);
 }
 
+void test_node_utility_functions()
+{
+  printf("test node utility functions\n");
+
+  node *n = new_node(Border);
+
+  node_set_root(n);
+  node_unset_root(n);
+
+  node_set_version(n, (uint32_t)magic_number);
+  assert(node_get_version(n) == magic_number);
+
+  node_set_parent(n, (node *)magic_number);
+  assert((int)node_get_parent(n) == magic_number);
+
+  assert(node_get_next(n) == 0);
+
+  free_node(n);
+}
+
 struct node_arg
 {
   node *n;
@@ -93,7 +115,7 @@ struct node_arg
   pthread_mutex_t *mutex;
 };
 
-void* _run(void *arg)
+static void* _run(void *arg)
 {
   struct node_arg *na = (struct node_arg *)arg;
 
@@ -156,9 +178,23 @@ void test_node_lock()
   free_node(n);
 }
 
+void test_border_node_insert()
+{
+  node *n = new_node(Border);
+
+
+  free_node(n);
+}
+
+void test_node_locate_child()
+{
+
+}
+
 int main()
 {
   test_node_marco();
+  test_node_utility_functions();
   test_node_lock();
   return 0;
 }
