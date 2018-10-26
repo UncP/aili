@@ -285,6 +285,7 @@ int node_is_full(node *n)
   uint32_t version = node_get_version(n);
   assert(is_locked(version));
 
+  // TODO: no need to use atomic operation
   return node_get_count(n) == max_key_count;
 }
 
@@ -337,6 +338,7 @@ int node_get_conflict_key(node *n, const void *key, uint32_t len, uint32_t *ptr,
     *ptr  += sizeof(uint64_t);
   }
 
+  // TODO: no need to use atomic operation
   int count = node_get_count(n);
   // just do a linear search, should not hurt performance
   int i = 0;
@@ -378,6 +380,7 @@ void node_swap_child(node *n, node *c, node *c1)
   uint32_t version = node_get_version(n);
   assert(is_locked(version) && is_border(version));
 
+  // TODO: no need to use atomic operation
   int count = node_get_count(n);
 
   // just do a linear search, should not hurt performance
@@ -581,6 +584,7 @@ static uint64_t border_node_split(border_node *bn, border_node *bn1)
 {
   // TODO: no need to use atomic operation
   uint64_t permutation = node_get_permutation((node *)bn);
+  // TODO: no need to use atomic operation
   int count = get_count(permutation);
   assert(count == max_key_count);
 
@@ -636,6 +640,7 @@ static uint64_t interior_node_split(interior_node *in, interior_node *in1)
 {
   // TODO: no need to use atomic operation
   uint64_t permutation = node_get_permutation((node *)in);
+  // TODO: no need to use atomic operation
   int count = get_count(permutation);
   assert(count == max_key_count);
 
