@@ -93,4 +93,11 @@ void* node_insert(node *n, const void *key, uint32_t len, uint32_t *ptr, const v
 node* node_split(node *n, uint64_t *fence);
 node* node_search(node *n, const void *key, uint32_t len, uint32_t *ptr, void **suffix);
 
+#ifdef Test
+
+void free_node_raw(node *n);
+void node_print(node *n, int detail);
+
+#endif /* Test */
+
 #endif /* _node_h_ */

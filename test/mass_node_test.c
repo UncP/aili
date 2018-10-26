@@ -178,12 +178,41 @@ void test_node_lock()
   free_node(n);
 }
 
-void test_border_node_insert()
+void test_border_node_value_insert_and_search()
 {
+  printf("test border node basic insert and search\n");
+
   node *n = new_node(Border);
+  node_lock(n);
 
+  srand(time(0));
+  // each key should be unique
+  uint64_t key[15];
+  for (int i = 0; i < 15; ++i) {
+    key[i] = ((uint64_t)rand() << 32) + i;
+    uint32_t tmp = 0;
+    assert((int)node_insert(n, &key[i], sizeof(uint64_t), &tmp, &key[i], 0 /* link */) == 1);
+  }
 
-  free_node(n);
+  node_print(n, 1);
+
+  // each key is already inserted
+  for (int i = 0; i < 15; ++i) {
+    uint32_t tmp = 0;
+    assert((int)node_insert(n, &key[i], sizeof(uint64_t), &tmp, &key[i], 0 /* link */) == 0);
+  }
+
+  assert(node_is_full(n));
+  node_unlock(n);
+
+  for (int i = 0; i < 15; ++i) {
+    void *suffix;
+    uint32_t tmp = 0;
+    assert(node_search(n, &key[i], sizeof(uint64_t), &tmp, &suffix) == 0);
+    assert((uint64_t *)suffix == &key[i]);
+  }
+
+  free_node_raw(n);
 }
 
 void test_node_locate_child()
@@ -193,8 +222,9 @@ void test_node_locate_child()
 
 int main()
 {
-  test_node_marco();
-  test_node_utility_functions();
-  test_node_lock();
+  // test_node_marco();
+  // test_node_utility_functions();
+  // test_node_lock();
+  test_border_node_value_insert_and_search();
   return 0;
 }

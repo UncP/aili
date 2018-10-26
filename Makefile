@@ -3,7 +3,7 @@ CFLAGS=-std=c99 -Wall -Werror -Wextra -O3
 IFLAGS=-I./third_party
 LFLAGS=./third_party/c_hashmap/libhashmap.a -lpthread
 PFLAGS=-DTest -DLazy
-MFLAGS=
+MFLAGS=-DTest
 
 PALMFLAGS=$(CC) $(CFLAGS) $(PFLAGS) $(IFLAGS)
 MASSFLAGS=$(CC) $(CFLAGS) $(MFLAGS)
