@@ -37,7 +37,7 @@ static node* mass_tree_grow(node *n, uint64_t fence, node *n1)
   // TODO: some operations below is not required to be atomic
   node_set_root(r);
 
-  node_insert_first_child(r, n);
+  node_set_first_child(r, n);
   uint32_t ptr = 0;
   assert((int)node_insert(r, &fence, sizeof(uint64_t), &ptr, n1, 1 /* is_link */) == 1);
 
@@ -172,6 +172,8 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
       assert((int)node_insert(n1, ckey, clen, &ptr, 0, 0 /* is_link */) == 1);
       tmp = 0, ptr = pre;
       assert((int)node_insert(n1, key, len, &ptr, val, 0 /* is_link */) == 1);
+
+      node_set_parent(n1, n);
 
       // replace value with new layer `n1`
       node_update_at(n, index, n1);

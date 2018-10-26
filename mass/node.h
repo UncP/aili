@@ -83,7 +83,7 @@ uint32_t node_get_stable_version(node *n);
 node* node_get_parent(node *n);
 void node_set_parent(node *n, node *p);
 node* node_get_locked_parent(node *n);
-void node_insert_first_child(node *n, node *c);
+void node_set_first_child(node *n, node *c);
 int node_include_key(node *n, const void *key, uint32_t len, uint32_t ptr);
 node* node_locate_child(node *n, const void *key, uint32_t len, uint32_t *ptr);
 void* node_insert(node *n, const void *key, uint32_t len, uint32_t *ptr, const void *val, int is_link);
