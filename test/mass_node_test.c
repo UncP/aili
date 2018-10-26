@@ -178,9 +178,9 @@ void test_node_lock()
   free_node(n);
 }
 
-void test_border_node_value_insert_and_search()
+void test_border_node_insert_and_search()
 {
-  printf("test border node basic insert and search\n");
+  printf("test border node insert and search\n");
 
   node *n = new_node(Border);
   node_lock(n);
@@ -191,40 +191,207 @@ void test_border_node_value_insert_and_search()
   for (int i = 0; i < 15; ++i) {
     key[i] = ((uint64_t)rand() << 32) + i;
     uint32_t tmp = 0;
-    assert((int)node_insert(n, &key[i], sizeof(uint64_t), &tmp, &key[i], 0 /* link */) == 1);
+    assert((int)node_insert(n, &key[i], sizeof(uint64_t), &tmp, &key[i], (i % 2) ? 1 : 0 /* link */) == 1);
   }
-
-  node_print(n, 1);
 
   // each key is already inserted
   for (int i = 0; i < 15; ++i) {
     uint32_t tmp = 0;
-    assert((int)node_insert(n, &key[i], sizeof(uint64_t), &tmp, &key[i], 0 /* link */) == 0);
+    if ((i % 2))
+      assert((uint64_t *)node_insert(n, &key[i], sizeof(uint64_t), &tmp, &key[i], 0 /* link */) == &key[i]);
+    else
+      assert(node_insert(n, &key[i], sizeof(uint64_t), &tmp, &key[i], 0 /* link */) == 0);
   }
 
   assert(node_is_full(n));
   node_unlock(n);
 
+  node_print(n, 1);
+
   for (int i = 0; i < 15; ++i) {
     void *suffix;
     uint32_t tmp = 0;
-    assert(node_search(n, &key[i], sizeof(uint64_t), &tmp, &suffix) == 0);
-    assert((uint64_t *)suffix == &key[i]);
+    if ((i % 2)) {
+      assert((uint64_t *)node_search(n, &key[i], sizeof(uint64_t), &tmp, &suffix) == &key[i]);
+    } else {
+      assert(node_search(n, &key[i], sizeof(uint64_t), &tmp, &suffix) == 0);
+      assert((uint64_t *)suffix == &key[i]);
+    }
   }
 
   free_node_raw(n);
 }
 
-void test_node_locate_child()
+void test_interior_node_insert_and_search()
 {
+  printf("test interior node insert and search\n");
 
+  node *n = new_node(Interior);
+  node_lock(n);
+
+  srand(time(0));
+  uint64_t key[15];
+
+  node_set_first_child(n, (void *)-1);
+  for (int i = 0; i < 15; ++i) {
+    key[i] = i * 2 + 1;
+    uint32_t tmp = 0;
+    assert((int)node_insert(n, &key[i], sizeof(uint64_t), &tmp, &key[i], 1 /* link */) == 1);
+  }
+
+  node_unlock(n);
+
+  node_print(n, 1);
+
+  for (int i = 0; i < 15; ++i) {
+    uint64_t k = i * 2;
+    uint32_t tmp = 0;
+    if (i == 0)
+      assert((int)node_locate_child(n, &k, sizeof(uint64_t), &tmp) == -1);
+    else
+      assert((uint64_t *)node_locate_child(n, &k, sizeof(uint64_t), &tmp) == &key[i - 1]);
+  }
+  uint64_t k = 15 * 2;
+  uint32_t tmp = 0;
+  assert((uint64_t *)node_locate_child(n, &k, sizeof(uint64_t), &tmp) == &key[14]);
+
+  free_node_raw(n);
+}
+
+void test_border_node_split()
+{
+  printf("test border node split\n");
+
+  node *n = new_node(Border);
+  node_lock(n);
+
+  srand(time(0));
+  // each key should be unique
+  uint64_t key[15];
+  for (int i = 0; i < 15; ++i) {
+    key[i] = i * 2 + 1;
+    uint32_t tmp = 0;
+    assert((int)node_insert(n, &key[i], sizeof(uint64_t), &tmp, &key[i], (i % 2) ? 1 : 0 /* link */) == 1);
+  }
+
+  node_print(n, 1);
+
+  uint64_t fence;
+  node *n1 = node_split(n, &fence);
+
+  node_unlock(n);
+  node_unlock(n1);
+
+  assert(fence == key[7]);
+
+  for (int i = 0; i < 7; ++i) {
+    uint32_t tmp = 0;
+    void *suffix;
+    if ((i % 2)) {
+      assert((uint64_t *)node_search(n, &key[i], sizeof(uint64_t), &tmp, &suffix) == &key[i]);
+    } else {
+      assert(node_search(n, &key[i], sizeof(uint64_t), &tmp, &suffix) == 0);
+      assert((uint64_t *)suffix == &key[i]);
+    }
+    tmp = 0;
+    assert(node_search(n1, &key[i], sizeof(uint64_t), &tmp, &suffix) == 0);
+    assert(!suffix);
+  }
+
+  for (int i = 7; i < 15; ++i) {
+    uint32_t tmp = 0;
+    void *suffix;
+    if ((i % 2)) {
+      assert((uint64_t *)node_search(n1, &key[i], sizeof(uint64_t), &tmp, &suffix) == &key[i]);
+    } else {
+      assert(node_search(n1, &key[i], sizeof(uint64_t), &tmp, &suffix) == 0);
+      assert((uint64_t *)suffix == &key[i]);
+    }
+    tmp = 0;
+    assert(node_search(n, &key[i], sizeof(uint64_t), &tmp, &suffix) == 0);
+    assert(!suffix);
+  }
+
+  assert(node_get_next(n) == n1);
+
+  node_print(n, 1);
+  node_print(n1, 1);
+
+  free_node_raw(n);
+  free_node_raw(n1);
+}
+
+void test_interior_node_split()
+{
+  printf("test interior node split\n");
+
+  node *n = new_node(Interior);
+  node_lock(n);
+
+  srand(time(0));
+  uint64_t key[15];
+  node *child[16];
+  child[0] = new_node(Border);
+  node_set_parent(child[0], n);
+
+  node_set_first_child(n, child[0]);
+  for (int i = 0; i < 15; ++i) {
+    key[i] = i * 2 + 1;
+    child[i+1] = new_node(Border);
+    node_set_parent(child[i+1], n);
+    uint32_t tmp = 0;
+    assert((int)node_insert(n, &key[i], sizeof(uint64_t), &tmp, child[i+1], 1 /* link */) == 1);
+  }
+
+  node_print(n, 1);
+
+  uint64_t fence;
+  node *n1 = node_split(n, &fence);
+
+  node_unlock(n);
+  node_unlock(n1);
+
+  assert(fence == key[7]);
+
+  for (int i = 0; i < 7; ++i) {
+    uint64_t k = i * 2;
+    uint32_t tmp = 0;
+    assert(node_locate_child(n, &k, sizeof(uint64_t), &tmp) == child[i]);
+    assert(node_get_parent(child[i]) == n);
+  }
+  uint64_t k = 7 * 2;
+  uint32_t tmp = 0;
+  assert(node_locate_child(n, &k, sizeof(uint64_t), &tmp) == child[7]);
+  assert(node_get_parent(child[7]) == n);
+
+  for (int i = 8; i < 15; ++i) {
+    uint64_t k = i * 2;
+    uint32_t tmp = 0;
+    assert(node_locate_child(n1, &k, sizeof(uint64_t), &tmp) == child[i]);
+    assert(node_get_parent(child[i]) == n1);
+  }
+  k = 15 * 2;
+  tmp = 0;
+  assert(node_locate_child(n1, &k, sizeof(uint64_t), &tmp) == child[15]);
+  assert(node_get_parent(child[15]) == n1);
+
+  node_print(n, 1);
+  node_print(n1, 1);
+
+  for (int i = 0; i < 16; ++i)
+    free_node_raw(child[i]);
+  free_node_raw(n);
+  free_node_raw(n1);
 }
 
 int main()
 {
-  // test_node_marco();
-  // test_node_utility_functions();
-  // test_node_lock();
-  test_border_node_value_insert_and_search();
+  test_node_marco();
+  test_node_utility_functions();
+  test_node_lock();
+  test_border_node_insert_and_search();
+  test_interior_node_insert_and_search();
+  test_border_node_split();
+  test_interior_node_split();
   return 0;
 }

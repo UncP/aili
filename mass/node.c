@@ -21,7 +21,7 @@
 #define update_permutation(permutation, index, value) {                       \
   uint64_t right = (permutation << ((index + 1) * 4)) >> ((index + 2) * 4);   \
   uint64_t left = (permutation >> ((15 - index) * 4)) << ((15 - index) * 4);  \
-  uint64_t middle = ((uint64_t)value & 0xf) << ((14 - index) * 4);                      \
+  uint64_t middle = ((uint64_t)value & 0xf) << ((14 - index) * 4);            \
   permutation = left | middle | right;                                        \
   permutation = permutation + ((uint64_t)1 << 60);                            \
 }
@@ -255,7 +255,8 @@ void node_unlock(node *n)
   if (is_inserting(version)) {
     version = incr_vinsert(version);
     version = unset_insert(version);
-  } else if (is_spliting(version)) {
+  }
+  if (is_spliting(version)) {
     version = incr_vsplit(version);
     version = unset_split(version);
   }
@@ -621,7 +622,8 @@ static uint64_t border_node_split(border_node *bn, border_node *bn1)
   __atomic_load(&bn->next, &old_next, __ATOMIC_RELAXED);
   __atomic_store(&bn1->prev, &bn, __ATOMIC_RELAXED);
   __atomic_store(&bn1->next, &old_next, __ATOMIC_RELAXED);
-  __atomic_store(&old_next->prev, &bn1, __ATOMIC_RELAXED);
+  if (old_next)
+    __atomic_store(&old_next->prev, &bn1, __ATOMIC_RELAXED);
   // `__ATOMIC_RELEASE` will make sure all the relaxed operation before been seen by other threads
   __atomic_store(&bn->next, &bn1, __ATOMIC_RELEASE);
 
@@ -656,8 +658,10 @@ static uint64_t interior_node_split(interior_node *in, interior_node *in1)
   for (int i = 0; i < 7; ++i) {
     in1->keyslice[i] = in1->keyslice[i + 8];
     in1->child[i]    = in1->child[i + 7];
+    node_set_parent(in1->child[i], (node *)in1);
   }
-  in1->child[7] = in1->child[15];
+  in1->child[7] = in1->child[14];
+  node_set_parent(in1->child[7], (node *)in1);
 
   // finally we set each node's `permutation` field
   permutation = 0;
