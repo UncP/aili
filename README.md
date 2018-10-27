@@ -21,7 +21,7 @@
 | [1.2.3](https://github.com/UncP/aili/tree/1.2.3)  | adjust Palm Tree descending policy (lazy descend, great for sequential operation) |
 | [1.3.0](https://github.com/UncP/aili/tree/1.3.0)  | a major refactor |
 | [1.3.1](https://github.com/UncP/aili/tree/1.3.1)  | Prefetch Palm Tree |
-| [1.3.2](https://github.com/UncP/aili/tree/1.3.2)  | zigzag descending policy |
+| [1.3.2](https://github.com/UncP/aili/tree/1.3.2)  | adjust Palm Tree descending policy (zigzag descending policy) |
 
 
 #### Have a Try

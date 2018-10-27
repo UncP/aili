@@ -481,19 +481,8 @@ void worker_execute_on_leaf_nodes(worker *w, batch *b)
         case 0:  // key already inserted, we set value to 0
           set_val(val, 0);
           break;
-        case -3: { // we need to allocate a new node to the left
-          // seems not possible
-          assert(0);
-          node *nn = new_node(Leaf, curr->level);
-          node_insert(nn, key, len, (const void *)*(val_t *)val);
-          fnc.pth = cp;
-          fnc.ptr = nn;
-          memcpy(fnc.key, key, len);
-          fnc.len = len;
-          set_val(val, 1);
-          break;
-        }
-        case -2: // we need to allocate a new node to the right
+        case -2: // we need to allocate a new node to the right, `node_is_before_key` below will
+                 // return true
         case -1: { // node does not have enough space, needs to split
           node *nn = new_node(Leaf, curr->level);
           fnc.pth = cp;

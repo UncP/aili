@@ -203,6 +203,19 @@ void* node_search(node *n, const void *key, uint32_t len)
   return 0;
 }
 
+// try to do a prefix compression, if succeed, return 1; else return 0
+static int node_try_prefix_compression(node *n)
+{
+  assert(n->level == 0 && n->keys > 1);
+
+  index_t *index = node_index(n);
+  get_key_info(n, index[0], lkey, llen);           // get first key in this node
+  get_key_info(n, index[n->keys - 1], rkey, rlen); // get last key in this node
+
+  if (llen == 1 || rlen == 1) return 0;
+  uint32_t len = llen > rlen ? rlen - 1;
+}
+
 static void node_insert_kv(node *n, const void *key, uint32_t len, const void *val)
 {
   *((len_t *)(n->data + n->off)) = (len_t)len;
@@ -218,21 +231,20 @@ static void node_insert_kv(node *n, const void *key, uint32_t len, const void *v
   ++n->keys;
 }
 
-// insert a kv into node,
-// if key is smaller than the prefix, return -3
-// if key is larger than the prefix, return -2
-// if key already exists, return 0
-// if there is not enough space, return -1
-// if succeed, return 1
+// insert a kv into node:
+//   if key is larger than the prefix, return -2
+//   if key already exists, return 0
+//   if there is not enough space, return -1
+//   if succeed, return 1
 int node_insert(node *n, const void *key, uint32_t len, const void *val)
 {
   if (n->pre) { // compare with node prefix
     assert(n->level == 0);
     uint32_t plen = len > n->pre ? n->pre : len;
     int r = compare_key(key, plen, n->data, n->pre);
-    if (r < 0)
-      return -3;
-    else if (r > 0)
+    // prefix of `key` must be larger than or equal with the prefix of `n`
+    assert(r >= 0);
+    if (r > 0)
       return -2;
   }
 
@@ -260,8 +272,12 @@ int node_insert(node *n, const void *key, uint32_t len, const void *val)
 
   --index;
   // check if there is enough space
-  if (unlikely((char *)n->data + (n->off + key_byte + len1 + value_bytes) > (char *)index))
-    return -1;
+  if (unlikely(((char *)n->data + (n->off + key_byte + len1 + value_bytes)) > (char *)index)) {
+    // // after prefix compression is succeeded, we still need to check whether current key can fit in
+    // if (!node_try_prefix_compression(n) ||
+    //     ((char *)n->data + (n->off + key_byte + len1 + value_bytes)) > (char *)index)
+      return -1;
+  }
 
   // update index
   if (likely(low)) memmove(&index[0], &index[1], low * index_byte);
