@@ -481,17 +481,30 @@ void worker_execute_on_leaf_nodes(worker *w, batch *b)
         case 0:  // key already inserted, we set value to 0
           set_val(val, 0);
           break;
+        case -3: { // we need to allocate a new node to the left
+          // seems not possible
+          assert(0);
+          node *nn = new_node(Leaf, curr->level);
+          node_insert(nn, key, len, (const void *)*(val_t *)val);
+          fnc.pth = cp;
+          fnc.ptr = nn;
+          memcpy(fnc.key, key, len);
+          fnc.len = len;
+          set_val(val, 1);
+          break;
+        }
+        case -2: // we need to allocate a new node to the right
         case -1: { // node does not have enough space, needs to split
           node *nn = new_node(Leaf, curr->level);
           fnc.pth = cp;
           fnc.ptr = nn;
 
           // if the key we are going to insert is the last key in this node,
-          // we don't have to split the node, we just put this kv into the new node,
+          // we don't have to split the node, we just put this key into a new node,
           // also the key after will probably fall into the new node,
           // this is especially useful for sequential insertion.
           // also we want to avoid certain situation where too many one-key nodes
-          // are allocated, that's `n->sopt` used for
+          // are allocated, that's what `n->sopt` is used for
           int move_right = 0;
           uint32_t flen;
           if (curr->sopt == 0 && (flen = node_is_before_key(curr, key, len))) {

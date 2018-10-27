@@ -69,7 +69,7 @@ typedef struct node
   uint32_t    type:8;   // Root or Branch or Leaf
   uint32_t   level:8;   // level this node in
   uint32_t    sopt:8;   // for sequential insertion optimization, only for level 0
-  uint32_t     pre:8;   // prefix length
+  uint32_t     pre:8;   // prefix length, only used in level 0
   uint32_t     id;      // id of this node, mainly for debug
   uint32_t     keys;    // number of keys
   uint32_t     off;     // current data offset
@@ -130,10 +130,10 @@ node* path_get_node_at_index(path *p, uint32_t idx);
 
 typedef struct fence
 {
-  path     *pth;                   // path that this fence belongs to
-  uint32_t  len;                   // key length
-  char      key[max_key_size + 1]; // key data, +1 for alignment
-  node     *ptr;                   // new node pointer
+  path     *pth;     // path that this fence belongs to
+  uint32_t  len;     // key length
+  char      key[20]; // key data, TODO: make it dynamic
+  node     *ptr;     // new node pointer
 }fence;
 
 #define likely(x)   (__builtin_expect(!!(x), 1))

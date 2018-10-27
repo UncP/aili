@@ -112,51 +112,44 @@ void free_btree_node(node *n)
   free_node(n);
 }
 
-// whether we should insert key into this node, if not, return (their common prefix length + 1)
+// whether we should insert key into this node, if not, return (their common prefix length) + 1
+// this function is only called after `node_insert` is called
 int node_is_before_key(node *n, const void *key, uint32_t len)
 {
-  assert(n->keys);
-  index_t *index = node_index(n);
-
-  get_key_info(n, index[n->keys - 1], key1, len1);
+  assert(n->level == 0);
 
   if (n->pre) {
-    // TODO: remove this
-    assert(0);
+    char *lptr = (char *)n->data, *rptr = (char *)key;
+    for (uint32_t i = 0; i < n->pre && i < len; ++i)
+      if (lptr[i] != rptr[i])
+        return i + 1;
   }
 
+  const void *key1 = key + n->pre;
+  uint32_t    len1 = len - n->pre;
+
+  index_t *index = node_index(n);
+  assert(n->keys);
+  get_key_info(n, index[n->keys - 1], key2, len2);
   // equal is not possible
-  if (compare_key(key1, len1, key, len) > 0)
+  if (compare_key(key2, len2, key1, len1) > 0)
     return 0;
 
-  char *lptr = (char *)key1, *rptr = (char *)key;
-  for (uint32_t i = 0; i < len1 && i < len; ++i) {
+  char *lptr = (char *)key2, *rptr = (char *)key1;
+  uint32_t i = 0;
+  for (; i < len2 && i < len1; ++i)
     if (lptr[i] != rptr[i])
-      return i + 1;
-  }
+      return i + 1 + n->pre;
 
-  return len;
+  uint32_t ret = i + 1 + n->pre;
+  return ret > len ? len : ret;
 }
 
 node* node_descend(node *n, const void *key, uint32_t len)
 {
   // TODO: remove this
-  assert(n->level && n->keys);
-
+  assert(n->level && n->keys && !n->pre);
   index_t *index = node_index(n);
-  if (n->pre) { // compare with node prefix
-    // TODO: remove this
-    assert(0);
-    uint32_t tlen = len < n->pre ? len : n->pre;
-    int r = compare_key(key, tlen, n->data, n->pre);
-    if (r < 0)
-      return n->first;
-    if (r > 0)
-      return (node *)get_val(n, index[n->keys - 1]);
-  }
-
-  const void *key1 = key + n->pre;
-  uint32_t    len1 = len - n->pre;
 
   int first = 0, count = (int)n->keys;
 
@@ -164,9 +157,9 @@ node* node_descend(node *n, const void *key, uint32_t len)
     int half = count >> 1;
     int middle = first + half;
 
-    get_key_info(n, index[middle], key2, len2);
+    get_key_info(n, index[middle], key1, len1);
 
-    if (compare_key(key2, len2, key1, len1) <= 0) {
+    if (compare_key(key1, len1, key, len) <= 0) {
       first = middle + 1;
       count -= half + 1;
     } else {
@@ -179,19 +172,19 @@ node* node_descend(node *n, const void *key, uint32_t len)
 // find the key in the leaf, return its pointer, if no such key, return null
 void* node_search(node *n, const void *key, uint32_t len)
 {
-  // TODO: remove this
   assert(n->level == 0);
 
-  if (unlikely(n->keys == 0)) return 0;
+  if (n->pre) {
+    uint32_t plen = len > n->pre ? n->pre : len;
+    if (compare_key(key, plen, n->data, n->pre)) // compare with node prefix
+      return 0;
+  }
 
-  if (n->pre && compare_key(key, len, n->data, n->pre)) // compare with node prefix
-    return 0;
-
-  int low = 0, high = (int)n->keys - 1;
-  index_t *index = node_index(n);
   const void *key1 = key + n->pre;
   uint32_t    len1 = len - n->pre;
 
+  int low = 0, high = (int)n->keys - 1;
+  index_t *index = node_index(n);
   while (low <= high) {
     int mid = (low + high) / 2;
 
@@ -225,60 +218,56 @@ static void node_insert_kv(node *n, const void *key, uint32_t len, const void *v
   ++n->keys;
 }
 
-// insert a kv into node, if key already exists, return 0
+// insert a kv into node,
+// if key is smaller than the prefix, return -3
+// if key is larger than the prefix, return -2
+// if key already exists, return 0
 // if there is not enough space, return -1
 // if succeed, return 1
 int node_insert(node *n, const void *key, uint32_t len, const void *val)
 {
-  int pos = -1;
-
   if (n->pre) { // compare with node prefix
-    // TODO: remove this
-    assert(0);
-    int r = compare_key(key, len, n->data, n->pre);
+    assert(n->level == 0);
+    uint32_t plen = len > n->pre ? n->pre : len;
+    int r = compare_key(key, plen, n->data, n->pre);
     if (r < 0)
-      pos = 0;
+      return -3;
     else if (r > 0)
-      pos = n->keys;
+      return -2;
   }
 
+  const void *key1 = key + n->pre;
+  uint32_t    len1 = len - n->pre;
+
   // find the index which to insert the key
-  if (likely(pos == -1)) {
-    int low = 0, high = (int)n->keys - 1;
-    index_t *index = node_index(n);
-    const void *key1 = key + n->pre;
-    uint32_t    len1 = len - n->pre;
+  int low = 0, high = (int)n->keys - 1;
+  index_t *index = node_index(n);
+  while (low <= high) {
+    int mid = (low + high) / 2;
 
-    while (low <= high) {
-      int mid = (low + high) / 2;
+    get_key_info(n, index[mid], key2, len2);
 
-      get_key_info(n, index[mid], key2, len2);
-
-      int r = compare_key(key2, len2, key1, len1);
-      if (r == 0)
-        return 0;
-      else if (r < 0)
-        low  = mid + 1;
-      else
-        high = mid - 1;
-    }
-    pos = low;
+    int r = compare_key(key2, len2, key1, len1);
+    if (r == 0)
+      return 0;
+    else if (r < 0)
+      low  = mid + 1;
+    else
+      high = mid - 1;
   }
 
   // key does not exist, we can proceed
 
-  uint32_t klen = len - n->pre;
-  index_t *index = node_index(n) - 1;
-
+  --index;
   // check if there is enough space
-  if (unlikely((char *)n->data + (n->off + key_byte + klen + value_bytes) > (char *)index))
+  if (unlikely((char *)n->data + (n->off + key_byte + len1 + value_bytes) > (char *)index))
     return -1;
 
   // update index
-  if (likely(pos)) memmove(&index[0], &index[1], pos * index_byte);
-  index[pos] = n->off;
+  if (likely(low)) memmove(&index[0], &index[1], low * index_byte);
+  index[low] = n->off;
 
-  node_insert_kv(n, key + n->pre, klen, val);
+  node_insert_kv(n, key1, len1, val);
 
   return 1;
 }
@@ -626,8 +615,7 @@ void node_get_whole_key(node *n, uint32_t idx, char *key, uint32_t *len)
   index_t *index = node_index(n);
   get_key_info(n, index[idx], buf, buf_len);
   if (n->pre) {
-    // TODO: remove this
-    assert(0);
+    assert(n->level == 0);
     memcpy(key, n->data, n->pre);
   }
   memcpy(key + n->pre, buf, buf_len);

@@ -13,7 +13,7 @@
 
 #include "../mass/node.h"
 
-#define magic_number 9130
+#define magic_number 3190
 
 static long long mstime()
 {
