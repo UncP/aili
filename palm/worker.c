@@ -481,9 +481,7 @@ void worker_execute_on_leaf_nodes(worker *w, batch *b)
         case 0:  // key already inserted, we set value to 0
           set_val(val, 0);
           break;
-        case -2: // we need to allocate a new node to the right, `node_is_before_key` below will
-                 // return true
-        case -1: { // node does not have enough space, needs to split
+        case -1: { // node does not have enough space, or has conflict key prefix, needs to split
           node *nn = new_node(Leaf, curr->level);
           fnc.pth = cp;
           fnc.ptr = nn;

@@ -123,9 +123,10 @@ int node_is_before_key(node *n, const void *key, uint32_t len)
     for (uint32_t i = 0; i < n->pre && i < len; ++i)
       if (lptr[i] != rptr[i])
         return i + 1;
+    if (len <= n->pre) return 0;
   }
 
-  const void *key1 = key + n->pre;
+  const void *key1 = (char *)key + n->pre;
   uint32_t    len1 = len - n->pre;
 
   index_t *index = node_index(n);
@@ -141,8 +142,9 @@ int node_is_before_key(node *n, const void *key, uint32_t len)
     if (lptr[i] != rptr[i])
       return i + 1 + n->pre;
 
-  uint32_t ret = i + 1 + n->pre;
-  return ret > len ? len : ret;
+  uint32_t r = i + 1 + n->pre;
+  assert(r <= len);
+  return r;
 }
 
 node* node_descend(node *n, const void *key, uint32_t len)
@@ -175,12 +177,14 @@ void* node_search(node *n, const void *key, uint32_t len)
   assert(n->level == 0);
 
   if (n->pre) {
-    uint32_t plen = len > n->pre ? n->pre : len;
-    if (compare_key(key, plen, n->data, n->pre)) // compare with node prefix
+    // key length must be longer than prefix length
+    if (len <= n->pre)
+      return 0;
+    if (compare_key(key, n->pre, n->data, n->pre)) // compare with node prefix
       return 0;
   }
 
-  const void *key1 = key + n->pre;
+  const void *key1 = (char *)key + n->pre;
   uint32_t    len1 = len - n->pre;
 
   int low = 0, high = (int)n->keys - 1;
@@ -204,16 +208,49 @@ void* node_search(node *n, const void *key, uint32_t len)
 }
 
 // try to do a prefix compression, if succeed, return 1; else return 0
+// note: this is a little bit time consuming
 static int node_try_prefix_compression(node *n)
 {
-  assert(n->level == 0 && n->keys > 1);
+  return 0;
+  // prefix compression is only supported in level 0
+  if (n->level)
+    return 0;
 
+  assert(n->keys > 1);
+
+  // try to get new sub prefix
   index_t *index = node_index(n);
-  get_key_info(n, index[0], lkey, llen);           // get first key in this node
-  get_key_info(n, index[n->keys - 1], rkey, rlen); // get last key in this node
+  get_key_info(n, index[0], lkey, llen);
+  assert(llen);
+  if (--llen == 0) return 0;
+  char *lptr = (char *)lkey;
+  uint32_t prelen = llen;
+  for (uint32_t i = 1; i < n->keys; ++i) {
+    get_key_info(n, index[i], rkey, rlen);
+    assert(rlen);
+    if (--rlen == 0) return 0;
+    char *rptr = (char *)rkey;
+    uint32_t curlen = 0;
+    for (uint32_t j = 0; j < llen && j < rlen; ++j) {
+      if (lptr[j] != rptr[j])
+        break;
+      ++curlen;
+    }
+    if (curlen == 0) return 0;
+    prelen = prelen < curlen ? prelen : curlen;
+  }
 
-  if (llen == 1 || rlen == 1) return 0;
-  uint32_t len = llen > rlen ? rlen - 1;
+  assert(prelen);
+
+  // get new prefix
+  char prefix[max_key_size + 1];
+  memcpy(prefix, n->data, n->pre);
+  memcpy(prefix + n->pre, lkey, prelen);
+  prelen += n->pre;
+
+  // adjust node layout
+
+  return 1;
 }
 
 static void node_insert_kv(node *n, const void *key, uint32_t len, const void *val)
@@ -234,22 +271,21 @@ static void node_insert_kv(node *n, const void *key, uint32_t len, const void *v
 // insert a kv into node:
 //   if key is larger than the prefix, return -2
 //   if key already exists, return 0
-//   if there is not enough space, return -1
+//   if there is prefix conflict, or not enough space, return -1
 //   if succeed, return 1
 int node_insert(node *n, const void *key, uint32_t len, const void *val)
 {
   if (n->pre) { // compare with node prefix
     assert(n->level == 0);
-    uint32_t plen = len > n->pre ? n->pre : len;
-    int r = compare_key(key, plen, n->data, n->pre);
-    // prefix of `key` must be larger than or equal with the prefix of `n`
-    assert(r >= 0);
-    if (r > 0)
-      return -2;
+    // this key can't fit in this node if its length is shorter than or equal with the prefix length
+    if (len <= n->pre) return -1;
+    // prefix conflict
+    if (compare_key(key, n->pre, n->data, n->pre))
+      return -1;
   }
 
-  const void *key1 = key + n->pre;
-  uint32_t    len1 = len - n->pre;
+  void *key1 = (char *)key + n->pre;
+  uint32_t len1 = len - n->pre;
 
   // find the index which to insert the key
   int low = 0, high = (int)n->keys - 1;
@@ -271,12 +307,20 @@ int node_insert(node *n, const void *key, uint32_t len, const void *val)
   // key does not exist, we can proceed
 
   --index;
+
   // check if there is enough space
   if (unlikely(((char *)n->data + (n->off + key_byte + len1 + value_bytes)) > (char *)index)) {
-    // // after prefix compression is succeeded, we still need to check whether current key can fit in
-    // if (!node_try_prefix_compression(n) ||
-    //     ((char *)n->data + (n->off + key_byte + len1 + value_bytes)) > (char *)index)
-      return -1;
+    // try to compress prefix
+    if (!node_try_prefix_compression(n)) return -1;
+    // need to check key length again after prefix compression
+    if (len <= n->pre) return -1;
+    // need to check prefix conflict again after prefix compression
+    if (compare_key(key, n->pre, n->data, n->pre)) return -1;
+    // need to update new key suffix
+    key1 = (char *)key + n->pre;
+    len1 = len - n->pre;
+    // still not enough space
+    if (((char *)n->data + (n->off + key_byte + len1 + value_bytes)) > (char *)index) return -1;
   }
 
   // update index
