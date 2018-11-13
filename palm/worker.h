@@ -52,7 +52,6 @@ typedef struct worker
 
   /* point to point synchronization */
   node *last[8];
-  uint64_t padding[8]; // make sure that `last` and `first` never fall into the same cache line
   node *first[8];
   node *their_last;
   node *my_first;
