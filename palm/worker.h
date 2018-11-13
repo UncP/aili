@@ -51,11 +51,13 @@ typedef struct worker
   struct worker *next; // next worker with bigger id
 
   /* point to point synchronization */
-  channel *ch;
-  node    *their_last;
-  node    *my_first;
-  node    *my_last;
-  node    *their_first;
+  node *last[8];
+  uint64_t padding[8]; // make sure that `last` and `first` never fall into the same cache line
+  node *first[8];
+  node *their_last;
+  node *my_first;
+  node *my_last;
+  node *their_first;
 }worker;
 
 worker* new_worker(uint32_t id, uint32_t total);

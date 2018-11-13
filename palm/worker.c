@@ -16,77 +16,6 @@
 // used in point-to-point synchronization
 #define magic_pointer (node *)913
 
-// a channel specially tailored for palm tree algorithm, not the channel you see in Go or Rust
-// used for atomic set & get
-struct _channel
-{
-  uint32_t  total;
-  uint64_t *last;
-  uint64_t *first;
-};
-
-channel* new_channel(uint32_t total)
-{
-  channel *c = (channel *)malloc(sizeof(channel));
-
-  c->total = total;
-  c->first = (uint64_t *)calloc(c->total, sizeof(uint64_t));
-  c->last  = (uint64_t *)calloc(c->total, sizeof(uint64_t));
-
-  return c;
-}
-
-void free_channel(channel *c)
-{
-  free((void *)c->last);
-  free((void *)c->first);
-
-  free((void *)c);
-}
-
-void channel_reset(channel *c)
-{
-  memset(c->first, 0, c->total * sizeof(uint64_t));
-  memset(c->last,  0, c->total * sizeof(uint64_t));
-}
-
-// use acquire-release for the next 4 functions instead of full memory barrier
-void channel_set_first(channel *c, uint32_t idx, void *ptr)
-{
-  assert(idx < c->total);
-  __atomic_store(&c->first[idx], (uint64_t *)&ptr, __ATOMIC_RELEASE);
-}
-
-void channel_set_last(channel *c, uint32_t idx, void *ptr)
-{
-  assert(idx < c->total);
-  __atomic_store(&c->last[idx], (uint64_t *)&ptr, __ATOMIC_RELEASE);
-}
-
-void* channel_get_first(channel *c, uint32_t idx)
-{
-  assert(idx < c->total);
-  uint64_t ret;
-  __atomic_load(&c->first[idx], &ret, __ATOMIC_ACQUIRE);
-  return (void *)ret;
-}
-
-void* channel_get_last(channel *c, uint32_t idx)
-{
-  assert(idx < c->total);
-  uint64_t ret;
-  __atomic_load(&c->last[idx], &ret, __ATOMIC_ACQUIRE);
-  return (void *)ret;
-}
-
-void channel_reset_at(channel *c, uint32_t idx)
-{
-  assert(idx < c->total);
-  // atomic operation is not necessary here
-  c->first[idx] = 0;
-  c->last[idx] = 0;
-}
-
 worker* new_worker(uint32_t id, uint32_t total)
 {
   assert(id < total);
@@ -117,7 +46,8 @@ worker* new_worker(uint32_t id, uint32_t total)
   w->prev = 0;
   w->next = 0;
 
-  w->ch = new_channel(max_descend_depth + 2); // we need 2 more channel to do extra worker_sync
+  memset(w->last, 0, sizeof(node*) * 8);
+  memset(w->first, 0, sizeof(node*) * 8);
   w->their_last  = 0;
   w->my_first    = 0;
   w->my_last     = 0;
@@ -128,8 +58,6 @@ worker* new_worker(uint32_t id, uint32_t total)
 
 void free_worker(worker* w)
 {
-  free_channel(w->ch);
-
   free((void *)w->fences[0]);
   free((void *)w->fences[1]);
   free((void *)w->paths);
@@ -327,33 +255,36 @@ void worker_sync(worker *w, uint32_t level, uint32_t root_level)
     if (w->id > 0 && my_first == my_last) my_first = 0;
   }
 
-  // we don't use pthread_yield() or functions like that, we just keep each thread busy
+  int idx = level;
   while (!(set_first && set_last && their_first && their_last)) {
     if (my_first && !set_first) {
-      channel_set_first(w->prev->ch, level, (void *)my_first); // `w->prev` can't be NULL
+      __atomic_store(&w->prev->first[idx], &my_first, __ATOMIC_RELAXED);
       set_first = 1;
     }
 
     if (my_last && !set_last) {
-      channel_set_last(w->next->ch, level, (void *)my_last); // `w->next` can't be NULL
+      __atomic_store(&w->next->last[idx], &my_last, __ATOMIC_RELAXED);
       set_last = 1;
     }
 
     if (!their_first)
-      their_first = (node *)channel_get_first(w->ch, level);
+      __atomic_load(&w->first[idx], &their_first, __ATOMIC_RELAXED);
 
     if (their_first && !my_first)
       my_first = their_first;
 
     if (!their_last)
-      their_last = (node *)channel_get_last(w->ch, level);
+      __atomic_load(&w->last[idx], &their_last, __ATOMIC_RELAXED);
 
     if (their_last && !my_last)
       my_last = their_last;
+
+    __asm__ volatile ("pause");
   }
 
-  // we can safely reset this level's channel since this level's synchronization is done
-  channel_reset_at(w->ch, level);
+  // we can safely reset since this level's synchronization is done
+  w->last[idx]  = 0;
+  w->first[idx] = 0;
 
   // record boundary nodes for later work redistribution
   w->their_last  = their_last;
