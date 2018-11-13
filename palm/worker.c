@@ -278,8 +278,6 @@ void worker_sync(worker *w, uint32_t level, uint32_t root_level)
 
     if (their_last && !my_last)
       my_last = their_last;
-
-    __asm__ volatile ("pause");
   }
 
   // we can safely reset since this level's synchronization is done
