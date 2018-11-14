@@ -9,7 +9,7 @@
 
 #include "node.h"
 
-typedef struct _channel channel;
+#define channel_size max_descend_depth + 1 // +2 is better but we want `channel_size` to be 8
 
 /**
  *   every thread has a worker, worker does write/read operations to b+ tree,
@@ -51,8 +51,8 @@ typedef struct worker
   struct worker *next; // next worker with bigger id
 
   /* point to point synchronization */
-  node *last[8];
-  node *first[8];
+  node *last[channel_size]; // `last` & `first` both take up a cache line
+  node *first[channel_size];
   node *their_last;
   node *my_first;
   node *my_last;

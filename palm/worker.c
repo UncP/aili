@@ -46,8 +46,8 @@ worker* new_worker(uint32_t id, uint32_t total)
   w->prev = 0;
   w->next = 0;
 
-  memset(w->last, 0, sizeof(node*) * 8);
-  memset(w->first, 0, sizeof(node*) * 8);
+  memset(w->last, 0, sizeof(node*) * channel_size);
+  memset(w->first, 0, sizeof(node*) * channel_size);
   w->their_last  = 0;
   w->my_first    = 0;
   w->my_last     = 0;

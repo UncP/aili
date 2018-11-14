@@ -14,3 +14,4 @@
 - [x] 懒惰下降策略
 - [ ] Mass Tree
 - [x] 折线下降策略
+- [ ] 双向 early termination
