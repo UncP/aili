@@ -24,7 +24,7 @@ mass_tree* new_mass_tree()
   return mt;
 }
 
-// require: no other thread is visiting or will visit this tree
+// require: no other thread is visiting this tree
 void free_mass_tree(mass_tree *mt)
 {
   free_node(mt->root);

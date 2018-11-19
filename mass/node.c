@@ -155,6 +155,13 @@ uint32_t node_get_version(node *n)
   return version;
 }
 
+static uint32_t node_get_version_unsafe(node *n)
+{
+  uint32_t version;
+  __atomic_load(&n->version, &version, __ATOMIC_RELAXED);
+  return version;
+}
+
 void node_set_version(node *n, uint32_t version)
 {
   __atomic_store(&n->version, &version, __ATOMIC_RELEASE);
@@ -249,7 +256,8 @@ void node_lock(node *n)
 // require: `n` is locked
 void node_unlock(node *n)
 {
-  uint32_t version = node_get_version(n);
+  // since `n` is locked, we can use `relaxed` operation
+  uint32_t version = node_get_version_unsafe(n);
   assert(is_locked(version));
 
   if (is_inserting(version)) {
@@ -628,7 +636,7 @@ static uint64_t border_node_split(border_node *bn, border_node *bn1)
   __atomic_store(&bn1->next, &old_next, __ATOMIC_RELAXED);
   if (old_next)
     __atomic_store(&old_next->prev, &bn1, __ATOMIC_RELAXED);
-  // `__ATOMIC_RELEASE` will make sure all the relaxed operation before been seen by other threads
+  // `__ATOMIC_RELEASE` will make sure all the relaxed operation above been seen by other threads
   __atomic_store(&bn->next, &bn1, __ATOMIC_RELEASE);
 
   // return fence key
