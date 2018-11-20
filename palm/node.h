@@ -79,6 +79,7 @@ typedef struct node
 }node;
 
 void set_node_size(uint32_t size);
+uint32_t get_node_size();
 void set_batch_size(uint32_t size);
 uint32_t get_batch_size();
 int compare_key(const void *key1, uint32_t len1, const void *key2, uint32_t len2);
@@ -92,6 +93,9 @@ void* node_search(node *n, const void *key, uint32_t len);
 void node_split(node *old, node *new, char *pkey, uint32_t *plen);
 int node_is_before_key(node *n, const void *key, uint32_t len);
 void node_prefetch(node *n);
+
+void node_init(node *n, uint8_t type, uint8_t level);
+void node_insert_fence(node *old, node *new, void *next);
 
 /**
  *   batch is a wrapper for node with some difference, key may be duplicated
@@ -141,7 +145,6 @@ typedef struct fence
 
 #ifdef Test
 
-uint32_t get_node_size();
 void node_print(node *n, int detail);
 void batch_print(batch *b, int detail);
 void node_validate(node *n);

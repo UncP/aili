@@ -24,6 +24,11 @@ void set_node_size(uint32_t size)
   node_size &= node_size_mask;
 }
 
+uint32_t get_node_size()
+{
+  return node_size;
+}
+
 void set_batch_size(uint32_t size)
 {
   batch_size = size < node_min_size ? node_min_size : size > node_max_size ? node_max_size : size;
@@ -46,8 +51,7 @@ uint32_t get_batch_size()
   const void *key = get_key(n, off);   \
   uint32_t len = get_len(n, off);
 #define get_kv_info(n, off, key, len, val) \
-  const void *key = get_key(n, off);       \
-  uint32_t len = get_len(n, off);          \
+  get_key_info(n, off, key, len);          \
   void *val = get_val(n, off);
 #define get_kv_ptr(n, off, key, len, val)                 \
   const void *key = get_key(n, off);                      \
@@ -67,18 +71,24 @@ node* new_node(uint8_t type, uint8_t level)
 {
   uint32_t size = likely(type < Batch) ? node_size : batch_size;
   node *n = (node *)malloc(size);
+
+  node_init(n, type, level);
+
+  return n;
+}
+
+inline void node_init(node *n, uint8_t type, uint8_t level)
+{
   n->type  = type;
   n->level = level;
   n->pre   = 0;
   n->sopt  = 0;
-  // two or more threads can be creating new node at the same time, increase node-id atomically
-  n->id    = __sync_fetch_and_add(&node_id, 1);
+  // multiple threads can be creating new node at the same time, increase node-id atomically
+  n->id    = __atomic_fetch_add(&node_id, 1, __ATOMIC_RELAXED);
   n->keys  = 0;
   n->off   = 0;
   n->next  = 0;
   n->first = 0;
-
-  return n;
 }
 
 void free_node(node *n)
@@ -119,6 +129,7 @@ int node_is_before_key(node *n, const void *key, uint32_t len)
   assert(n->level == 0);
 
   if (n->pre) {
+    assert(0);
     char *lptr = (char *)n->data, *rptr = (char *)key;
     for (uint32_t i = 0; i < n->pre && i < len; ++i)
       if (lptr[i] != rptr[i])
@@ -177,6 +188,7 @@ void* node_search(node *n, const void *key, uint32_t len)
   assert(n->level == 0);
 
   if (n->pre) {
+    assert(0);
     // key length must be longer than prefix length
     if (len <= n->pre)
       return 0;
@@ -276,6 +288,7 @@ static void node_insert_kv(node *n, const void *key, uint32_t len, const void *v
 int node_insert(node *n, const void *key, uint32_t len, const void *val)
 {
   if (n->pre) { // compare with node prefix
+    assert(0);
     assert(n->level == 0);
     // this key can't fit in this node if its length is shorter than or equal with the prefix length
     if (len <= n->pre) return -1;
@@ -407,6 +420,19 @@ void node_split(node *old, node *new, char *pkey, uint32_t *plen)
   // update node link
   new->next = old->next;
   old->next = new;
+}
+
+// for blink node, insert the first key of `new` as fence key for `old`
+void node_insert_fence(node *old, node *new, void *next)
+{
+  index_t *nidx = node_index(new);
+  assert(new->keys);
+  get_key_info(new, nidx[0], key, len);
+
+  assert(node_insert(old, key, len, next) == 1);
+
+  // overwrite the old node's `next` field
+  old->next = (node *)next;
 }
 
 /****** BATCH operation ******/
@@ -543,11 +569,6 @@ node* path_get_node_at_index(path *p, uint32_t idx)
 
 #include <stdio.h>
 
-uint32_t get_node_size()
-{
-  return node_size;
-}
-
 static char* format_kv(char *ptr, char *end, node* n, uint32_t off)
 {
   // ptr += snprintf(ptr, end - ptr, "%4u  ", off);
@@ -675,6 +696,7 @@ void node_get_whole_key(node *n, uint32_t idx, char *key, uint32_t *len)
   index_t *index = node_index(n);
   get_key_info(n, index[idx], buf, buf_len);
   if (n->pre) {
+    assert(0);
     assert(n->level == 0);
     memcpy(key, n->data, n->pre);
   }

@@ -2,18 +2,16 @@ CC=gcc
 CFLAGS=-std=c99 -Wall -Werror -Wextra -O3
 IFLAGS=-I./third_party
 LFLAGS=./third_party/c_hashmap/libhashmap.a -lpthread
-PFLAGS=-DTest -DLazy
-MFLAGS=-DTest
+PFLAGS=-DLazy
+TFLAGS=
+MFLAGS=
 
-PALMFLAGS=$(CC) $(CFLAGS) $(PFLAGS) $(IFLAGS)
-MASSFLAGS=$(CC) $(CFLAGS) $(MFLAGS)
+PALMFLAGS=$(CC) $(CFLAGS) $(PFLAGS) $(IFLAGS) $(TFLAGS)
+MASSFLAGS=$(CC) $(CFLAGS) $(MFLAGS) $(TFLAGS)
 
 AILI_OBJ=palm/node.o palm/bounded_queue.o palm/worker.o palm/palm_tree.o palm/metric.o
 
 default: lib
-
-third_party: third_party/c_hashmap
-	cd third_party/c_hashmap && $(CC) $(CFLAGS) -c hashmap.c -o hashmap.o && ar rcs libhashmap.a hashmap.o
 
 lib:$(AILI_OBJ)
 	make third_party
@@ -44,6 +42,9 @@ node_test: test/mass_node_test.c mass/node.o
 
 tree_test: test/mass_tree_test.c mass/node.o mass/mass_tree.o
 	$(MASSFLAGS) -o $@ $^ -lpthread
+
+third_party: third_party/c_hashmap
+	cd third_party/c_hashmap && $(CC) $(CFLAGS) -c hashmap.c -o hashmap.o && ar rcs libhashmap.a hashmap.o
 
 clean:
 	rm palm/*.o mass/*.o *_test generate_data libaili.a; cd example && make clean
