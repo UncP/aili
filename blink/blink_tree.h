@@ -10,13 +10,13 @@
 #include <pthread.h>
 
 #include "node.h"
-#include "bounded_mapping_queue.h"
+#include "mapping_array.h"
 
 typedef struct blink_tree
 {
   blink_node *root;
 
-  bounded_mapping_queue *queue;
+  mapping_array *array;
 
   int        thread_num;
   pthread_t *ids;

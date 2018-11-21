@@ -40,8 +40,7 @@ generate_data: ./generate_data.c
 blink/%.o: blink/%.c
 	$(BLINKFLAGS) -c $^ -o $@
 
-blink_tree_test: test/blink_tree_test.c blink/node.o blink/blink_tree.o blink/bounded_mapping_queue.o \
-	palm/node.o
+blink_tree_test: test/blink_tree_test.c blink/node.o blink/blink_tree.o blink/mapping_array.o palm/node.o
 	$(BLINKFLAGS) -o $@ $^ -lpthread
 
 mass/%.o: mass/%.c

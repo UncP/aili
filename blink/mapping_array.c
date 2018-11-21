@@ -7,7 +7,7 @@
 #include <stdlib.h>
 #include <assert.h>
 
-#include "bounded_mapping_queue.h"
+#include "mapping_array.h"
 
 // find first zero bit, ported from linux kernal, `word` must not be ~0UL
 static inline unsigned long ffz(unsigned long word)
@@ -27,17 +27,17 @@ static inline unsigned long ffs(unsigned long word)
   return word;
 }
 
-bounded_mapping_queue* new_bounded_mapping_queue(size_t element_bytes)
+mapping_array* new_mapping_array(size_t element_bytes)
 {
-  bounded_mapping_queue *q = (bounded_mapping_queue *)malloc(sizeof(bounded_mapping_queue));
+  mapping_array *q = (mapping_array *)malloc(sizeof(mapping_array));
 
   q->clear = 0;
   q->free  = (uint64_t)-1;
   q->busy  = 0;
 
   size_t aligned_element_bytes = (element_bytes + 63) & (~((size_t)63));
-  void *ptr = valloc(max_queue_size * aligned_element_bytes);
-  for (size_t i = 0; i < max_queue_size; ++i)
+  void *ptr = valloc(max_array_size * aligned_element_bytes);
+  for (size_t i = 0; i < max_array_size; ++i)
     q->elements[i] = (void *)((char *)ptr + i * aligned_element_bytes);
 
   pthread_mutex_init(q->mutex, 0);
@@ -47,9 +47,9 @@ bounded_mapping_queue* new_bounded_mapping_queue(size_t element_bytes)
   return q;
 }
 
-void free_bounded_mapping_queue(bounded_mapping_queue *q)
+void free_mapping_array(mapping_array *q)
 {
-	bounded_mapping_queue_clear(q);
+	mapping_array_clear(q);
 
   pthread_mutex_destroy(q->mutex);
   pthread_cond_destroy(q->free_cond);
@@ -58,7 +58,7 @@ void free_bounded_mapping_queue(bounded_mapping_queue *q)
   free((void *)q);
 }
 
-void bounded_mapping_queue_clear(bounded_mapping_queue *q)
+void mapping_array_clear(mapping_array *q)
 {
   pthread_mutex_lock(q->mutex);
 
@@ -75,7 +75,7 @@ void bounded_mapping_queue_clear(bounded_mapping_queue *q)
   pthread_mutex_unlock(q->mutex);
 }
 
-void bounded_mapping_queue_wait_empty(bounded_mapping_queue *q)
+void mapping_array_wait_empty(mapping_array *q)
 {
   pthread_mutex_lock(q->mutex);
 
@@ -87,7 +87,7 @@ void bounded_mapping_queue_wait_empty(bounded_mapping_queue *q)
   pthread_mutex_unlock(q->mutex);
 }
 
-void* bounded_mapping_queue_get_free(bounded_mapping_queue *q, int *idx)
+void* mapping_array_get_free(mapping_array *q, int *idx)
 {
   pthread_mutex_lock(q->mutex);
 
@@ -101,7 +101,7 @@ void* bounded_mapping_queue_get_free(bounded_mapping_queue *q, int *idx)
   return q->elements[*idx];
 }
 
-void bounded_mapping_queue_put_free(bounded_mapping_queue *q, int idx)
+void mapping_array_put_free(mapping_array *q, int idx)
 {
   assert(idx >= 0 && idx <= 63);
   uint64_t mask = ((uint64_t)1) << idx;
@@ -112,7 +112,7 @@ void bounded_mapping_queue_put_free(bounded_mapping_queue *q, int idx)
   pthread_cond_signal(q->busy_cond);
 }
 
-void* bounded_mapping_queue_get_busy(bounded_mapping_queue *q, int *idx)
+void* mapping_array_get_busy(mapping_array *q, int *idx)
 {
   pthread_mutex_lock(q->mutex);
 
@@ -134,7 +134,7 @@ void* bounded_mapping_queue_get_busy(bounded_mapping_queue *q, int *idx)
   return q->elements[*idx];
 }
 
-void bounded_mapping_queue_put_busy(bounded_mapping_queue *q, int idx)
+void mapping_array_put_busy(mapping_array *q, int idx)
 {
   assert(idx >= 0 && idx <= 63);
 

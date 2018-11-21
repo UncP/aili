@@ -12,12 +12,12 @@
 static void* run(void *arg)
 {
   blink_tree *bt = (blink_tree *)arg;
-  bounded_mapping_queue *q = bt->queue;
+  mapping_array *q = bt->array;
 
   int   idx;
   void *buf;
   while (1) {
-    void *kv = bounded_mapping_queue_get_busy(q, &idx);
+    void *kv = mapping_array_get_busy(q, &idx);
 
     if (unlikely(kv == 0))
       break;
@@ -31,8 +31,9 @@ static void* run(void *arg)
     else
       blink_tree_read(bt, key, len, &buf);
 
-    bounded_mapping_queue_put_busy(q, idx);
+    mapping_array_put_busy(q, idx);
   }
+
   return (void *)0;
 }
 
@@ -45,16 +46,16 @@ blink_tree* new_blink_tree(int thread_num)
 
   bt->root = root;
 
-  bt->queue = 0;
+  bt->array = 0;
   if (thread_num <= 0) {
-    // queue is disabled
+    // array is disabled
     return 0;
   }
 
   if (thread_num > 4)
     thread_num = 4;
 
-  bt->queue = new_bounded_mapping_queue(max_key_size + sizeof(uint32_t) + 1 /* w or r */);
+  bt->array = new_mapping_array(max_key_size + sizeof(uint32_t) + 1 /* w or r */);
 
   bt->thread_num = thread_num;
   bt->ids = (pthread_t *)malloc(bt->thread_num * sizeof(pthread_t));
@@ -67,11 +68,11 @@ blink_tree* new_blink_tree(int thread_num)
 
 void free_blink_tree(blink_tree *bt)
 {
-  if (bt->queue) {
+  if (bt->array) {
     for (int i = 0; i < bt->thread_num; ++i)
       assert(pthread_join(bt->ids[i], 0) == 0);
 
-    free_bounded_mapping_queue(bt->queue);
+    free_mapping_array(bt->array);
     free((void *)bt->ids);
   }
 
@@ -82,8 +83,8 @@ void free_blink_tree(blink_tree *bt)
 
 void blink_tree_flush(blink_tree *bt)
 {
-  if (bt->queue)
-    bounded_mapping_queue_wait_empty(bt->queue);
+  if (bt->array)
+    mapping_array_wait_empty(bt->array);
 }
 
 struct stack {
@@ -93,6 +94,8 @@ struct stack {
 
 static void blink_tree_root_split(blink_tree *bt, blink_node *left, const void *key, uint32_t len, blink_node *right)
 {
+  assert(blink_node_is_root(left));
+
   int level = blink_node_get_level(left);
   blink_node *new_root = new_blink_node(blink_node_get_type(left), level + 1);
   blink_node_insert_infinity_key(new_root);
