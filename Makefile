@@ -4,9 +4,11 @@ IFLAGS=-I./third_party
 LFLAGS=./third_party/c_hashmap/libhashmap.a -lpthread
 PFLAGS=-DLazy
 TFLAGS=
+BFLAGS=
 MFLAGS=
 
 PALMFLAGS=$(CC) $(CFLAGS) $(PFLAGS) $(IFLAGS) $(TFLAGS)
+BLINKFLAGS=$(CC) $(CFLAGS) $(BFLAGS) $(TFLAGS)
 MASSFLAGS=$(CC) $(CFLAGS) $(MFLAGS) $(TFLAGS)
 
 AILI_OBJ=palm/node.o palm/bounded_queue.o palm/worker.o palm/palm_tree.o palm/metric.o
@@ -28,11 +30,19 @@ palm_node_test: test/palm_node_test.c palm/node.o
 palm_batch_test: test/palm_batch_test.c palm/node.o
 	$(PALMFLAGS) -o $@ $^
 
-palm_tree_test: test/palm_tree_test.c palm/node.o palm/worker.o palm/bounded_queue.o palm/palm_tree.o palm/metric.o
+palm_tree_test: test/palm_tree_test.c palm/node.o palm/worker.o palm/bounded_queue.o palm/palm_tree.o \
+	palm/metric.o
 	$(PALMFLAGS) -o $@ $^ $(LFLAGS)
 
 generate_data: ./generate_data.c
 	$(CC) $(CFLAGS) -o $@ $^
+
+blink/%.o: blink/%.c
+	$(BLINKFLAGS) -c $^ -o $@
+
+blink_tree_test: test/blink_tree_test.c blink/node.o blink/blink_tree.o blink/bounded_mapping_queue.o \
+	palm/node.o
+	$(BLINKFLAGS) -o $@ $^ -lpthread
 
 mass/%.o: mass/%.c
 	$(MASSFLAGS) -c $^ -o $@

@@ -8,12 +8,12 @@
  *   B+ tree node is k-v storage unit & internal index unit
  *
  *   layout of a node in bytes:
- *       type    level    prefix        id         keys        offset     next node    first child
- *     |   1   |   1   |     2     |     4     |     4     |     4     |      8      |      8      |
- *     |        prefix data        |                          kv paris                             |
- *     |                                     kv pairs                                              |
- *     |                                     kv pairs                                              |
- *     |                         kv pairs                              |            index          |
+ *       type    level   sopt   prefix      id         keys        offset     next node    first child
+ *     |   1   |   1   |   1   |   1   |     4     |     4     |     4     |      8      |      8      |
+ *     |        prefix data        |                          kv paris                                 |
+ *     |                                     kv pairs                                                  |
+ *     |                                     kv pairs                                                  |
+ *     |                         kv pairs                              |            index              |
  *
  *
  *   layout of kv pair:
@@ -31,10 +31,11 @@
 #include <stdint.h>
 
 // node type
-#define Root   0
-#define Branch 1
-#define Leaf   2
-#define Batch  3
+#define Root   (1 << 0)
+#define Branch (1 << 1)
+#define Leaf   (1 << 2)
+#define Blink  (1 << 3)
+#define Batch  (1 << 4)
 
 // op type
 #define Read  0
@@ -136,7 +137,7 @@ typedef struct fence
 {
   path     *pth;     // path that this fence belongs to
   uint32_t  len;     // key length
-  char      key[20]; // key data, TODO: make it dynamic
+  char      key[12]; // key data, TODO: make it dynamic or change to `max_key_size`
   node     *ptr;     // new node pointer
 }fence;
 

@@ -29,8 +29,8 @@
 1. make third_party
                                        #  key_num   key_len
 2. make generate_data && ./generate_data  10000000    10    # test data will be in ./data
-                                                      # f_name  n_size  b_size  t_num  q_num  k_num
-make "TFLAGS=-DTest" palm_tree_test && ./palm_tree_test  1      4096   4096     2      8     1000
+                                                        # f_name  n_size  b_size  t_num  q_num  k_num
+3. make "TFLAGS=-DTest" palm_tree_test && ./palm_tree_test  1      4096   4096     2      8     1000
 
 # f_name can be 0 (sequential data) or 1 (random data);
 # if your machine supports N threads, t_num can be 1, 2, ..., (N-1), not N;

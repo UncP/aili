@@ -407,7 +407,7 @@ void worker_execute_on_leaf_nodes(worker *w, batch *b)
         case 1:  // key insert succeed, we set value to 1
           set_val(val, 1);
           break;
-        case 0:  // key already inserted, we set value to 0
+        case 0:  // key already exists, we set value to 0
           set_val(val, 0);
           break;
         case -1: { // node does not have enough space, or has conflict key prefix, needs to split
@@ -489,7 +489,7 @@ void worker_execute_on_branch_nodes(worker *w, uint32_t level)
     switch (node_insert(curr, key, len, val)) {
       case 1:  // key insert succeed
         break;
-      case 0:  // key already inserted, it's not possible
+      case 0:  // key already exists, it's not possible
         assert(0);
         break;
       case -1: { // node does not have enough space, needs to split

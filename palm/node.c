@@ -183,6 +183,7 @@ node* node_descend(node *n, const void *key, uint32_t len)
 }
 
 // find the key in the leaf, return its pointer, if no such key, return null
+
 void* node_search(node *n, const void *key, uint32_t len)
 {
   assert(n->level == 0);
@@ -216,7 +217,10 @@ void* node_search(node *n, const void *key, uint32_t len)
     }
   }
 
-  return 0;
+  if (unlikely(low == (int)n->keys) && (n->type & Blink))
+    return (void *)-1;
+
+  return (void *)0;
 }
 
 // try to do a prefix compression, if succeed, return 1; else return 0
@@ -281,9 +285,11 @@ static void node_insert_kv(node *n, const void *key, uint32_t len, const void *v
 }
 
 // insert a kv into node:
-//   if key is larger than the prefix, return -2
+//   if key is larger than the prefix, return -1
 //   if key already exists, return 0
 //   if there is prefix conflict, or not enough space, return -1
+//   if there is not enough space, return -1
+//   if this is a blink node and we need to move right, return -2
 //   if succeed, return 1
 int node_insert(node *n, const void *key, uint32_t len, const void *val)
 {
@@ -316,6 +322,9 @@ int node_insert(node *n, const void *key, uint32_t len, const void *val)
     else
       high = mid - 1;
   }
+
+  if (unlikely(low == (int)n->keys) && (n->type & Blink))
+    return -2;
 
   // key does not exist, we can proceed
 
@@ -363,7 +372,8 @@ void node_split(node *old, node *new, char *pkey, uint32_t *plen)
   }
 
   get_kv_info(old, l_idx[left], fkey, flen, fval);
-  if (likely(old->level == 0)) { // if we are at level 0, try to get prefix key
+  // if we are at level 0 and this is not a blink node, get prefix key
+  if (likely(old->level == 0) && (old->type & Blink) == 0) {
     // Reference: Prefix B-Trees
     assert(left);
     get_key_info(old, l_idx[left - 1], lkey, llen);

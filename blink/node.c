@@ -6,6 +6,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 #include "node.h"
 
@@ -14,7 +15,7 @@ blink_node *new_blink_node(uint8_t type, uint8_t level)
   blink_node *bn = (blink_node *)malloc(get_node_size());
 
   latch_init(bn->lock);
-  node_init(bn->pn);
+  node_init(bn->pn, type | Blink, level);
 
   return bn;
 }
@@ -26,6 +27,7 @@ void free_blink_node(blink_node *bn)
 
 void free_blink_tree_node(blink_node *bn)
 {
+  (void)bn;
   // TODO
 }
 
@@ -51,7 +53,7 @@ blink_node* blink_node_descend(blink_node *bn, const void *key, uint32_t len)
 
 int blink_node_insert(blink_node *bn, const void *key, uint32_t len, const void *val)
 {
-  return node_insert(bn->pn, key, len);
+  return node_insert(bn->pn, key, len, val);
 }
 
 void* blink_node_search(blink_node *bn, const void *key, uint32_t len)
@@ -63,6 +65,11 @@ void blink_node_split(blink_node *old, blink_node *new, char *pkey, uint32_t *pl
 {
   node_split(old->pn, new->pn, pkey, plen);
   node_insert_fence(old->pn, new->pn, (void *)new);
+}
+
+int blink_node_is_before_key(blink_node *bn, const void *key, uint32_t len)
+{
+  return node_is_before_key(bn->pn, key, len);
 }
 
 void blink_node_insert_infinity_key(blink_node *bn)
