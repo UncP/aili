@@ -7,6 +7,8 @@
 #ifndef _blink_tree_h_
 #define _blink_tree_h_
 
+#include <pthread.h>
+
 #include "node.h"
 #include "bounded_mapping_queue.h"
 
@@ -15,6 +17,10 @@ typedef struct blink_tree
   blink_node *root;
 
   bounded_mapping_queue *queue;
+
+  int        thread_num;
+  pthread_t *ids;
+
 }blink_tree;
 
 blink_tree* new_blink_tree(int thread_num);

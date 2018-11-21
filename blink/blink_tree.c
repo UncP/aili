@@ -9,6 +9,33 @@
 
 #include "blink_tree.h"
 
+static void* run(void *arg)
+{
+  blink_tree *bt = (blink_tree *)arg;
+  bounded_mapping_queue *q = bt->queue;
+
+  int   idx;
+  void *buf;
+  while (1) {
+    void *kv = bounded_mapping_queue_get_busy(q, &idx);
+
+    if (unlikely(kv == 0))
+      break;
+
+    int is_write = (int)(((char *)kv)[0]);
+    uint32_t len = *(uint32_t *)(((char *)kv) + 1);
+    const void *key = (void *)((char *)kv + 5);
+    const void *val = (void *)((char *)kv + (len + 5));
+    if (is_write)
+      blink_tree_write(bt, key, len, val);
+    else
+      blink_tree_read(bt, key, len, &buf);
+
+    bounded_mapping_queue_put_busy(q, idx);
+  }
+  return (void *)0;
+}
+
 blink_tree* new_blink_tree(int thread_num)
 {
   blink_tree *bt = (blink_tree *)malloc(sizeof(blink_tree));
@@ -28,15 +55,29 @@ blink_tree* new_blink_tree(int thread_num)
     thread_num = 4;
 
   bt->queue = new_bounded_mapping_queue(max_key_size + sizeof(uint32_t) + 1 /* w or r */);
+
+  bt->thread_num = thread_num;
+  bt->ids = (pthread_t *)malloc(bt->thread_num * sizeof(pthread_t));
+
+  for (int i = 0; i < bt->thread_num; ++i)
+    assert(pthread_create(&bt->ids[i], 0, run, (void *)bt) == 0);
+
   return bt;
 }
 
 void free_blink_tree(blink_tree *bt)
 {
-  if (bt->queue)
+  if (bt->queue) {
+    for (int i = 0; i < bt->thread_num; ++i)
+      assert(pthread_join(bt->ids[i], 0) == 0);
+
     free_bounded_mapping_queue(bt->queue);
+    free((void *)bt->ids);
+  }
 
   // TODO: free all nodes
+
+  free((void *)bt);
 }
 
 void blink_tree_flush(blink_tree *bt)
@@ -162,7 +203,10 @@ int blink_tree_read(blink_tree *bt, const void *key, uint32_t len, void **val)
   void *ret;
   for (;;) {
     switch ((int64_t)(ret = blink_node_search(curr, key, len))) {
-    case  0: return 0; // key not exists
+    case  0: { // key not exists
+      *val = 0;
+      return 0;
+    }
     // move to right leaf
     case -1: {
       blink_node *next = blink_node_get_next(curr);
@@ -172,7 +216,7 @@ int blink_tree_read(blink_tree *bt, const void *key, uint32_t len, void **val)
       break;
     }
     default:
-      val = ret;
+      *val = ret;
       return 1;
     }
   }
