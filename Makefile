@@ -56,4 +56,4 @@ third_party: third_party/c_hashmap
 	cd third_party/c_hashmap && $(CC) $(CFLAGS) -c hashmap.c -o hashmap.o && ar rcs libhashmap.a hashmap.o
 
 clean:
-	rm palm/*.o mass/*.o *_test generate_data libaili.a; cd example && make clean
+	rm palm/*.o blink/*.o mass/*.o *_test generate_data libaili.a; cd example && make clean

@@ -5,7 +5,10 @@
 **/
 
 #include <stdlib.h>
+#include <string.h>
 #include <assert.h>
+// TODO: remove this
+#include <stdio.h>
 
 #include "blink_tree.h"
 
@@ -15,21 +18,21 @@ static void* run(void *arg)
   mapping_array *q = bt->array;
 
   int   idx;
-  void *buf;
+  void *tmp;
   while (1) {
-    void *kv = mapping_array_get_busy(q, &idx);
+    char *buf = mapping_array_get_busy(q, &idx);
 
-    if (unlikely(kv == 0))
+    if (unlikely(buf == 0))
       break;
 
-    int is_write = (int)(((char *)kv)[0]);
-    uint32_t len = *(uint32_t *)(((char *)kv) + 1);
-    const void *key = (void *)((char *)kv + 5);
-    const void *val = (void *)((char *)kv + (len + 5));
+    int is_write = (int)(buf[0]);
+    uint32_t len = *((uint32_t *)(buf + 1));
+    const void *key = (void *)(buf + 5);
+    const void *val = (void *)(*((uint64_t *)(buf + len + 5)));
     if (is_write)
       blink_tree_write(bt, key, len, val);
     else
-      blink_tree_read(bt, key, len, &buf);
+      blink_tree_read(bt, key, len, &tmp);
 
     mapping_array_put_busy(q, idx);
   }
@@ -55,7 +58,7 @@ blink_tree* new_blink_tree(int thread_num)
   if (thread_num > 4)
     thread_num = 4;
 
-  bt->array = new_mapping_array(max_key_size + sizeof(uint32_t) + 1 /* w or r */);
+  bt->array = new_mapping_array(1 /* w or r */ + sizeof(uint32_t) + max_key_size + sizeof(void *));
 
   bt->thread_num = thread_num;
   bt->ids = (pthread_t *)malloc(bt->thread_num * sizeof(pthread_t));
@@ -85,6 +88,22 @@ void blink_tree_flush(blink_tree *bt)
 {
   if (bt->array)
     mapping_array_wait_empty(bt->array);
+}
+
+void blink_tree_schedule(blink_tree *bt, int is_write, const void *key, uint32_t len, const void *val)
+{
+  int idx;
+  char *buf = (char *)mapping_array_get_free(bt->array, &idx);
+
+  buf[0] = (char)is_write;
+  *((uint32_t *)(buf + 1)) = len;
+  memcpy(buf + 5, key, len);
+  if (val)
+    *((uint64_t *)(buf + 5 + len)) = *((uint64_t *)&val);
+  else
+    *((uint64_t *)(buf + 5 + len)) = 0;
+
+  mapping_array_put_free(bt->array, idx);
 }
 
 struct stack {
@@ -207,6 +226,7 @@ int blink_tree_read(blink_tree *bt, const void *key, uint32_t len, void **val)
   for (;;) {
     switch ((int64_t)(ret = blink_node_search(curr, key, len))) {
     case  0: { // key not exists
+      assert(0);
       *val = 0;
       return 0;
     }

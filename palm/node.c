@@ -323,7 +323,7 @@ int node_insert(node *n, const void *key, uint32_t len, const void *val)
       high = mid - 1;
   }
 
-  if (unlikely(low == (int)n->keys) && (n->type & Blink))
+  if (unlikely(low == (int)n->keys) && low && (n->type & Blink))
     return -2;
 
   // key does not exist, we can proceed
