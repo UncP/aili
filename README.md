@@ -4,14 +4,11 @@
 [![Version](https://img.shields.io/badge/Version-2.0.0-blue.svg)](https://github.com/UncP/aili)
 
 
-
 #### Algorithms
 
 * Palm Tree (`palm/`)
 * Blink Tree (`blink/`)
 * Mass Tree (`mass/`)
-
-&nbsp;
 
 #### Version Information
 | Version |           Detail             |
@@ -27,7 +24,6 @@
 | [1.3.2](https://github.com/UncP/aili/tree/1.3.2)  | adjust Palm Tree descending policy (zigzag descending policy) |
 | [2.0.0](https://github.com/UncP/aili/tree/2.0.0)  | B<sup>link</sup> Tree |
 
-&nbsp;
 
 #### Have a Try
 
@@ -45,14 +41,11 @@
 # k_num can be [1, infinity), depending on how many test keys you generate
 ```
 
-&nbsp;
-
 #### Other
 
 + checkout `example/` for examples
 + follow my [知乎专栏](https://zhuanlan.zhihu.com/b-tree) for blogs about this repository
 
-&nbsp;
 
 #### References
 
@@ -61,6 +54,4 @@
 - B<sup>link</sup> Tree : [Efficient Locking for Concurrent Operations on B-Trees](https://www.csd.uoc.gr/~hy460/pdf/p650-lehman.pdf)
 - Prefetch B+ Tree : [Improving Index Performance through Prefetching](http://www.aladdin.cs.cmu.edu/papers/pdfs/y2001/improv_ind.pdf)
 - Prefix B Tree : [Prefix B-Trees](http://delivery.acm.org/10.1145/330000/320530/p11-bayer.pdf?ip=111.114.49.2&id=320530&acc=ACTIVE%20SERVICE&key=BF85BBA5741FDC6E%2E4510866D46BF76B7%2E4D4702B0C3E38B35%2E4D4702B0C3E38B35&__acm__=1537792786_42d3c27bf4ea064b8d68b89657e39bf6)
-
-
 
