@@ -80,7 +80,11 @@ void blink_node_insert_infinity_key(blink_node *bn)
   assert(blink_node_insert(bn, key, max_key_size, 0) == 1);
 }
 
+#ifdef Test
+
 void blink_node_print(blink_node *bn, int detail)
 {
   node_print(bn->pn, detail);
 }
+
+#endif /* Test */

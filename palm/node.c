@@ -17,6 +17,8 @@ static uint32_t batch_size = node_min_size;
 static uint32_t node_offset = 0;
 static uint32_t node_id = 0;
 
+#define node_size_mask (~0xfff)
+
 void set_node_size(uint32_t size)
 {
   node_size = size < node_min_size ? node_min_size : size > node_max_size ? node_max_size : size;

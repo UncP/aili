@@ -7,7 +7,7 @@
 #include <stdio.h>
 #include <assert.h>
 
-#include "../src/palm_tree.h"
+#include "../palm/palm_tree.h"
 
 /* a simple example as how to use palm tree */
 

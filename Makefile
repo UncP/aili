@@ -12,12 +12,13 @@ BLINKFLAGS=$(CC) $(CFLAGS) $(BFLAGS) $(TFLAGS)
 MASSFLAGS=$(CC) $(CFLAGS) $(MFLAGS) $(TFLAGS)
 
 AILI_OBJ=palm/node.o palm/bounded_queue.o palm/worker.o palm/palm_tree.o palm/metric.o
+BLINK_OBJ=palm/node.o blink/node.o blink/blink_tree.o blink/mapping_array.o
 
 default: lib
 
-lib:$(AILI_OBJ)
+lib:$(AILI_OBJ) $(BLINK_OBJ)
 	make third_party
-	ar rcs libaili.a $(AILI_OBJ) third_party/c_hashmap/hashmap.o
+	ar rcs libaili.a $(AILI_OBJ) $(BLINK_OBJ) third_party/c_hashmap/hashmap.o
 
 test: node_test palm_batch_test palm_node_test palm_tree_test
 

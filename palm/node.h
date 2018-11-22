@@ -64,7 +64,6 @@ typedef uint16_t index_t;
 #define node_max_size  (((uint32_t)1) << 16) // 64kb
                                              // if you set `index_t` to uint32_t,
                                              // the node_max_size can be up to 4gb
-#define node_size_mask ((uint64_t)~0xfff)
 
 typedef struct node
 {
