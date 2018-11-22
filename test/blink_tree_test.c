@@ -14,7 +14,6 @@
 
 #include "../blink/blink_tree.h"
 
-const static uint64_t value = 3190;
 static char *file_str;
 static int thread_number;
 static int total_keys;
@@ -32,7 +31,7 @@ static long long mstime()
 
 void test_blink_tree()
 {
-  blink_tree *bt = new_blink_tree(thread_number);
+  blink_tree *bt = new_blink_tree(0);
 
   char file_name[32];
   memset(file_name, 0, 32);
@@ -65,7 +64,8 @@ void test_blink_tree()
         break;
       }
 
-      blink_tree_schedule(bt, 1 /* is_write */, key, len, (const void *)value);
+      blink_tree_write(bt, key, len, (const void *)3190);
+      // blink_tree_schedule(bt, 1 /* is_write */, key, len, (const void *)3190);
     }
   }
 
@@ -98,7 +98,10 @@ void test_blink_tree()
         break;
       }
 
-      blink_tree_schedule(bt, 0 /* is_write */, key, len, 0);
+      void *value;
+      assert(blink_tree_read(bt, key, len, &value));
+      assert((uint64_t)value == 3190);
+      // blink_tree_schedule(bt, 0 /* is_write */, key, len, 0);
     }
   }
 

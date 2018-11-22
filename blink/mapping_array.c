@@ -6,6 +6,8 @@
 
 #include <stdlib.h>
 #include <assert.h>
+// TODO: remove this
+#include <stdio.h>
 
 #include "mapping_array.h"
 
@@ -64,6 +66,7 @@ void mapping_array_clear(mapping_array *q)
   q->clear = 1;
 
   pthread_mutex_unlock(q->mutex);
+  pthread_cond_broadcast(q->busy_cond);
 }
 
 void mapping_array_wait_empty(mapping_array *q)
@@ -120,6 +123,7 @@ void* mapping_array_get_busy(mapping_array *q, int *idx)
 
   q->busy &= ~(((uint64_t)1) << *idx);
 
+  pthread_mutex_unlock(q->mutex);
   return q->elements[*idx];
 }
 

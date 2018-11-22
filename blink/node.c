@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <stdio.h>
 
 #include "node.h"
 
@@ -64,7 +65,7 @@ void* blink_node_search(blink_node *bn, const void *key, uint32_t len)
 void blink_node_split(blink_node *old, blink_node *new, char *pkey, uint32_t *plen)
 {
   node_split(old->pn, new->pn, pkey, plen);
-  node_insert_fence(old->pn, new->pn, (void *)new);
+  node_insert_fence(old->pn, new->pn, (void *)new, pkey, plen);
 }
 
 int blink_node_is_before_key(blink_node *bn, const void *key, uint32_t len)
@@ -77,4 +78,9 @@ void blink_node_insert_infinity_key(blink_node *bn)
   char key[max_key_size];
   memset(key, 0xff, max_key_size);
   assert(blink_node_insert(bn, key, max_key_size, 0) == 1);
+}
+
+void blink_node_print(blink_node *bn, int detail)
+{
+  node_print(bn->pn, detail);
 }

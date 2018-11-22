@@ -20,7 +20,7 @@ static void* run(void *arg)
   int   idx;
   void *tmp;
   while (1) {
-    char *buf = mapping_array_get_busy(q, &idx);
+    char *buf = (char *)mapping_array_get_busy(q, &idx);
 
     if (unlikely(buf == 0))
       break;
@@ -29,10 +29,16 @@ static void* run(void *arg)
     uint32_t len = *((uint32_t *)(buf + 1));
     const void *key = (void *)(buf + 5);
     const void *val = (void *)(*((uint64_t *)(buf + len + 5)));
-    if (is_write)
+    if (is_write) {
       blink_tree_write(bt, key, len, val);
-    else
-      blink_tree_read(bt, key, len, &tmp);
+    } else {
+      #ifdef Test
+        assert(blink_tree_read(bt, key, len, &tmp));
+        assert((uint64_t)tmp == 3190);
+      #else
+        blink_tree_read(bt, key, len, &tmp);
+      #endif
+    }
 
     mapping_array_put_busy(q, idx);
   }
@@ -45,6 +51,10 @@ blink_tree* new_blink_tree(int thread_num)
   blink_tree *bt = (blink_tree *)malloc(sizeof(blink_tree));
 
   blink_node *root = new_blink_node(Root, 0);
+
+	uint32_t offset = (char *)(&(root->pn)) - (char *)(&(root->lock));
+  set_node_offset(offset);
+
   blink_node_insert_infinity_key(root);
 
   bt->root = root;
@@ -52,7 +62,7 @@ blink_tree* new_blink_tree(int thread_num)
   bt->array = 0;
   if (thread_num <= 0) {
     // array is disabled
-    return 0;
+    return bt;
   }
 
   if (thread_num > 4)
@@ -72,10 +82,10 @@ blink_tree* new_blink_tree(int thread_num)
 void free_blink_tree(blink_tree *bt)
 {
   if (bt->array) {
+    free_mapping_array(bt->array);
+
     for (int i = 0; i < bt->thread_num; ++i)
       assert(pthread_join(bt->ids[i], 0) == 0);
-
-    free_mapping_array(bt->array);
     free((void *)bt->ids);
   }
 
@@ -117,10 +127,11 @@ static void blink_tree_root_split(blink_tree *bt, blink_node *left, const void *
 
   int level = blink_node_get_level(left);
   blink_node *new_root = new_blink_node(blink_node_get_type(left), level + 1);
+
   blink_node_insert_infinity_key(new_root);
 
   blink_node_set_first(new_root, left);
-  blink_node_insert(new_root, key, len, right);
+  assert(blink_node_insert(new_root, key, len, (const void *)right) == 1);
 
   int type = level ? Branch : Leaf;
   blink_node_set_type(left, type);
@@ -171,34 +182,43 @@ int blink_tree_write(blink_tree *bt, const void *key, uint32_t len, const void *
   char fkey[max_key_size];
   uint32_t flen;
   void *k = (void *)key;
+  uint32_t l = len;
   void *v = (void *)val;
 
   for (;;) {
-    switch (blink_node_insert(curr, k, len, v)) {
+    switch (blink_node_insert(curr, k, l, v)) {
     case 0: { // key already exists
       assert(blink_node_get_level(curr) == 0);
+      blink_node_unlock(curr);
       return 0;
     }
     case 1:
       // key insert succeed
+      blink_node_unlock(curr);
       return 1;
     case -1: { // node needs to split
       // a normal split
       blink_node *new = new_blink_node(blink_node_get_type(curr), blink_node_get_level(curr));
 
       blink_node_split(curr, new, fkey, &flen);
-      if (blink_node_is_before_key(curr, k, len))
-        assert(blink_node_insert(new, k, len, v) == 1);
-      else
-        assert(blink_node_insert(curr, k, len, v) == 1);
 
-      k = (void *)fkey; len = flen; v = (void *)new;
+      if (blink_node_is_before_key(curr, k, l))
+        assert(blink_node_insert(new, k, l, v) == 1);
+      else
+        assert(blink_node_insert(curr, k, l, v) == 1);
+
+      memcpy(k, fkey, flen); l = flen; v = (void *)new;
 
       // promote to parent
-      if (stack.depth)
-        curr = stack.path[--stack.depth];
-      else {
+      if (stack.depth) {
+        blink_node *parent = stack.path[--stack.depth];
+        // we can unlock `curr` first, but to be safe just lock `parent` first
+        blink_node_wlock(parent);
+        blink_node_unlock(curr);
+        curr = parent;
+      } else {
         blink_tree_root_split(bt, curr, k, len, new);
+        blink_node_unlock(curr);
         return 1;
       }
       break;
@@ -226,7 +246,7 @@ int blink_tree_read(blink_tree *bt, const void *key, uint32_t len, void **val)
   for (;;) {
     switch ((int64_t)(ret = blink_node_search(curr, key, len))) {
     case  0: { // key not exists
-      assert(0);
+      blink_node_unlock(curr);
       *val = 0;
       return 0;
     }
@@ -239,6 +259,7 @@ int blink_tree_read(blink_tree *bt, const void *key, uint32_t len, void **val)
       break;
     }
     default:
+      blink_node_unlock(curr);
       *val = ret;
       return 1;
     }

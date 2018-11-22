@@ -13,12 +13,11 @@
 typedef node palm_node;
 
 // blink node is basically a wrapper for palm node, but with a latch and a fence key
-struct blink_node {
+typedef struct blink_node {
   latch     lock[1];
+  char      padding[64 - (sizeof(latch) % 64)]; // only for padding
   palm_node pn[1];
-};
-
-typedef struct blink_node blink_node;
+}blink_node;
 
 #define blink_node_is_root(bn)   ((int)((bn)->pn->type | Root))
 #define blink_node_get_level(bn) ((int)((bn)->pn->level))
@@ -39,5 +38,11 @@ void blink_node_insert_infinity_key(blink_node *bn);
 void* blink_node_search(blink_node *bn, const void *key, uint32_t len);
 void blink_node_split(blink_node *old, blink_node *new, char *pkey, uint32_t *plen);
 int blink_node_is_before_key(blink_node *bn, const void *key, uint32_t len);
+
+#ifdef Test
+
+void blink_node_print(blink_node *bn, int detail);
+
+#endif /* Test */
 
 #endif /* _blink_node_h_ */

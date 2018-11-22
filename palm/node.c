@@ -14,9 +14,8 @@
 
 static uint32_t node_size  = node_min_size;
 static uint32_t batch_size = node_min_size;
+static uint32_t node_offset = 0;
 static uint32_t node_id = 0;
-
-#define node_size_mask ((uint64_t)~0xfff)
 
 void set_node_size(uint32_t size)
 {
@@ -40,13 +39,19 @@ uint32_t get_batch_size()
   return batch_size;
 }
 
+// for blink node, `node_size` is not really node size
+void set_node_offset(uint32_t offset)
+{
+  node_offset = offset;
+}
+
 // get the ptr to the key length byte
 #define get_ptr(n, off) ((char *)n->data + off)
 // get the length of the key
 #define get_len(n, off) ((uint32_t)(*(len_t *)get_ptr(n, off)))
 #define get_key(n, off) (get_ptr(n, off) + key_byte)
 #define get_val(n, off) ((void *)(*(val_t *)(get_key(n, off) + get_len(n, off))))
-#define node_index(n)   ((index_t *)((char *)n + (node_size - (n->keys * index_byte))))
+#define node_index(n)   ((index_t *)((char *)n + (node_size - node_offset - (n->keys * index_byte))))
 #define get_key_info(n, off, key, len) \
   const void *key = get_key(n, off);   \
   uint32_t len = get_len(n, off);
@@ -126,7 +131,7 @@ void free_btree_node(node *n)
 // this function is only called after `node_insert` is called
 int node_is_before_key(node *n, const void *key, uint32_t len)
 {
-  assert(n->level == 0);
+  assert(n->level == 0 || (n->type & Blink));
 
   if (n->pre) {
     assert(0);
@@ -153,7 +158,7 @@ int node_is_before_key(node *n, const void *key, uint32_t len)
     if (lptr[i] != rptr[i])
       return i + 1 + n->pre;
 
-  uint32_t r = i + 1 + n->pre;
+  uint32_t r = i + n->pre;
   assert(r <= len);
   return r;
 }
@@ -182,8 +187,8 @@ node* node_descend(node *n, const void *key, uint32_t len)
   return likely(first) ? (node *)get_val(n, index[first - 1]) : n->first;
 }
 
-// find the key in the leaf, return its pointer, if no such key, return null
-
+// find the key in the leaf, return its pointer, if no such key, return 0
+// if this is a blink node and we need to move right, return -1
 void* node_search(node *n, const void *key, uint32_t len)
 {
   assert(n->level == 0);
@@ -323,10 +328,10 @@ int node_insert(node *n, const void *key, uint32_t len, const void *val)
       high = mid - 1;
   }
 
-  if (unlikely(low == (int)n->keys) && low && (n->type & Blink))
-    return -2;
-
   // key does not exist, we can proceed
+
+  if (unlikely((low == (int)n->keys) && low && (n->type & Blink)))
+    return -2;
 
   --index;
 
@@ -433,13 +438,24 @@ void node_split(node *old, node *new, char *pkey, uint32_t *plen)
 }
 
 // for blink node, insert the first key of `new` as fence key for `old`
-void node_insert_fence(node *old, node *new, void *next)
+void node_insert_fence(node *old, node *new, void *next, char *pkey, uint32_t *plen)
 {
-  index_t *nidx = node_index(new);
-  assert(new->keys);
-  get_key_info(new, nidx[0], key, len);
+  // remove `blink` type to help insert fence key
+  old->type &= (~(uint8_t)Blink);
 
-  assert(node_insert(old, key, len, next) == 1);
+  if (likely(old->level == 0)) {
+    index_t *nidx = node_index(new);
+    assert(new->keys);
+    get_key_info(new, nidx[0], key, len);
+    memcpy(pkey, key, len);
+    *plen = len;
+    assert(node_insert(old, key, len, next) == 1);
+  } else {
+    assert(node_insert(old, pkey, *plen, next) == 1);
+  }
+
+  // restore `blink` type
+  old->type |= Blink;
 
   // overwrite the old node's `next` field
   old->next = (node *)next;
@@ -581,7 +597,7 @@ node* path_get_node_at_index(path *p, uint32_t idx)
 
 static char* format_kv(char *ptr, char *end, node* n, uint32_t off)
 {
-  // ptr += snprintf(ptr, end - ptr, "%4u  ", off);
+  ptr += snprintf(ptr, end - ptr, "%4u  ", off);
   uint32_t len = get_len(n, off);
   ptr += snprintf(ptr, end - ptr, "%u  ", len);
   snprintf(ptr, len + 1, "%s", get_key(n, off));
@@ -597,28 +613,32 @@ static char* format_child(char *ptr, char *end, node* n, uint32_t off)
   ptr += snprintf(ptr, end - ptr, "%u  ", len);
   snprintf(ptr, len + 1, "%s", get_key(n, off));
   ptr += len;
-  node *child = (node *)get_val(n, off);
-  ptr += snprintf(ptr, end - ptr, "  %u\n", child->id);
+  if (!(n->type & Blink)) {
+    node *child = (node *)get_val(n, off);
+    ptr += snprintf(ptr, end - ptr, "  %u\n", child->id);
+  } else {
+    ptr += snprintf(ptr, end - ptr, "\n");
+  }
   return ptr;
 }
 
 void node_print(node *n, int detail)
 {
   assert(n);
-  int size = (float)node_size * 1.5;
+  int size = node_size * 2;
   char buf[size], *ptr = buf, *end = buf + size;
   char* (*format)(char *, char *, node *, uint32_t) = n->level == 0 ? format_kv : format_child;
 
   ptr += snprintf(ptr, end - ptr, "id: %u  ", n->id);
   ptr += snprintf(ptr, end - ptr, "type: %s  ",
-    n->type == Root ? "root" : n->type == Branch ? "branch" : "leaf");
+    (n->type & Root) ? "root" : (n->type & Branch) ? "branch" : "leaf");
   ptr += snprintf(ptr, end - ptr, "level: %u  ", n->level);
   ptr += snprintf(ptr, end - ptr, "keys: %u  ", n->keys);
   snprintf(ptr, n->pre + 9, "prefix: %s", n->data);
   ptr += n->pre + 8;
   ptr += snprintf(ptr, end - ptr, "  offset: %u\n", n->off);
 
-  if (n->level)
+  if (n->level && (n->type & Blink) == 0)
     ptr += snprintf(ptr, end - ptr, "first: %u\n", n->first->id);
 
   index_t *index = node_index(n);
@@ -632,7 +652,7 @@ void node_print(node *n, int detail)
       ptr = (*format)(ptr, end, n, index[n->keys - 1]);
   }
 
-  if (n->next)
+  if (n->next && (n->type & Blink) == 0)
     ptr += snprintf(ptr, end - ptr, "next: %u\n", n->next->id);
 
   printf("%s\n", buf);

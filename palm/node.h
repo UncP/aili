@@ -64,6 +64,7 @@ typedef uint16_t index_t;
 #define node_max_size  (((uint32_t)1) << 16) // 64kb
                                              // if you set `index_t` to uint32_t,
                                              // the node_max_size can be up to 4gb
+#define node_size_mask ((uint64_t)~0xfff)
 
 typedef struct node
 {
@@ -95,8 +96,9 @@ void node_split(node *old, node *new, char *pkey, uint32_t *plen);
 int node_is_before_key(node *n, const void *key, uint32_t len);
 void node_prefetch(node *n);
 
+void set_node_offset(uint32_t offset);
 void node_init(node *n, uint8_t type, uint8_t level);
-void node_insert_fence(node *old, node *new, void *next);
+void node_insert_fence(node *old, node *new, void *next, char *pkey, uint32_t *plen);
 
 /**
  *   batch is a wrapper for node with some difference, key may be duplicated
