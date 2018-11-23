@@ -52,7 +52,7 @@ blink_tree* new_blink_tree(int thread_num)
 
   blink_node *root = new_blink_node(Root, 0);
 
-	uint32_t offset = (char *)(&(root->pn)) - (char *)(&(root->lock));
+  uint32_t offset = (char *)(&(root->pn)) - (char *)(&(root->lock));
   set_node_offset(offset);
 
   blink_node_insert_infinity_key(root);
@@ -102,6 +102,8 @@ void blink_tree_flush(blink_tree *bt)
 
 void blink_tree_schedule(blink_tree *bt, int is_write, const void *key, uint32_t len, const void *val)
 {
+  assert(bt->array);
+
   int idx;
   char *buf = (char *)mapping_array_get_free(bt->array, &idx);
 
@@ -137,6 +139,7 @@ static void blink_tree_root_split(blink_tree *bt, blink_node *left, const void *
   blink_node_set_type(left, type);
   blink_node_set_type(right, type);
 
+  // it's ok to use `relaxed` operation, but it doesn't matter
   __atomic_store(&bt->root, &new_root, __ATOMIC_RELEASE);
 }
 
@@ -147,9 +150,10 @@ blink_tree_descend_to_leaf(blink_tree *bt, const void *key, uint32_t len, struct
   stack->depth = 0;
 
   // acquire the latest root, it's ok to be stale if it changes right after
+  // actually it's also ok to use `relaxed` operation
   __atomic_load(&bt->root, &curr, __ATOMIC_ACQUIRE);
 
-  // no need to lock node since a node's level never changes
+  // we can read `level` without lock this node since a node's level never changes
   int level = blink_node_get_level(curr);
 
   while (level) {
