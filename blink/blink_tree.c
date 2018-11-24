@@ -10,10 +10,16 @@
 // TODO: remove this
 #include <stdio.h>
 
+#include "../palm/allocator.h"
 #include "blink_tree.h"
 
 static void* run(void *arg)
 {
+#ifdef Allocator
+  // initialize each worker's allocator
+  init_allocator();
+#endif
+
   blink_tree *bt = (blink_tree *)arg;
   mapping_array *q = bt->array;
 
@@ -48,6 +54,10 @@ static void* run(void *arg)
 
 blink_tree* new_blink_tree(int thread_num)
 {
+#ifdef Allocator
+  init_allocator();
+#endif
+
   blink_tree *bt = (blink_tree *)malloc(sizeof(blink_tree));
 
   blink_node *root = new_blink_node(Root, 0);

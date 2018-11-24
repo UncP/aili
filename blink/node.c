@@ -9,11 +9,16 @@
 #include <assert.h>
 #include <stdio.h>
 
+#include "../palm/allocator.h"
 #include "node.h"
 
 blink_node *new_blink_node(uint8_t type, uint8_t level)
 {
+#ifdef Allocator
+  blink_node *bn = (blink_node *)allocator_alloc(get_node_size());
+#else
   blink_node *bn = (blink_node *)malloc(get_node_size());
+#endif
 
   latch_init(bn->lock);
   node_init(bn->pn, type | Blink, level);
@@ -23,7 +28,11 @@ blink_node *new_blink_node(uint8_t type, uint8_t level)
 
 void free_blink_node(blink_node *bn)
 {
+#ifdef Allocator
+  allocator_free((void *)bn);
+#else
   free((void *)bn);
+#endif
 }
 
 void free_blink_tree_node(blink_node *bn)

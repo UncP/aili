@@ -10,6 +10,7 @@
 // TODO: remove this
 #include <stdio.h>
 
+#include "allocator.h"
 #include "node.h"
 
 static uint32_t node_size  = node_min_size;
@@ -77,7 +78,11 @@ int compare_key(const void *key1, uint32_t len1, const void *key2, uint32_t len2
 node* new_node(uint8_t type, uint8_t level)
 {
   uint32_t size = likely(type < Batch) ? node_size : batch_size;
+#ifdef Allocator
+  node *n = (node *)allocator_alloc(size);
+#else
   node *n = (node *)malloc(size);
+#endif
 
   node_init(n, type, level);
 
@@ -100,7 +105,11 @@ inline void node_init(node *n, uint8_t type, uint8_t level)
 
 void free_node(node *n)
 {
-  free((void *)n);
+  #ifdef Allocator
+    allocator_free((void *)n);
+  #else
+    free((void *)n);
+  #endif
 }
 
 void node_prefetch(node *n)
@@ -474,7 +483,7 @@ batch* new_batch()
 
 void free_batch(batch *b)
 {
-  free((void *)b);
+  free_node((node *)b);
 }
 
 void batch_clear(batch *b)

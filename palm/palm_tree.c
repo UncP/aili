@@ -13,6 +13,7 @@
 
 #include "palm_tree.h"
 #include "metric.h"
+#include "allocator.h"
 
 static const char *stage_descend  = "descend to leaf";
 static const char *stage_sync     = "worker sync";
@@ -47,6 +48,11 @@ static void free_thread_arg(thread_arg *j)
 
 static void* run(void *arg)
 {
+#ifdef Allocator
+  // initialize each worker's allocator
+  init_allocator();
+#endif
+
   thread_arg *j = (thread_arg *)arg;
   palm_tree *pt = j->pt;
   worker *w= j->wrk;
@@ -73,6 +79,10 @@ static void* run(void *arg)
 
 palm_tree* new_palm_tree(int worker_num, int queue_size)
 {
+  #ifdef Allocator
+    init_allocator();
+  #endif
+
   if (worker_num <= 0) worker_num = 1;
 
   init_metric(worker_num);
@@ -379,6 +389,6 @@ static void do_palm_tree_execute(palm_tree *pt, batch *b, worker *w)
     handle_root_split(pt, w); update_metric(w->id, stage_root, &c);
   }
 
-  // do a global synchronization
+  // do a global synchronization, not really needed, but just make things consistent
   worker_sync(w, level + 1, root_level); update_metric(w->id, stage_sync, &c);
 }

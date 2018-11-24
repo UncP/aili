@@ -3,22 +3,22 @@ CFLAGS=-std=c99 -Wall -Werror -Wextra -O3
 IFLAGS=-I./third_party
 LFLAGS=./third_party/c_hashmap/libhashmap.a -lpthread
 PFLAGS=-DLazy
-TFLAGS=
+DFLAGS=
 BFLAGS=
 MFLAGS=
 
-PALMFLAGS=$(CC) $(CFLAGS) $(PFLAGS) $(IFLAGS) $(TFLAGS)
-BLINKFLAGS=$(CC) $(CFLAGS) $(BFLAGS) $(TFLAGS)
-MASSFLAGS=$(CC) $(CFLAGS) $(MFLAGS) $(TFLAGS)
+PALMFLAGS=$(CC) $(CFLAGS) $(PFLAGS) $(IFLAGS) $(DFLAGS)
+BLINKFLAGS=$(CC) $(CFLAGS) $(BFLAGS) $(DFLAGS)
+MASSFLAGS=$(CC) $(CFLAGS) $(MFLAGS) $(DFLAGS)
 
-AILI_OBJ=palm/node.o palm/bounded_queue.o palm/worker.o palm/palm_tree.o palm/metric.o
-BLINK_OBJ=palm/node.o blink/node.o blink/blink_tree.o blink/mapping_array.o
+PALM_OBJ=palm/node.o palm/bounded_queue.o palm/worker.o palm/palm_tree.o palm/metric.o palm/allocator.o
+BLINK_OBJ=palm/node.o palm/allocator.o blink/node.o blink/blink_tree.o blink/mapping_array.o
 
 default: lib
 
-lib:$(AILI_OBJ) $(BLINK_OBJ)
+lib:$(PALM_OBJ) $(BLINK_OBJ)
 	make third_party
-	ar rcs libaili.a $(AILI_OBJ) $(BLINK_OBJ) third_party/c_hashmap/hashmap.o
+	ar rcs libaili.a $(PALM_OBJ) $(BLINK_OBJ) third_party/c_hashmap/hashmap.o
 
 test: node_test palm_batch_test palm_node_test palm_tree_test
 
@@ -32,7 +32,7 @@ palm_batch_test: test/palm_batch_test.c palm/node.o
 	$(PALMFLAGS) -o $@ $^
 
 palm_tree_test: test/palm_tree_test.c palm/node.o palm/worker.o palm/bounded_queue.o palm/palm_tree.o \
-	palm/metric.o
+	palm/metric.o palm/allocator.o
 	$(PALMFLAGS) -o $@ $^ $(LFLAGS)
 
 generate_data: ./generate_data.c
@@ -41,7 +41,8 @@ generate_data: ./generate_data.c
 blink/%.o: blink/%.c
 	$(BLINKFLAGS) -c $^ -o $@
 
-blink_tree_test: test/blink_tree_test.c blink/node.o blink/blink_tree.o blink/mapping_array.o palm/node.o
+blink_tree_test: test/blink_tree_test.c blink/node.o blink/blink_tree.o blink/mapping_array.o palm/node.o \
+	palm/allocator.o
 	$(BLINKFLAGS) -o $@ $^ -lpthread
 
 mass/%.o: mass/%.c
