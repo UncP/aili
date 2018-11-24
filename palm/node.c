@@ -123,6 +123,9 @@ void node_prefetch(node *n)
 // DFS free each node
 void free_btree_node(node *n)
 {
+#ifdef Allocator
+  (void)n;
+#else
   if (n == 0) return ;
 
   if (n->level) {
@@ -136,6 +139,7 @@ void free_btree_node(node *n)
   }
 
   free_node(n);
+#endif
 }
 
 // whether we should insert key into this node, if not, return (their common prefix length) + 1
