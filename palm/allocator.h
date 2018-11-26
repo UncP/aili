@@ -13,7 +13,7 @@
 // an allocator is obtained by one thread only so no thread synchronization is needed,
 // the memory allocated is always vaild until the allocator itself is destroyed
 
-#define block_size ((size_t)2 << 20) // 2mb
+#define block_size ((size_t)4 << 20) // 4mb
 
 typedef struct block
 {

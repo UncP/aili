@@ -120,6 +120,10 @@ palm_tree* new_palm_tree(int worker_num, int queue_size)
 
 void free_palm_tree(palm_tree *pt)
 {
+#ifdef Test
+  print_total_id();
+#endif
+
   bounded_queue_clear(pt->queue);
 
   // collect all the child threads

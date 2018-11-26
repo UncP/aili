@@ -149,12 +149,13 @@ int node_is_before_key(node *n, const void *key, uint32_t len)
   assert(n->level == 0 || (n->type & Blink));
 
   if (n->pre) {
-    assert(0);
+    assert(n->level == 0);
+    // TODO: remove this if we can handle key length <= prefix length
+    assert(len > n->pre);
     char *lptr = (char *)n->data, *rptr = (char *)key;
-    for (uint32_t i = 0; i < n->pre && i < len; ++i)
+    for (uint32_t i = 0; i < n->pre; ++i)
       if (lptr[i] != rptr[i])
         return i + 1;
-    if (len <= n->pre) return 0;
   }
 
   const void *key1 = (char *)key + n->pre;
@@ -180,7 +181,6 @@ int node_is_before_key(node *n, const void *key, uint32_t len)
 
 node* node_descend(node *n, const void *key, uint32_t len)
 {
-  // TODO: remove this
   assert(n->level && n->keys && !n->pre);
   index_t *index = node_index(n);
 
@@ -209,11 +209,9 @@ void* node_search(node *n, const void *key, uint32_t len)
   assert(n->level == 0);
 
   if (n->pre) {
-    assert(0);
-    // key length must be longer than prefix length
-    if (len <= n->pre)
-      return 0;
-    if (compare_key(key, n->pre, n->data, n->pre)) // compare with node prefix
+    // TODO: remove this if we can handle key length <= prefix length
+    assert(len > n->pre);
+    if (compare_key(n->data, n->pre, key, n->pre)) // compare with node prefix
       return 0;
   }
 
@@ -237,37 +235,35 @@ void* node_search(node *n, const void *key, uint32_t len)
     }
   }
 
-  if (unlikely(low == (int)n->keys) && (n->type & Blink))
+  if (unlikely(low == (int)n->keys) && low && (n->type & Blink))
     return (void *)-1;
 
   return (void *)0;
 }
 
-// try to do a prefix compression, if succeed, return 1; else return 0
+// if we can do a prefix compression and fit the new key in this node, return 1; else return 0
 // note: this is a little bit time consuming
-static int node_try_prefix_compression(node *n)
+static int node_try_prefix_compression(node *n, const void *key, uint32_t len)
 {
   return 0;
   // prefix compression is only supported in level 0
   if (n->level)
     return 0;
 
-  assert(n->keys > 1);
+  if (--len == 0) return 0;
+  char *lptr = (char *)key;
+  uint32_t prelen = len;
 
-  // try to get new sub prefix
+  // see if we can get new prefix for all the key
+  assert(n->keys);
   index_t *index = node_index(n);
-  get_key_info(n, index[0], lkey, llen);
-  assert(llen);
-  if (--llen == 0) return 0;
-  char *lptr = (char *)lkey;
-  uint32_t prelen = llen;
-  for (uint32_t i = 1; i < n->keys; ++i) {
+  for (uint32_t i = 0; i < n->keys; ++i) {
     get_key_info(n, index[i], rkey, rlen);
     assert(rlen);
     if (--rlen == 0) return 0;
     char *rptr = (char *)rkey;
     uint32_t curlen = 0;
-    for (uint32_t j = 0; j < llen && j < rlen; ++j) {
+    for (uint32_t j = 0; j < len && j < rlen; ++j) {
       if (lptr[j] != rptr[j])
         break;
       ++curlen;
@@ -278,14 +274,34 @@ static int node_try_prefix_compression(node *n)
 
   assert(prelen);
 
-  // get new prefix
-  char prefix[max_key_size + 1];
-  memcpy(prefix, n->data, n->pre);
-  memcpy(prefix + n->pre, lkey, prelen);
-  prelen += n->pre;
+  // now calculate whether we can fit the new key in this node after prefix compression
+  uint32_t new_off = n->off - prelen * n->keys + key_byte + len + 1 + value_bytes + index_byte;
+  if ((n->data + new_off) > (char *)index)
+    return 0;
 
-  // adjust node layout
+  // copy new node content to `buf`, adjust node index at the same time
+  char buf[node_size];
+  uint32_t off = 0;
+  memcpy(buf, n->data, n->pre);
+  off += n->pre;
+  memcpy(buf + off, key, prelen);
+  off += prelen;
+  for (uint32_t i = 0; i < n->keys; ++i) {
+    get_key_info(n, index[i], k, l);
+    index[i] = off;
+    uint32_t nl = l - prelen;
+    *((len_t *)(buf + off)) = (len_t)nl;
+    off += key_byte;
+    memcpy(buf + off, k + prelen, nl + value_bytes);
+    off += nl + value_bytes;
+  }
 
+  // copy new node content back
+  memcpy(n->data, buf, off);
+  // assign new offset
+  n->off = off;
+  // assign new prefix length
+  n->pre += prelen;
   return 1;
 }
 
@@ -305,7 +321,6 @@ static void node_insert_kv(node *n, const void *key, uint32_t len, const void *v
 }
 
 // insert a kv into node:
-//   if key is larger than the prefix, return -1
 //   if key already exists, return 0
 //   if there is prefix conflict, or not enough space, return -1
 //   if there is not enough space, return -1
@@ -314,12 +329,10 @@ static void node_insert_kv(node *n, const void *key, uint32_t len, const void *v
 int node_insert(node *n, const void *key, uint32_t len, const void *val)
 {
   if (n->pre) { // compare with node prefix
-    assert(0);
     assert(n->level == 0);
-    // this key can't fit in this node if its length is shorter than or equal with the prefix length
-    if (len <= n->pre) return -1;
-    // prefix conflict
-    if (compare_key(key, n->pre, n->data, n->pre))
+    // TODO: remove this if we can handle key length <= prefix length
+    assert(len > n->pre);
+    if (compare_key(n->data, n->pre, key, n->pre))
       return -1;
   }
 
@@ -348,24 +361,17 @@ int node_insert(node *n, const void *key, uint32_t len, const void *val)
   if (unlikely((low == (int)n->keys) && low && (n->type & Blink)))
     return -2;
 
-  --index;
-
   // check if there is enough space
-  if (unlikely(((char *)n->data + (n->off + key_byte + len1 + value_bytes)) > (char *)index)) {
-    // try to compress prefix
-    if (!node_try_prefix_compression(n)) return -1;
-    // need to check key length again after prefix compression
-    if (len <= n->pre) return -1;
-    // need to check prefix conflict again after prefix compression
-    if (compare_key(key, n->pre, n->data, n->pre)) return -1;
+  if (unlikely((n->data + (n->off + key_byte + len1 + value_bytes + index_byte)) > (char *)index)) {
+    if (!node_try_prefix_compression(n, key1, len1)) return -1;
     // need to update new key suffix
     key1 = (char *)key + n->pre;
     len1 = len - n->pre;
-    // still not enough space
-    if (((char *)n->data + (n->off + key_byte + len1 + value_bytes)) > (char *)index) return -1;
+    assert((n->data + (n->off + key_byte + len1 + value_bytes + index_byte)) <= (char *)index);
   }
 
   // update index
+  --index;
   if (likely(low)) memmove(&index[0], &index[1], low * index_byte);
   index[low] = n->off;
 
@@ -382,8 +388,7 @@ void node_split(node *old, node *new, char *pkey, uint32_t *plen)
   *plen = 0;
 
   if (old->pre) { // copy prefix
-    // TODO: remove this
-    assert(0);
+    assert(old->level == 0);
     memcpy(new->data, old->data, old->pre);
     new->pre = old->pre;
     new->off = new->pre;
@@ -741,7 +746,6 @@ void node_get_whole_key(node *n, uint32_t idx, char *key, uint32_t *len)
   index_t *index = node_index(n);
   get_key_info(n, index[idx], buf, buf_len);
   if (n->pre) {
-    assert(0);
     assert(n->level == 0);
     memcpy(key, n->data, n->pre);
   }
@@ -794,6 +798,16 @@ void btree_node_validate(node *n)
   } else {
     assert(n->first == 0);
   }
+}
+
+int node_try_compression(node *n, const void *key, uint32_t len)
+{
+  return node_try_prefix_compression(n, key, len);
+}
+
+void print_total_id()
+{
+  printf("%u\n", node_id);
 }
 
 #endif /* Test */

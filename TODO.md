@@ -2,21 +2,21 @@
 - [x] batch_size 与 node_size 不同
 - [x] 根据 batch_size 和 worker 数量来进行 worker 初始化
 - [ ] 前缀压缩
-- [x] 更细粒度的 metric
+- [x] palm tree 更细粒度的 metric
 - [x] simple prefix B+ Tree
-- [x] 更详细的 metric 信息输出
-- [x] 顺序插入优化
+- [x] palm tree 更详细的 metric 信息输出
+- [x] palm tree 顺序插入优化
 - [x] worker 同步时的 memory order 优化
 - [x] 减小同步粒度
 - [x] 移除 barrier
-- [x] 层级下降策略
+- [x] palm tree 层级下降策略
 - [x] level 0 顺序插入优化
-- [x] 懒惰下降策略
+- [x] palm tree 懒惰下降策略
 - [ ] Mass Tree
-- [x] 折线下降策略
+- [x] palm tree 折线下降策略
 - [ ] 双向 early termination
 - [ ] 重构 B+ 树节点
-- [ ] 手动管理 B+ 树节点内存
-- [ ] 重构工作队列（multi-way）
+- [x] 手动管理 B+ 树节点内存
+- [ ] 重构 palm tree 工作队列（multi-way）
 - [x] B<sup>link</sup> Tree
 - [x] 重构 bounded mapping queue -> mapping array

@@ -34,7 +34,7 @@
 #define Root   (1 << 0)
 #define Branch (1 << 1)
 #define Leaf   (1 << 2)
-#define Blink  (1 << 3)
+#define Blink  (1 << 3) // blink tree
 #define Batch  (1 << 4)
 
 // op type
@@ -147,11 +147,13 @@ typedef struct fence
 
 #ifdef Test
 
+void print_total_id();
 void node_print(node *n, int detail);
 void batch_print(batch *b, int detail);
 void node_validate(node *n);
 void batch_validate(batch *n);
 void btree_node_validate(node *n);
+int node_try_compression(node *n, const void *key, uint32_t len);
 
 #endif /* Test */
 

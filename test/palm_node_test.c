@@ -251,6 +251,31 @@ void test_print_node()
   free_node(n);
 }
 
+void test_node_compression()
+{
+  printf("test print node\n");
+
+  key_buf(key, 20);
+
+  node *n = new_node(Leaf, 0);
+
+  for (uint32_t i = 0; i < 10; ++i) {
+    key[len - i - 1] = '1';
+    assert(node_insert(n, key, len, (void *)(uint64_t)i) == 1);
+    key[len - i - 1] = '0';
+  }
+
+  node_print(n, 1);
+
+  assert(node_try_compression(n, key, len) == 1);
+
+  node_print(n, 1);
+
+  assert(node_try_compression(n, key, len) == 0);
+
+  free_node(n);
+}
+
 int main()
 {
   test_set_node_size();
@@ -262,6 +287,7 @@ int main()
   test_node_split_level_0();
   test_node_split_level_1();
   test_print_node();
+  test_node_compression();
 
   return 0;
 }

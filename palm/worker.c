@@ -421,21 +421,21 @@ void worker_execute_on_leaf_nodes(worker *w, batch *b)
           // this is especially useful for sequential insertion.
           // also we want to avoid certain situation where too many one-key nodes
           // are allocated, that's what `n->sopt` is used for
-          int move_right = 0;
+          int move = 0;
           uint32_t flen;
           if (curr->sopt == 0 && (flen = node_is_before_key(curr, key, len))) {
             curr->sopt = 1;
             memcpy(fnc.key, key, flen);
             fnc.len = flen;
-            move_right = 1;
+            move = 1;
           } else {
             curr->sopt = 0;
             node_split(curr, nn, fnc.key, &fnc.len);
-            move_right = compare_key(key, len, fnc.key, fnc.len) > 0; // equal is not possible
+            move = compare_key(key, len, fnc.key, fnc.len) > 0; // equal is not possible
           }
 
           uint32_t idx = worker_insert_fence(w, 0, &fnc);
-          if (move_right) {
+          if (move) {
             curr = nn;
             // we need to update fence because the next key may fall into the next split node
             worker_update_fence(w, 0, &fnc, idx);
