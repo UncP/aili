@@ -1,7 +1,7 @@
 # aili
 
 [![Author](https://img.shields.io/badge/Author-UncP-brightgreen.svg)](https://github.com/UncP)
-[![Version](https://img.shields.io/badge/Version-2.1.0-blue.svg)](https://github.com/UncP/aili)
+[![Version](https://img.shields.io/badge/Version-2.2.0-blue.svg)](https://github.com/UncP/aili)
 
 
 #### Algorithms
@@ -24,6 +24,7 @@
 | [1.3.2](https://github.com/UncP/aili/tree/1.3.2)  | adjust Palm Tree descending policy (zigzag descending policy) |
 | [2.0.0](https://github.com/UncP/aili/tree/2.0.0)  | B<sup>link</sup> Tree |
 | [2.1.0](https://github.com/UncP/aili/tree/2.1.0)  | node allocator |
+| [2.2.0](https://github.com/UncP/aili/tree/2.2.0)  | Palm Tree node prefix compression |
 
 
 #### Have a Try
