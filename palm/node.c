@@ -245,7 +245,7 @@ void* node_search(node *n, const void *key, uint32_t len)
 // note: this is a little bit time consuming
 static int node_try_prefix_compression(node *n, const void *key, uint32_t len)
 {
-  return 0;
+#ifdef Prefix
   // prefix compression is only supported in level 0
   if (n->level)
     return 0;
@@ -303,6 +303,12 @@ static int node_try_prefix_compression(node *n, const void *key, uint32_t len)
   // assign new prefix length
   n->pre += prelen;
   return 1;
+#else
+  (void)n;
+  (void)key;
+  (void)len;
+  return 0;
+#endif
 }
 
 static void node_insert_kv(node *n, const void *key, uint32_t len, const void *val)

@@ -8,8 +8,7 @@
 
 #include <stdlib.h>
 #include <assert.h>
-// TODO: remove this
-#include <stdio.h>
+#include <sys/mman.h>
 #include <pthread.h>
 
 #include "allocator.h"
@@ -19,25 +18,11 @@
 
 static pthread_key_t key;
 static int initialized = 0;
-
-static inline block* new_block()
-{
-  block *b = (block *)malloc(sizeof(block));
-  b->buffer = malloc(block_size);
-  b->now = 0;
-  b->next = 0;
-  return b;
-}
-
-static void free_block(block *b)
-{
-  free(b->buffer);
-  free((void *)b);
-}
+static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static inline void* block_alloc(block *b, size_t size, int *success)
 {
-  if (likely((b->now + size) <= block_size)) {
+  if (likely((b->now + size) <= b->tot)) {
     *success = 1;
     void *ptr = (char *)b->buffer + b->now;
     b->now += size;
@@ -48,14 +33,55 @@ static inline void* block_alloc(block *b, size_t size, int *success)
   }
 }
 
+static inline block* new_block(block *meta)
+{
+  size_t s = (sizeof(block) + 63) & (~((size_t)63));
+  int success;
+  block *b = block_alloc(meta, s, &success);
+  if (likely(success)) {
+    b->buffer = mmap(0, block_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+    assert(b->buffer != MAP_FAILED);
+    b->now = 0;
+    b->tot = block_size;
+    b->next = 0;
+    return b;
+  }
+  return 0;
+}
+
+static inline block* new_meta_block()
+{
+  char *buf = (char *)mmap(0, meta_block_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+  assert(buf != MAP_FAILED);
+  block *m = (block *)buf;
+  m->buffer = (void *)buf;
+  m->now = (sizeof(block) + 63) & (~((size_t)63));
+  m->tot = meta_block_size;
+  m->next = 0;
+  return m;
+}
+
+static void free_block(block *b)
+{
+  munmap(b->buffer, b->tot);
+}
+
 void destroy_allocator(void *arg)
 {
   allocator *a = (allocator *)arg;
 
-  while (a->head) {
-    block *head = a->head->next;
-    free_block(a->head);
-    a->head = head;
+  block *curr = a->curr;
+  while (curr) {
+    block *next = curr->next;
+    free_block(curr);
+    curr = next;
+  }
+
+  curr = a->meta_curr;
+  while (curr) {
+    block *next = curr->next;
+    free_block(curr);
+    curr = next;
   }
 
   free((void *)a);
@@ -63,25 +89,23 @@ void destroy_allocator(void *arg)
 
 void init_allocator()
 {
+  pthread_mutex_lock(&mutex);
   if (initialized == 0) {
     assert(pthread_key_create(&key, destroy_allocator) == 0);
     initialized = 1;
   }
+  pthread_mutex_unlock(&mutex);
 
-  allocator *a = (allocator *)malloc(sizeof(allocator));
-  block *head = new_block();
-  a->head = head;
-  a->curr = head;
+  allocator *a;
+  assert(posix_memalign((void **)&a, 64, sizeof(allocator)) == 0);
+  block *meta = new_meta_block();
+  a->meta_curr = meta;
+
+  block *curr = new_block(a->meta_curr);
+  assert(curr);
+  a->curr = curr;
 
   assert(pthread_setspecific(key, (void *)a) == 0);
-
-#ifdef __linux__
-  void *ptr;
-  pthread_getspecific(key, &ptr);
-  assert(ptr == (void *)a);
-#else
-  assert(pthread_getspecific(key) == (void *)a);
-#endif
 }
 
 void* allocator_alloc(size_t size)
@@ -98,10 +122,16 @@ void* allocator_alloc(size_t size)
   int success;
   void *ptr = block_alloc(a->curr, size, &success);
   if (unlikely(success == 0)) {
-    a->curr = new_block();
-    block *head = a->head;
-    a->head = a->curr;
-    a->head->next = head;
+    block *new = new_block(a->meta_curr);
+    if (new == 0) {
+      block *meta = new_meta_block();
+      meta->next = a->meta_curr;
+      a->meta_curr = meta;
+      new = new_block(a->meta_curr);
+      assert(new);
+    }
+    new->next = a->curr;
+    a->curr = new;
     ptr = block_alloc(a->curr, size, &success);
   }
   assert(success);
