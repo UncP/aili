@@ -181,7 +181,7 @@ int node_not_include_key(node *n, const void *key, uint32_t len)
 
 node* node_descend(node *n, const void *key, uint32_t len)
 {
-  assert(n->level && n->keys && !n->pre);
+  assert(n->level && n->keys && n->pre == 0);
   index_t *index = node_index(n);
 
   int first = 0, count = (int)n->keys;
@@ -386,17 +386,6 @@ int node_insert(node *n, const void *key, uint32_t len, const void *val)
   return 1;
 }
 
-// copy partial `rkey`
-static void copy_prefix_key(const char *lkey, uint32_t llen, const char *rkey, uint32_t rlen,
-  char *key, uint32_t *len)
-{
-  for (uint32_t i = 0; i < llen && i < rlen; ++i) {
-    key[(*len)++] = rkey[i];
-    if (lkey[i] != rkey[i])
-      break;
-  }
-}
-
 // split half of the node entries from `old` to `new`
 void node_split(node *old, node *new, char *pkey, uint32_t *plen)
 {
@@ -419,7 +408,12 @@ void node_split(node *old, node *new, char *pkey, uint32_t *plen)
     // Reference: Prefix B-Trees
     assert(left);
     get_key_info(old, l_idx[left - 1], lkey, llen);
-    copy_prefix_key((const char *)lkey, llen, (const char *)fkey, flen, pkey, plen);
+    char *lk = (char *)lkey, *rk = (char *)fkey;
+    for (uint32_t i = 0; i < llen && i < flen; ++i) {
+      pkey[(*plen)++] = rk[i];
+      if (lk[i] != rk[i])
+        break;
+    }
   } else {
     memcpy(pkey + *plen, fkey, flen);
     *plen += flen;
@@ -521,6 +515,27 @@ static void node_delete_range(node *n, uint32_t from, uint32_t to)
   }
 }
 
+// Reference: Prefix B-Trees
+// get prefix fence key in level 0
+static void node_get_prefix_key(node *left, node *right, char *key, uint32_t *len)
+{
+  assert(left->level == 0 && right->level == 0);
+  assert(left->keys && right->keys);
+  index_t *l_idx = node_index(left);
+  index_t *r_idx = node_index(right);
+  get_key_info(left, l_idx[left->keys - 1], lk, ll);
+  get_key_info(right, r_idx[0], rk, rl);
+
+  *len = 0;
+
+  char *lkey = (char *)lk, *rkey = (char *)rk;
+  for (uint32_t i = 0; i < ll && i < rl; ++i) {
+    key[(*len)++] = rkey[i];
+    if (lkey[i] != rkey[i])
+      break;
+  }
+}
+
 // try to move some key from `left` to `right`, keeping their balance at the same time,
 // if there is prefix conflict, return -1, else return how many keys we moved
 int node_adjust_few(node *left, node *right, char *key, uint32_t *len, char *okey, uint32_t *olen)
@@ -528,9 +543,10 @@ int node_adjust_few(node *left, node *right, char *key, uint32_t *len, char *oke
   // TODO: 1. get more info about nodes
   //       2. loosen the condition
   // first check the prefix, we don't move any key if the prefix is not the same
-  if (left->pre && (left->pre == right->pre))
-    if (compare_key(left->data, left->pre, right->data, right->pre))
-      return -1;
+  if (left->pre != right->pre)
+    return -1;
+  if (left->pre && compare_key(left->data, left->pre, right->data, right->pre))
+    return -1;
 
   index_t *r_idx = node_index(right);
   assert((char *)r_idx > (right->data + right->off));
@@ -552,17 +568,11 @@ int node_adjust_few(node *left, node *right, char *key, uint32_t *len, char *oke
   if (moved_key <  4) return 0;
   // we don't want to move too few keys, 20 is just an experienced value
   if (moved_key > 20) moved_key = 20;
+
   // now move it!
 
   // record old fence key
-  {
-    assert(left->keys && right->keys);
-    index_t *l_idx = node_index(left);
-    index_t *r_idx = node_index(right);
-    get_key_info(left, l_idx[left->keys - 1], lk, ll);
-    get_key_info(right, r_idx[0], rk, rl);
-    copy_prefix_key(lk, ll, rk, rl, okey, olen);
-  }
+  node_get_prefix_key(left, right, okey, olen);
 
   // step 1, move from left to right and
   uint32_t total = left->keys;
@@ -578,22 +588,16 @@ int node_adjust_few(node *left, node *right, char *key, uint32_t *len, char *oke
   node_delete_range(left, left->keys - moved_key, left->keys);
 
   // record new fence key
-  {
-    assert(left->keys && right->keys);
-    index_t *l_idx = node_index(left);
-    index_t *r_idx = node_index(right);
-    get_key_info(left, l_idx[left->keys - 1], lk, ll);
-    get_key_info(right, r_idx[0], rk, rl);
-    copy_prefix_key(lk, ll, rk, rl, key, len);
-  }
+  node_get_prefix_key(left, right, key, len);
 
   return moved_key;
 }
 
-// move 1/3 from `left` and 1/3 from `right` to `new`, keeping their balance at the same time
-// it is assured by `node_adjust_few` that `left` and `right` have the same prefix
-void node_adjust_many(node *new, node *left, node *right, char *key, uint32_t *len,
-  char *okey, uint32_t *olen)
+// move 1/3 from `left` and 1/3 from `right` to `new`, it is assured by `node_adjust_few`
+// that `left` and `right` have the same prefix, `okey` and `key` are old fence key and replace
+// fence key, `nkey` is new fence key
+void node_adjust_many(node *new, node *left, node *right, char *okey, uint32_t *olen,
+  char *key, uint32_t *len, char *nkey, uint32_t *nlen)
 {
   // int cpl = 0; // common prefix length
   // uint32_t l_p = left->pre, r_p = right->pre;
@@ -604,14 +608,7 @@ void node_adjust_many(node *new, node *left, node *right, char *key, uint32_t *l
   // }
 
   // record old fence key
-  {
-    assert(left->keys && right->keys);
-    index_t *l_idx = node_index(left);
-    index_t *r_idx = node_index(right);
-    get_key_info(left, l_idx[left->keys - 1], lk, ll);
-    get_key_info(right, r_idx[0], rk, rl);
-    copy_prefix_key(lk, ll, rk, rl, okey, olen);
-  }
+  node_get_prefix_key(left, right, okey, olen);
 
   // step 1, copy prefix
   new->pre = left->pre;
@@ -634,8 +631,11 @@ void node_adjust_many(node *new, node *left, node *right, char *key, uint32_t *l
     n_idx[new->keys] = new->off;
     node_insert_kv(new, k, l, v);
   }
-
+  // deal with the hole caused by this move
   node_delete_range(left, lk - lmk, lk);
+
+  // record new fence key
+  node_get_prefix_key(left, new, nkey, nlen);
 
   // step 3, move keys from `right` to `new`
   index_t *r_idx = node_index(right);
@@ -644,18 +644,11 @@ void node_adjust_many(node *new, node *left, node *right, char *key, uint32_t *l
     n_idx[new->keys] = new->off;
     node_insert_kv(new, k, l, v);
   }
-
+  // deal with the hole caused by this move
   node_delete_range(right, 0, rmk);
 
-  // record new fence key
-  {
-    assert(new->keys && right->keys);
-    index_t *l_idx = node_index(new);
-    index_t *r_idx = node_index(right);
-    get_key_info(new, l_idx[new->keys - 1], lk, ll);
-    get_key_info(right, r_idx[0], rk, rl);
-    copy_prefix_key(lk, ll, rk, rl, key, len);
-  }
+  // record replace fence key
+  node_get_prefix_key(new, right, key, len);
 }
 
 // replace old key with new key, if old key and new key have the same key length, this is just an in-place update,
@@ -663,7 +656,7 @@ void node_adjust_many(node *new, node *left, node *right, char *key, uint32_t *l
 int node_replace_key(node *n, const void *okey, uint32_t olen, const void *val,
   const void *key, uint32_t len)
 {
-  assert(n->level && n->pre == 0);
+  assert(n->level && n->keys && n->pre == 0);
 
   int low = 0, high = (int)n->keys - 1;
   index_t *index = node_index(n);

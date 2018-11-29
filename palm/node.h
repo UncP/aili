@@ -94,7 +94,8 @@ void* node_search(node *n, const void *key, uint32_t len);
 void node_split(node *old, node *new, char *pkey, uint32_t *plen);
 int node_not_include_key(node *n, const void *key, uint32_t len);
 int node_adjust_few(node *left, node *right, char *key, uint32_t *len, char *okey, uint32_t *olen);
-void node_adjust_many(node *new, node *left, node *right, char *key, uint32_t *len, char *okey, uint32_t *olen);
+void node_adjust_many(node *new, node *left, node *right, char *okey, uint32_t *olen, char *key, uint32_t *len,
+  char *nkey, uint32_t *nlen);
 int node_replace_key(node *n, const void *okey, uint32_t olen, const void *val, const void *key, uint32_t len);
 void node_prefetch(node *n);
 
@@ -136,7 +137,7 @@ uint32_t path_get_kv_id(path *p);
 void path_push_node(path *p, node *n);
 node* path_get_node_at_level(path *p, uint32_t level);
 node* path_get_node_at_index(path *p, uint32_t idx);
-uint32_t path_get_level();
+uint32_t path_get_level(path *p);
 
 #define fence_insert  0
 #define fence_replace 1
