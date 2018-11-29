@@ -65,7 +65,7 @@ typedef uint16_t index_t;
                                              // if you set `index_t` to uint32_t,
                                              // the node_max_size can be up to 4gb
 
-typedef struct node
+typedef struct __attribute__ ((packed))  node
 {
   uint32_t    type:8;   // Root or Branch or Leaf
   uint32_t   level:8;   // level this node in
@@ -92,7 +92,10 @@ node* node_descend(node *n, const void *key, uint32_t len);
 int node_insert(node *n, const void *key, uint32_t len, const void *val);
 void* node_search(node *n, const void *key, uint32_t len);
 void node_split(node *old, node *new, char *pkey, uint32_t *plen);
-int node_is_before_key(node *n, const void *key, uint32_t len);
+int node_not_include_key(node *n, const void *key, uint32_t len);
+int node_adjust_few(node *left, node *right, char *key, uint32_t *len, char *okey, uint32_t *olen);
+void node_adjust_many(node *new, node *left, node *right, char *key, uint32_t *len, char *okey, uint32_t *olen);
+int node_replace_key(node *n, const void *okey, uint32_t olen, const void *val, const void *key, uint32_t len);
 void node_prefetch(node *n);
 
 void set_node_offset(uint32_t offset);
@@ -133,13 +136,20 @@ uint32_t path_get_kv_id(path *p);
 void path_push_node(path *p, node *n);
 node* path_get_node_at_level(path *p, uint32_t level);
 node* path_get_node_at_index(path *p, uint32_t idx);
+uint32_t path_get_level();
+
+#define fence_insert  0
+#define fence_replace 1
 
 typedef struct fence
 {
   path     *pth;     // path that this fence belongs to
-  uint32_t  len;     // key length
-  char      key[12]; // key data, TODO: make it dynamic or change to `max_key_size`
   node     *ptr;     // new node pointer
+  uint32_t  type;    // fence type
+  uint32_t  len;     // key length
+  char      key[16]; // key data, TODO: make it dynamic or change to `max_key_size`
+  uint32_t  olen;    // old key length
+  char      okey[16];// old key data to replace, TODO: make it dynamic or change to `max_key_size`
 }fence;
 
 #define likely(x)   (__builtin_expect(!!(x), 1))

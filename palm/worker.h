@@ -75,31 +75,6 @@ void worker_sync(worker *w, uint32_t level, uint32_t root_level);
 void worker_execute_on_leaf_nodes(worker *w, batch *b);
 void worker_execute_on_branch_nodes(worker *w, uint32_t level);
 
-// used to iterate the paths processed by one worker, but path may be in several workers
-typedef struct path_iter
-{
-  uint32_t current; // number of path we have itered
-  uint32_t total;   // total fence we need to iter
-  uint32_t offset;  // current fence index
-  worker  *owner;   // current worker this iter uses
-}path_iter;
-
-void init_path_iter(path_iter *iter, worker *w);
-path* next_path(path_iter *iter);
-
-// used to iterate the fences processed by one worker, but fence may be in several workers
-typedef struct fence_iter
-{
-  uint32_t level;   // indicate which fences we are processing
-  uint32_t current; // number of fence we have itered
-  uint32_t total;   // total fence we need to iter
-  uint32_t offset;  // current fence index
-  worker  *owner;   // current worker this iter uses
-}fence_iter;
-
-void init_fence_iter(fence_iter *iter, worker *w, uint32_t level);
-fence* next_fence(fence_iter *iter);
-
 #ifdef Test
 
 void worker_print_path_info(worker *w);

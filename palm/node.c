@@ -144,7 +144,7 @@ void free_btree_node(node *n)
 
 // whether we should insert key into this node, if not, return (their common prefix length) + 1
 // this function is only called after `node_insert` is called
-int node_is_before_key(node *n, const void *key, uint32_t len)
+int node_not_include_key(node *n, const void *key, uint32_t len)
 {
   assert(n->level == 0 || (n->type & Blink));
 
@@ -328,9 +328,9 @@ static void node_insert_kv(node *n, const void *key, uint32_t len, const void *v
 
 // insert a kv into node:
 //   if key already exists, return 0
-//   if there is prefix conflict, or not enough space, return -1
+//   if there is prefix conflict, return -2
 //   if there is not enough space, return -1
-//   if this is a blink node and we need to move right, return -2
+//   if this is a blink node and we need to move right, return -3
 //   if succeed, return 1
 int node_insert(node *n, const void *key, uint32_t len, const void *val)
 {
@@ -339,7 +339,7 @@ int node_insert(node *n, const void *key, uint32_t len, const void *val)
     // TODO: remove this if we can handle key length <= prefix length
     assert(len > n->pre);
     if (compare_key(n->data, n->pre, key, n->pre))
-      return -1;
+      return -2;
   }
 
   void *key1 = (char *)key + n->pre;
@@ -365,7 +365,7 @@ int node_insert(node *n, const void *key, uint32_t len, const void *val)
   // key does not exist, we can proceed
 
   if (unlikely((low == (int)n->keys) && low && (n->type & Blink)))
-    return -2;
+    return -3;
 
   // check if there is enough space
   if (unlikely((n->data + (n->off + key_byte + len1 + value_bytes + index_byte)) > (char *)index)) {
@@ -384,6 +384,17 @@ int node_insert(node *n, const void *key, uint32_t len, const void *val)
   node_insert_kv(n, key1, len1, val);
 
   return 1;
+}
+
+// copy partial `rkey`
+static void copy_prefix_key(const char *lkey, uint32_t llen, const char *rkey, uint32_t rlen,
+  char *key, uint32_t *len)
+{
+  for (uint32_t i = 0; i < llen && i < rlen; ++i) {
+    key[(*len)++] = rkey[i];
+    if (lkey[i] != rkey[i])
+      break;
+  }
 }
 
 // split half of the node entries from `old` to `new`
@@ -408,12 +419,7 @@ void node_split(node *old, node *new, char *pkey, uint32_t *plen)
     // Reference: Prefix B-Trees
     assert(left);
     get_key_info(old, l_idx[left - 1], lkey, llen);
-    char *lptr = (char *)lkey, *rptr = (char *)fkey;
-    for (uint32_t i = 0; i < llen && i < flen; ++i) {
-      pkey[(*plen)++] = rptr[i];
-      if (lptr[i] != rptr[i])
-        break;
-    }
+    copy_prefix_key((const char *)lkey, llen, (const char *)fkey, flen, pkey, plen);
   } else {
     memcpy(pkey + *plen, fkey, flen);
     *plen += flen;
@@ -487,6 +493,206 @@ void node_insert_fence(node *old, node *new, void *next, char *pkey, uint32_t *p
   old->next = (node *)next;
 }
 
+// delete key in range [from, to), pain in the ass, it's really expensive
+static void node_delete_range(node *n, uint32_t from, uint32_t to)
+{
+  assert(from < to && to <= n->keys);
+  char buf[node_size - node_offset];
+  memcpy(buf, (const void *)n, node_size - node_offset);
+  node *o = (node *)buf;
+  index_t *o_idx = node_index(o);
+
+  n->keys -= to - from; // set `keys` field to get right index
+  index_t *idx = node_index(n);
+  n->off = n->pre;
+  n->keys = 0;
+
+  for (uint32_t i = 0; i < from; ++i) {
+    idx[n->keys] = n->off;
+    get_kv_ptr(o, o_idx[i], k, l, v);
+    node_insert_kv(n, k, l, v);
+  }
+
+  uint32_t end = o->keys;
+  for (uint32_t i = to; i < end; ++i) {
+    idx[n->keys] = n->off;
+    get_kv_ptr(o, o_idx[i], k, l, v);
+    node_insert_kv(n, k, l, v);
+  }
+}
+
+// try to move some key from `left` to `right`, keeping their balance at the same time,
+// if there is prefix conflict, return -1, else return how many keys we moved
+int node_adjust_few(node *left, node *right, char *key, uint32_t *len, char *okey, uint32_t *olen)
+{
+  // TODO: 1. get more info about nodes
+  //       2. loosen the condition
+  // first check the prefix, we don't move any key if the prefix is not the same
+  if (left->pre && (left->pre == right->pre))
+    if (compare_key(left->data, left->pre, right->data, right->pre))
+      return -1;
+
+  index_t *r_idx = node_index(right);
+  assert((char *)r_idx > (right->data + right->off));
+  // half of the available space in `right`
+  uint32_t max_bytes = ((char *)r_idx - (right->data + right->off)) / 2;
+
+  // next we calculate how many keys we can move, stop if we reach `max_bytes`
+  index_t *l_idx = node_index(left);
+  uint32_t cur_bytes = 0, moved_key = 0;
+  for (int i = left->keys - 1; i >= 0; --i) {
+     cur_bytes += get_len(left, l_idx[i]);
+     if (cur_bytes >= max_bytes)
+      break;
+    ++moved_key;
+  }
+
+  // TODO: maybe reconsider 4 and 20?
+  // we don't want to move too few keys, 4 is just an experienced value
+  if (moved_key <  4) return 0;
+  // we don't want to move too few keys, 20 is just an experienced value
+  if (moved_key > 20) moved_key = 20;
+  // now move it!
+
+  // record old fence key
+  {
+    assert(left->keys && right->keys);
+    index_t *l_idx = node_index(left);
+    index_t *r_idx = node_index(right);
+    get_key_info(left, l_idx[left->keys - 1], lk, ll);
+    get_key_info(right, r_idx[0], rk, rl);
+    copy_prefix_key(lk, ll, rk, rl, okey, olen);
+  }
+
+  // step 1, move from left to right and
+  uint32_t total = left->keys;
+  for (uint32_t i = moved_key; i > 0; --i) {
+    get_kv_ptr(left, l_idx[total - i], k, l, v);
+
+    --r_idx;
+    r_idx[0] = right->off;
+    node_insert_kv(right, k, l, v);
+  }
+
+  // step 2, deal with the hole caused by this move
+  node_delete_range(left, left->keys - moved_key, left->keys);
+
+  // record new fence key
+  {
+    assert(left->keys && right->keys);
+    index_t *l_idx = node_index(left);
+    index_t *r_idx = node_index(right);
+    get_key_info(left, l_idx[left->keys - 1], lk, ll);
+    get_key_info(right, r_idx[0], rk, rl);
+    copy_prefix_key(lk, ll, rk, rl, key, len);
+  }
+
+  return moved_key;
+}
+
+// move 1/3 from `left` and 1/3 from `right` to `new`, keeping their balance at the same time
+// it is assured by `node_adjust_few` that `left` and `right` have the same prefix
+void node_adjust_many(node *new, node *left, node *right, char *key, uint32_t *len,
+  char *okey, uint32_t *olen)
+{
+  // int cpl = 0; // common prefix length
+  // uint32_t l_p = left->pre, r_p = right->pre;
+  // for (uint32_t i = 0; i < l_p && i < r_p; ++i) {
+  //   if (left->data[i] != right->data[i])
+  //     break;
+  //   ++cpl;
+  // }
+
+  // record old fence key
+  {
+    assert(left->keys && right->keys);
+    index_t *l_idx = node_index(left);
+    index_t *r_idx = node_index(right);
+    get_key_info(left, l_idx[left->keys - 1], lk, ll);
+    get_key_info(right, r_idx[0], rk, rl);
+    copy_prefix_key(lk, ll, rk, rl, okey, olen);
+  }
+
+  // step 1, copy prefix
+  new->pre = left->pre;
+  memcpy(new->data, left->data, new->pre);
+  new->off = new->pre;
+
+  uint32_t lmk = left->keys / 3, rmk = right->keys / 3;
+  // get new node's index
+  new->keys = lmk + rmk;
+  index_t *n_idx = node_index(new);
+  new->keys = 0;
+
+  // WARN: we assume that `new` has enough space
+
+  // step 2, move keys from `left` to `new`
+  index_t *l_idx = node_index(left);
+  uint32_t lk = left->keys;
+  for (uint32_t i = lk - lmk; i < lk; ++i) {
+    get_kv_ptr(left, l_idx[i], k, l, v);
+    n_idx[new->keys] = new->off;
+    node_insert_kv(new, k, l, v);
+  }
+
+  node_delete_range(left, lk - lmk, lk);
+
+  // step 3, move keys from `right` to `new`
+  index_t *r_idx = node_index(right);
+  for (uint32_t i = 0; i < rmk; ++i) {
+    get_kv_ptr(right, r_idx[i], k, l, v);
+    n_idx[new->keys] = new->off;
+    node_insert_kv(new, k, l, v);
+  }
+
+  node_delete_range(right, 0, rmk);
+
+  // record new fence key
+  {
+    assert(new->keys && right->keys);
+    index_t *l_idx = node_index(new);
+    index_t *r_idx = node_index(right);
+    get_key_info(new, l_idx[new->keys - 1], lk, ll);
+    get_key_info(right, r_idx[0], rk, rl);
+    copy_prefix_key(lk, ll, rk, rl, key, len);
+  }
+}
+
+// replace old key with new key, if old key and new key have the same key length, this is just an in-place update,
+// but if they don't, pain in the ass
+int node_replace_key(node *n, const void *okey, uint32_t olen, const void *val,
+  const void *key, uint32_t len)
+{
+  assert(n->level && n->pre == 0);
+
+  int low = 0, high = (int)n->keys - 1;
+  index_t *index = node_index(n);
+  while (low <= high) {
+    int mid = (low + high) / 2;
+
+    get_kv_ptr(n, index[mid], key1, len1, val1);
+
+    int r = compare_key(key1, len1, okey, olen);
+    if (r == 0) {
+      assert(val1 == val);
+      if (olen == len) {
+        memcpy((void *)key1, key, len);
+        return 1;
+      } else {
+        node_delete_range(n, mid, mid + 1);
+        return node_insert(n, key, len, val);
+      }
+    } else if (r < 0) {
+      low  = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  assert(0);
+  return 0;
+}
+
 /****** BATCH operation ******/
 
 #define get_op(n, off) ((uint32_t)(*(uint8_t *)(get_ptr(n, off) - sizeof(uint8_t))))
@@ -501,7 +707,7 @@ void free_batch(batch *b)
   free_node((node *)b);
 }
 
-void batch_clear(batch *b)
+inline void batch_clear(batch *b)
 {
   b->keys = 0;
   b->off  = 0;
@@ -556,7 +762,7 @@ int batch_add_read(batch *b, const void *key, uint32_t len)
 }
 
 // read a kv at index
-void batch_read_at(batch *b, uint32_t idx, uint32_t *op, void **key, uint32_t *len, void **val)
+inline void batch_read_at(batch *b, uint32_t idx, uint32_t *op, void **key, uint32_t *len, void **val)
 {
   // TODO: remove this
   assert(idx < b->keys);
@@ -568,46 +774,51 @@ void batch_read_at(batch *b, uint32_t idx, uint32_t *op, void **key, uint32_t *l
   *val = (void *)v;
 }
 
-void* batch_get_value_at(batch *b, uint32_t idx)
+inline void* batch_get_value_at(batch *b, uint32_t idx)
 {
   if (idx >= b->keys || b->keys == 0) return 0;
   index_t *index = node_index(b);
   return get_val(b, index[idx]);
 }
 
-void path_clear(path *p)
+inline void path_clear(path *p)
 {
   p->depth = 0;
 }
 
-void path_copy(const path *src, path *dst)
+inline void path_copy(const path *src, path *dst)
 {
   dst->depth = src->depth;
   memcpy(dst->nodes, src->nodes, src->depth * sizeof(node *));
 }
 
-void path_set_kv_id(path *p, uint32_t id)
+inline void path_set_kv_id(path *p, uint32_t id)
 {
   p->id = id;
 }
 
-uint32_t path_get_kv_id(path *p)
+inline uint32_t path_get_kv_id(path *p)
 {
   return p->id;
 }
 
-void path_push_node(path *p, node *n)
+inline void path_push_node(path *p, node *n)
 {
   // TODO: remove this
   assert(p->depth < max_descend_depth);
   p->nodes[p->depth++] = n;
 }
 
-node* path_get_node_at_level(path *p, uint32_t level)
+inline node* path_get_node_at_level(path *p, uint32_t level)
 {
   // TODO: remove this
   assert(p->depth > level);
   return p->nodes[p->depth - level - 1];
+}
+
+inline uint32_t path_get_level(path *p)
+{
+  return p->depth;
 }
 
 node* path_get_node_at_index(path *p, uint32_t idx)

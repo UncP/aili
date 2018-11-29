@@ -237,7 +237,7 @@ int blink_tree_write(blink_tree *bt, const void *key, uint32_t len, const void *
       }
       break;
     }
-    case -2: {
+    case -3: {
       // need to move to right
       blink_node *next = blink_node_get_next(curr);
       blink_node_wlock(next);

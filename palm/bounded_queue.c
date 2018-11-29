@@ -5,6 +5,7 @@
 **/
 
 #include <stdlib.h>
+#include <string.h>
 #include <assert.h>
 
 #include "bounded_queue.h"
@@ -15,7 +16,9 @@ bounded_queue* new_bounded_queue(int total)
   // we don't use a big queue to avoid too much batch memory
   if (total >= 8) total = 8;
 
-  bounded_queue *q = (bounded_queue *)malloc(sizeof(bounded_queue));
+  void *q_buf;
+  assert(posix_memalign(&q_buf, 64, sizeof(bounded_queue)) == 0);
+  bounded_queue *q = (bounded_queue *)q_buf;
 
   q->total = total;
   q->head  = 0;
@@ -23,7 +26,10 @@ bounded_queue* new_bounded_queue(int total)
   q->size  = 0;
   q->clear = 0;
 
-  q->array = (void **)calloc(q->total, sizeof(void *));
+  void *array;
+  assert(posix_memalign(&array, 64, sizeof(void *) * q->total) == 0);
+  memset(array, 0, sizeof(void *) * q->total);
+  q->array = (void **)array;
 
   assert(pthread_mutex_init(&q->mutex, 0) == 0);
   assert(pthread_cond_init(&q->cond, 0) == 0);
