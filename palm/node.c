@@ -503,15 +503,15 @@ static void node_delete_range(node *n, uint32_t from, uint32_t to)
 
   for (uint32_t i = 0; i < from; ++i) {
     idx[n->keys] = n->off;
-    get_kv_ptr(o, o_idx[i], k, l, v);
-    node_insert_kv(n, k, l, v);
+    get_kv_info(o, o_idx[i], k, l, v);
+    node_insert_kv(n, k, l, (const void *)v);
   }
 
   uint32_t end = o->keys;
   for (uint32_t i = to; i < end; ++i) {
     idx[n->keys] = n->off;
-    get_kv_ptr(o, o_idx[i], k, l, v);
-    node_insert_kv(n, k, l, v);
+    get_kv_info(o, o_idx[i], k, l, v);
+    node_insert_kv(n, k, l, (const void *)v);
   }
 }
 
@@ -538,7 +538,7 @@ static void node_get_prefix_key(node *left, node *right, char *key, uint32_t *le
 
 // try to move some key from `left` to `right`, keeping their balance at the same time,
 // if there is prefix conflict, return -1, else return how many keys we moved
-int node_adjust_few(node *left, node *right, char *key, uint32_t *len, char *okey, uint32_t *olen)
+int node_adjust_few(node *left, node *right, char *okey, uint32_t *olen, char *key, uint32_t *len)
 {
   // TODO: 1. get more info about nodes
   //       2. loosen the condition
@@ -577,11 +577,11 @@ int node_adjust_few(node *left, node *right, char *key, uint32_t *len, char *oke
   // step 1, move from left to right and
   uint32_t total = left->keys;
   for (uint32_t i = moved_key; i > 0; --i) {
-    get_kv_ptr(left, l_idx[total - i], k, l, v);
+    get_kv_info(left, l_idx[total - i], k, l, v);
 
     --r_idx;
     r_idx[0] = right->off;
-    node_insert_kv(right, k, l, v);
+    node_insert_kv(right, k, l, (const void *)v);
   }
 
   // step 2, deal with the hole caused by this move
@@ -627,9 +627,9 @@ void node_adjust_many(node *new, node *left, node *right, char *okey, uint32_t *
   index_t *l_idx = node_index(left);
   uint32_t lk = left->keys;
   for (uint32_t i = lk - lmk; i < lk; ++i) {
-    get_kv_ptr(left, l_idx[i], k, l, v);
+    get_kv_info(left, l_idx[i], k, l, v);
     n_idx[new->keys] = new->off;
-    node_insert_kv(new, k, l, v);
+    node_insert_kv(new, k, l, (const void *)v);
   }
   // deal with the hole caused by this move
   node_delete_range(left, lk - lmk, lk);
@@ -640,9 +640,9 @@ void node_adjust_many(node *new, node *left, node *right, char *okey, uint32_t *
   // step 3, move keys from `right` to `new`
   index_t *r_idx = node_index(right);
   for (uint32_t i = 0; i < rmk; ++i) {
-    get_kv_ptr(right, r_idx[i], k, l, v);
+    get_kv_info(right, r_idx[i], k, l, v);
     n_idx[new->keys] = new->off;
-    node_insert_kv(new, k, l, v);
+    node_insert_kv(new, k, l, (const void *)v);
   }
   // deal with the hole caused by this move
   node_delete_range(right, 0, rmk);
@@ -656,14 +656,14 @@ void node_adjust_many(node *new, node *left, node *right, char *okey, uint32_t *
 int node_replace_key(node *n, const void *okey, uint32_t olen, const void *val,
   const void *key, uint32_t len)
 {
-  assert(n->level && n->keys && n->pre == 0);
+  assert(n->level == 0 && n->keys && n->pre == 0);
 
   int low = 0, high = (int)n->keys - 1;
   index_t *index = node_index(n);
   while (low <= high) {
     int mid = (low + high) / 2;
 
-    get_kv_ptr(n, index[mid], key1, len1, val1);
+    get_kv_info(n, index[mid], key1, len1, val1);
 
     int r = compare_key(key1, len1, okey, olen);
     if (r == 0) {

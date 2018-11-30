@@ -466,7 +466,7 @@ void worker_execute_on_leaf_nodes(worker *w, batch *b)
           node *parent_next = parent->next;
           if (likely(parent_next == 0 || parent_next->first != next)) {
             // `curr` and `next` belong to the same parent
-            int r = node_adjust_few(curr, next, fnc.key, &fnc.len, fnc.okey, &fnc.olen);
+            int r = node_adjust_few(curr, next, fnc.okey, &fnc.olen, fnc.key, &fnc.len);
             if (likely(r == -1)) {
               // key prefix conflict, intentionally fall through
             } else {

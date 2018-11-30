@@ -8,6 +8,7 @@
 #include <assert.h>
 #include <time.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "../palm/node.h"
 
@@ -253,7 +254,7 @@ void test_print_node()
 
 void test_node_compression()
 {
-  printf("test print node\n");
+  printf("test node compression\n");
 
   key_buf(key, 20);
 
@@ -276,6 +277,125 @@ void test_node_compression()
   free_node(n);
 }
 
+void test_node_adjust_few()
+{
+  printf("test node adjust few\n");
+
+  key_buf(key, 50);
+
+  node *left = new_node(Leaf, 0);
+
+  srand(time(NULL));
+  for (uint32_t i = 0; i < 30; ++i) {
+    key[len - (rand() % 30) - 1] = 'a' + (rand() % 26);
+    node_insert(left, key, len, (void *)(uint64_t)i);
+  }
+
+  node *right = new_node(Leaf, 0);
+
+  key[0] = '1';
+  for (uint32_t i = 0; i < 30; ++i) {
+    key[len - (rand() % 30) - 1] = 'a' + (rand() % 26);
+    node_insert(right, key, len, (void *)(uint64_t)i);
+  }
+
+  node_print(left, 1);
+  node_print(right, 1);
+
+  char okey[max_key_size], nkey[max_key_size];
+  uint32_t olen, nlen;
+  assert(node_adjust_few(left, right, okey, &olen, nkey, &nlen));
+
+  okey[olen] = 0;
+  nkey[nlen] = 0;
+
+  node_print(left, 1);
+  node_print(right, 1);
+
+  printf("%s\n%s\n", okey, nkey);
+
+  free_node(left);
+  free_node(right);
+}
+
+void test_node_adjust_many()
+{
+  printf("test node adjust many\n");
+
+  key_buf(key, 50);
+
+  node *left = new_node(Leaf, 0);
+
+  srand(time(NULL));
+  for (uint32_t i = 0; i < 30; ++i) {
+    key[len - (rand() % 30) - 1] = 'a' + (rand() % 26);
+    node_insert(left, key, len, (void *)(uint64_t)i);
+  }
+
+  node *right = new_node(Leaf, 0);
+
+  key[0] = '1';
+  for (uint32_t i = 0; i < 30; ++i) {
+    key[len - (rand() % 30) - 1] = 'a' + (rand() % 26);
+    node_insert(right, key, len, (void *)(uint64_t)i);
+  }
+
+  node_print(left, 1);
+  node_print(right, 1);
+
+  node *new = new_node(Leaf, 0);
+
+  char okey[max_key_size], nkey[max_key_size], fkey[max_key_size];
+  uint32_t olen, nlen, flen;
+  node_adjust_many(new, left, right, okey, &olen, nkey, &nlen, fkey, &flen);
+
+  okey[olen] = 0;
+  nkey[nlen] = 0;
+  fkey[flen] = 0;
+
+  node_print(left, 1);
+  node_print(new, 1);
+  node_print(right, 1);
+
+  printf("%s\n%s\n%s\n", okey, nkey, fkey);
+
+  free_node(left);
+  free_node(new);
+  free_node(right);
+}
+
+void test_node_replace_key()
+{
+  printf("test node replace key\n");
+
+  key_buf(key, 20);
+
+  node *n = new_node(Leaf, 0);
+
+  srand(time(NULL));
+  for (uint32_t i = 0; i < 20; ++i) {
+    key[i] = '1';
+    node_insert(n, key, len, (void *)(uint64_t)i);
+    key[i] = '0';
+  }
+  node_print(n, 1);
+
+  key[10] = '1';
+  char nkey[max_key_size];
+  memcpy(nkey, key, len);
+  nkey[12] = '1';
+  node_replace_key(n, key, len, (void *)(uint64_t)10, nkey, len);
+  node_print(n, 1);
+
+  key[12] = '1';
+
+  nkey[len] = '1';
+  node_replace_key(n, key, len, (void *)(uint64_t)10, nkey, len+1);
+  node_print(n, 1);
+
+  free_node(n);
+}
+
 int main()
 {
   test_set_node_size();
@@ -288,6 +408,9 @@ int main()
   test_node_split_level_1();
   test_print_node();
   test_node_compression();
+  test_node_adjust_few();
+  test_node_adjust_many();
+  test_node_replace_key();
 
   return 0;
 }
