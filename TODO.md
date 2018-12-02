@@ -18,7 +18,8 @@
 - [ ] 重构 B+ 树节点
 - [x] 手动管理 B+ 树节点内存
 - [ ] 重构 palm tree 工作队列（multi-way）
-- [x] B<sup>link</sup> Tree
+- [x] b<sup>link</sup> Tree
 - [x] 重构 bounded mapping queue -> mapping array
-- [ ] B<sup>*</sup> node
+- [x] b<sup>*</sup> node
 - [ ] MRBTree
+- [ ] palm tree 信息统计

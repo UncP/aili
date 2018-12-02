@@ -370,7 +370,7 @@ void test_node_replace_key()
 
   key_buf(key, 20);
 
-  node *n = new_node(Leaf, 0);
+  node *n = new_node(Branch, 1);
 
   srand(time(NULL));
   for (uint32_t i = 0; i < 20; ++i) {
@@ -378,20 +378,20 @@ void test_node_replace_key()
     node_insert(n, key, len, (void *)(uint64_t)i);
     key[i] = '0';
   }
-  node_print(n, 1);
+  node_validate(n);
 
   key[10] = '1';
   char nkey[max_key_size];
   memcpy(nkey, key, len);
   nkey[12] = '1';
   node_replace_key(n, key, len, (void *)(uint64_t)10, nkey, len);
-  node_print(n, 1);
+  node_validate(n);
 
   key[12] = '1';
 
   nkey[len] = '1';
   node_replace_key(n, key, len, (void *)(uint64_t)10, nkey, len+1);
-  node_print(n, 1);
+  node_validate(n);
 
   free_node(n);
 }
