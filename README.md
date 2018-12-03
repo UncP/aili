@@ -1,7 +1,7 @@
 # aili
 
 [![Author](https://img.shields.io/badge/Author-UncP-brightgreen.svg)](https://github.com/UncP)
-[![Version](https://img.shields.io/badge/Version-2.2.0-blue.svg)](https://github.com/UncP/aili)
+[![Version](https://img.shields.io/badge/Version-2.3.0-blue.svg)](https://github.com/UncP/aili)
 
 
 #### Algorithms
@@ -25,6 +25,7 @@
 | [2.0.0](https://github.com/UncP/aili/tree/2.0.0)  | B<sup>link</sup> Tree |
 | [2.1.0](https://github.com/UncP/aili/tree/2.1.0)  | node allocator |
 | [2.2.0](https://github.com/UncP/aili/tree/2.2.0)  | Palm Tree node prefix compression |
+| [2.3.0](https://github.com/UncP/aili/tree/2.3.0)  | B<sup>*</sup> node |
 
 
 #### Have a Try
@@ -34,9 +35,9 @@
                                        #  key_num   key_len
 2. make generate_data && ./generate_data  10000000    10    # test data will be in ./data
                                                         # f_name  n_size  b_size  t_num  q_num  k_num
-3.1 make "TFLAGS=-DTest" palm_tree_test && ./palm_tree_test  1      4096   4096     2      8    1000000
+3.1 make "DFLAGS=-DTest" palm_tree_test && ./palm_tree_test  1      4096   4096     2      8    1000000
                                                             # f_name  n_size  t_num  k_num
-3.2 make "TFLAGS=-DTest" blink_tree_test && ./blink_tree_test  1       4096    3     1000000
+3.2 make "DFLAGS=-DTest" blink_tree_test && ./blink_tree_test  1       4096    3     1000000
 
 # f_name can be 0 (sequential data) or 1 (random data);
 # if your machine supports N threads, t_num can be 1, 2, ..., (N-1), not N;

@@ -439,34 +439,16 @@ void worker_execute_on_leaf_nodes(worker *w, batch *b)
     void    *val;
     batch_read_at(b, path_get_kv_id(cp), &op, &key, &len, &val);
 
-    int step = 5;
     // get the actual leaf node to insert
   #ifdef BStar // B* node
     if (cn != pn) {
       if (pn && node_is_after_key(cn, key, len)) {
-      // {
-      //   char k[11];
-      //   memcpy(k, key, len);
-      //   k[len] = 0;
-      //   printf("%s\n", k);
-      //   node_print(cn, 1);
-      // }
         curr = worker_get_last_insert_fence(w)->ptr;
         move_left = 1;
-        step = 1;
       } else {
         curr = cn;
         move_left = 0;
         fnc.ptr = 0;
-        step = 2;
-        // {
-        //   char k[11];
-        //   memcpy(k, key, len);
-        //   k[len] = 0;
-        //   printf("%s\n", k);
-        //   node_print(cn, 1);
-        //   getchar();
-        // }
       }
     } else {
       if (move_left) {
@@ -474,18 +456,15 @@ void worker_execute_on_leaf_nodes(worker *w, batch *b)
           curr = cn;
           move_left = 0;
           fnc.ptr = 0;
-          step = 3;
         }
       } else {
         if (fnc.ptr && compare_key(key, len, fnc.key, fnc.len) >= 0) {
           curr = fnc.ptr;
           fnc.ptr = 0;
-          step = 4;
         }
       }
     }
   #else
-    (void)step;
     (void)move_left;
     if (cn != pn) {
       curr = cn;
@@ -497,12 +476,6 @@ void worker_execute_on_leaf_nodes(worker *w, batch *b)
   #endif // B* node
 
     if (op == Write) {
-      // {
-      //   char k[11];
-      //   memcpy(k, key, len);
-      //   k[len] = 0;
-      //   printf("%s %u %u %d\n", k, cn->id, curr->id, step);
-      // }
       switch (node_insert(curr, key, len, (const void *)*(val_t *)val)) {
       case 1:  // key insert succeed, we set value to 1
         set_val(val, 1);
@@ -616,8 +589,6 @@ void worker_execute_on_leaf_nodes(worker *w, batch *b)
           node_split(curr, nn, fnc.key, &fnc.len);
           move_next = compare_key(key, len, fnc.key, fnc.len) > 0; // equal is not possible
         }
-        // fnc.key[fnc.len] = 0;
-        // printf("%s\n", fnc.key);
 
         uint32_t idx = worker_insert_fence(w, 0, &fnc);
         if (move_next) {
@@ -669,16 +640,6 @@ void worker_execute_on_branch_nodes(worker *w, uint32_t level)
       curr = fnc.ptr;
       fnc.ptr = 0;
     }
-
-    // {
-    //   char *k = (char *)key;
-    //   k[len] = 0;
-    //   if (compare_key("edptggnzes", 10, k, len) == 0) {
-    //     fnc.key[fnc.len] = 0;
-    //     printf("%s\n", fnc.key);
-    //     worker_print_fence_info(w, level);
-    //   }
-    // }
 
     if (cf->type == fence_replace) {
       int r = node_replace_key(curr, cf->okey, cf->olen, val, key, len);
