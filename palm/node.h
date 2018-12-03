@@ -159,13 +159,14 @@ typedef struct fence
 
 #ifdef Test
 
-void print_total_id();
+uint32_t node_get_total_id();
 void node_print(node *n, int detail);
 void batch_print(batch *b, int detail);
 void node_validate(node *n);
 void batch_validate(batch *n);
 void btree_node_validate(node *n);
 int node_try_compression(node *n, const void *key, uint32_t len);
+float node_get_coverage(node *n);
 
 #endif /* Test */
 

@@ -120,10 +120,6 @@ palm_tree* new_palm_tree(int worker_num, int queue_size)
 
 void free_palm_tree(palm_tree *pt)
 {
-#ifdef Test
-  print_total_id();
-#endif
-
   bounded_queue_clear(pt->queue);
 
   // collect all the child threads
@@ -163,15 +159,34 @@ void palm_tree_execute(palm_tree *pt, batch *b)
 void palm_tree_validate(palm_tree *pt)
 {
   node *ptr = pt->root;
+  uint32_t total_count = 0;
+  float total_coverage = 0;
   while (ptr) {
     node *next = ptr->first;
     node *cur = ptr;
+    uint32_t count = 0;
+    float coverage = 0;
+    uint32_t less50 = 0;
+    uint32_t less60 = 0;
+    uint32_t less70 = 0;
     while (cur) {
       btree_node_validate(cur);
+      float c = node_get_coverage(cur);
+      if (c < 0.5) ++less50;
+      if (c < 0.6) ++less60;
+      if (c < 0.7) ++less70;
+      coverage += c;
+      ++count;
       cur = cur->next;
     }
+    printf("level %u:  count: %-4u  coverage: %.2f%%  <50%%: %-4u  <60%%: %-4u  <70%%: %-4u\n",
+      ptr->level, count, (coverage * 100 / count), less50, less60, less70);
+    total_count += count;
+    total_coverage += coverage;
     ptr = next;
   }
+  printf("total node count: %u\naverage coverage: %.2f%%\n",
+    total_count, total_coverage * 100 / total_count);
 }
 
 #endif /* Test */

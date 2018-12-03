@@ -96,7 +96,10 @@ inline void node_init(node *n, uint8_t type, uint8_t level)
   n->pre   = 0;
   n->sopt  = 0;
   // multiple threads can be creating new node at the same time, increase node-id atomically
-  n->id    = __atomic_fetch_add(&node_id, 1, __ATOMIC_RELAXED);
+  if (likely((type & Batch) == 0))
+    n->id = __atomic_fetch_add(&node_id, 1, __ATOMIC_RELAXED);
+  else
+    n->id = 0;
   n->keys  = 0;
   n->off   = 0;
   n->next  = 0;
@@ -1014,9 +1017,14 @@ int node_try_compression(node *n, const void *key, uint32_t len)
   return node_try_prefix_compression(n, key, len);
 }
 
-void print_total_id()
+float node_get_coverage(node *n)
 {
-  printf("%u\n", node_id);
+  return ((float)((n->data + (n->off + n->keys * index_byte)) - (char *)n)) / (node_size - node_offset);
+}
+
+uint32_t node_get_total_id()
+{
+  return node_id;
 }
 
 #endif /* Test */
