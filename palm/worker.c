@@ -416,6 +416,120 @@ void worker_redistribute_work(worker *w, uint32_t level)
   }
 }
 
+// try to move some key to next node if all of below situations are satisfied
+//   1. next node does not belong to next worker
+//   2. next node share the same parent with this node
+//   3. next node has enough room
+// and then insert k-v pair
+// for now we pessimisticly assume that `w->last`'s next node belongs to next worker,
+// because it's a little bit hard to determine whether next node belongs to next worker,
+// so use `curr != w->my_last` instead
+// TODO: get the real next worker's first node
+static int worker_handle_full_leaf_node(worker *w, node **curr, path *cp, fence *fnc,
+  const void *key, uint32_t len, void *val)
+{
+  node *next = (*curr)->next;
+  if (unlikely(*curr == w->my_last || next == 0 || path_get_level(cp) == 1))
+    return 0;
+
+  node *parent = path_get_node_at_level(cp, 1);
+  node *parent_next = parent->next;
+  if (unlikely(parent_next && parent_next->first == next))
+    return 0;
+  // `curr` and `next` belong to the same parent
+  int r = node_adjust_few(*curr, next, fnc->okey, &fnc->olen, fnc->key, &fnc->len);
+  if (r == -1) // key prefix conflict
+    return 0;
+  uint32_t idx;
+  if (unlikely(r == 0)) {
+    // `next` does not have enough room, we move
+    // 1/3 key of `curr` and 1/3 key of `next` into a new node
+    node *nn = new_node(Leaf, 0);
+    char nkey[max_key_size];
+    uint32_t nlen;
+    node_adjust_many(nn, *curr, next, fnc->okey, &fnc->olen, fnc->key, &fnc->len, nkey, &nlen);
+    // there are 2 fence key, this is for replace
+    fnc->pth = cp;
+    // record `next` for verification and avoid the same node being replaced more than one time
+    fnc->ptr = next;
+    fnc->type = fence_replace;
+    worker_insert_fence(w, 0, fnc);
+
+    // this is for insert
+    fnc->pth = cp;
+    fnc->ptr = nn;
+    fnc->type = fence_insert;
+    memcpy(fnc->key, nkey, nlen);
+    fnc->len = nlen;
+    idx = worker_insert_fence(w, 0, fnc);
+    next = nn;
+  } else {
+    // `next` have free space, now we can avoid splitting the node
+    // record information to replace fence key in parent
+    fnc->pth = cp;
+    fnc->ptr = next; // store `next` for verification
+    fnc->type = fence_replace;
+    idx = worker_insert_fence(w, 0, fnc);
+  }
+  if (compare_key(key, len, fnc->key, fnc->len) > 0) { // equal is not possible
+    *curr = next;
+    // advance fence because next key may fall into next-next node
+    worker_advance_fence(w, 0, fnc, idx);
+  }
+  assert(node_insert(*curr, key, len, (const void *)*(val_t *)val) == 1);
+
+  set_val(val, 1);
+  return 1;
+}
+
+// split `*curr` and insert kv-pair, if we reach here, it means one of them happened:
+// 1. there is key prefix conflict
+// 2. this is the right-most leaf node
+// 3. `next` belongs to next worker
+// 4. there is only level 0, which makes `curr` root node
+// 5. `curr` and `next` belongs to different parents
+static void worker_handle_leaf_node_split(worker *w, node **curr, path *cp, fence *fnc,
+  const void *key, uint32_t len, void *val)
+{
+  node *nn = new_node(Leaf, 0);
+  fnc->pth = cp;
+  fnc->ptr = nn;
+  fnc->type = fence_insert;
+  // if the key we are going to insert will be the last key in this node,
+  // we don't split the node, we just put this key into a new node,
+  // also the key after will probably fall into the new node,
+  // this is especially useful for sequential insertion.
+  int move_next = 0;
+  uint32_t flen;
+  if ((flen = node_not_include_key(*curr, key, len))) {
+  #ifdef BStar
+    (void)flen;
+    memcpy(fnc->key, key, len);
+    fnc->len = len;
+  #else
+    memcpy(fnc->key, key, flen);
+    fnc->len = flen;
+  #endif // BStar
+    move_next = 1;
+    nn->next = (*curr)->next;
+    (*curr)->next = nn;
+  } else {
+    // else we do the normal 1/2 and 1/2 split
+    node_split(*curr, nn, fnc->key, &fnc->len);
+    move_next = compare_key(key, len, fnc->key, fnc->len) > 0; // equal is not possible
+  }
+
+  uint32_t idx = worker_insert_fence(w, 0, fnc);
+  if (move_next) {
+    *curr = nn;
+    // update fence because next key may fall into the next split node
+    worker_advance_fence(w, 0, fnc, idx);
+  }
+
+  assert(node_insert(*curr, key, len, (const void *)*(val_t *)val) == 1);
+  set_val(val, 1);
+}
+
 // process keys assigned to this worker in leaf nodes, worker has already obtained the path information
 void worker_execute_on_leaf_nodes(worker *w, batch *b)
 {
@@ -483,122 +597,17 @@ void worker_execute_on_leaf_nodes(worker *w, batch *b)
       case 0:  // key already exists, we set value to 0
         set_val(val, 0);
         break;
-
-      // WARN: the code below here is a little bit complicated, also ugly,
-      //       seems really hard to reduce this complexity
-
       case -1: { // node does not have enough space
-      #ifdef BStar // B* node
-        // try to move some key to next node if all of them are satisfied
-        //   1. next node does not belong to next worker
-        //   2. next node share the same parent with this node
-        //   3. next node has enough room
-        // for now we pessimisticly assume that `w->last`'s next node belongs to next worker,
-        // because it's a little bit hard to determine whether next node belongs to next worker,
-        // so use `curr != w->my_last` instead
-        // TODO: get the real next worker's first node
-        node *next = curr->next;
-        if (likely(curr != w->my_last && next && path_get_level(cp) > 1)) {
-          node *parent = path_get_node_at_level(cp, 1);
-          node *parent_next = parent->next;
-          if (likely(parent_next == 0 || parent_next->first != next)) {
-            // `curr` and `next` belong to the same parent
-            int r = node_adjust_few(curr, next, fnc.okey, &fnc.olen, fnc.key, &fnc.len);
-            if (likely(r == -1)) {
-              // key prefix conflict, intentionally fall through
-            } else {
-              uint32_t idx;
-              if (unlikely(r == 0)) {
-                // `next` does not have enough room, we move
-                // 1/3 key of `curr` and 1/3 key of `next` into a new node
-                node *nn = new_node(Leaf, 0);
-                char nkey[max_key_size];
-                uint32_t nlen;
-                node_adjust_many(nn, curr, next, fnc.okey, &fnc.olen, fnc.key, &fnc.len, nkey, &nlen);
-                // there are 2 fence key, this is for replace
-                fnc.pth = cp;
-                // record `next` for verification and avoid the same node being replaced more than one time
-                fnc.ptr = next;
-                fnc.type = fence_replace;
-                worker_insert_fence(w, 0, &fnc);
-
-                // this is for insert
-                fnc.pth = cp;
-                fnc.ptr = nn;
-                fnc.type = fence_insert;
-                memcpy(fnc.key, nkey, nlen);
-                fnc.len = nlen;
-                idx = worker_insert_fence(w, 0, &fnc);
-                next = nn;
-              } else {
-                // `next` have free space, now we can avoid splitting the node
-
-                // record information to replace fence key in parent
-                fnc.pth = cp;
-                fnc.ptr = next; // store `next` for verification
-                fnc.type = fence_replace;
-                idx = worker_insert_fence(w, 0, &fnc);
-              }
-              if (compare_key(key, len, fnc.key, fnc.len) > 0) { // equal is not possible
-                curr = next;
-                // advance fence because next key may fall into next-next node
-                worker_advance_fence(w, 0, &fnc, idx);
-              }
-              assert(node_insert(curr, key, len, (const void *)*(val_t *)val) == 1);
-
-              set_val(val, 1);
-              break;
-            }
-          }
+        #ifdef BStar // B* node
+        if (worker_handle_full_leaf_node(w, &curr, cp, &fnc, key, len, val)) {
+          // key insert succeed
+          break;
         }
-      #endif // BStar
+        #endif // BStar
       }
       // intentionally fall through
-      case -2: { // has conflict key prefix
-        // if we reach here, it means one of them happened:
-        // 1. there is key prefix conflict
-        // 2. this is the right-most leaf node
-        // 3. `next` belongs to next worker
-        // 4. there is only level 0, which makes `curr` root node
-        // 5. `curr` and `next` belongs to different parents
-
-        node *nn = new_node(Leaf, 0);
-        fnc.pth = cp;
-        fnc.ptr = nn;
-        fnc.type = fence_insert;
-        // if the key we are going to insert will be the last key in this node,
-        // we don't split the node, we just put this key into a new node,
-        // also the key after will probably fall into the new node,
-        // this is especially useful for sequential insertion.
-        int move_next = 0;
-        uint32_t flen;
-        if ((flen = node_not_include_key(curr, key, len))) {
-        #ifdef BStar
-          (void)flen;
-          memcpy(fnc.key, key, len);
-          fnc.len = len;
-        #else
-          memcpy(fnc.key, key, flen);
-          fnc.len = flen;
-        #endif // BStar
-          move_next = 1;
-          nn->next = curr->next;
-          curr->next = nn;
-        } else {
-          // else we do the normal 1/2 and 1/2 split
-          node_split(curr, nn, fnc.key, &fnc.len);
-          move_next = compare_key(key, len, fnc.key, fnc.len) > 0; // equal is not possible
-        }
-
-        uint32_t idx = worker_insert_fence(w, 0, &fnc);
-        if (move_next) {
-          curr = nn;
-          // update fence because next key may fall into the next split node
-          worker_advance_fence(w, 0, &fnc, idx);
-        }
-
-        assert(node_insert(curr, key, len, (const void *)*(val_t *)val) == 1);
-        set_val(val, 1);
+      case -2: {
+        worker_handle_leaf_node_split(w, &curr, cp, &fnc, key, len, val);
         break;
       }
       default:
