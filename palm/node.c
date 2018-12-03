@@ -492,6 +492,32 @@ void node_insert_fence(node *old, node *new, void *next, char *pkey, uint32_t *p
   old->next = (node *)next;
 }
 
+static inline void node_get_whole_key(node *n, uint32_t idx, char *key, uint32_t *len)
+{
+  assert(idx < n->keys);
+  index_t *index = node_index(n);
+  get_key_info(n, index[idx], buf, buf_len);
+  if (n->pre) {
+    assert(n->level == 0);
+    memcpy(key, n->data, n->pre);
+  }
+  memcpy(key + n->pre, buf, buf_len);
+  *len = buf_len + n->pre;
+}
+
+inline int node_is_after_key(node *n, const void *key, uint32_t len)
+{
+  assert(n->level == 0);
+
+  if (unlikely(n->keys == 0))
+    return 0;
+
+  char     first[max_key_size];
+  uint32_t flen;
+  node_get_whole_key(n, 0, first, &flen);
+  return compare_key(key, len, first, flen) < 0;
+}
+
 // delete key in range [from, to), pain in the ass, it's really expensive
 static void node_delete_range(node *n, uint32_t from, uint32_t to)
 {
@@ -518,19 +544,6 @@ static void node_delete_range(node *n, uint32_t from, uint32_t to)
     get_kv_info(o, o_idx[i], k, l, v);
     node_insert_kv(n, k, l, (const void *)v);
   }
-}
-
-static inline void node_get_whole_key(node *n, uint32_t idx, char *key, uint32_t *len)
-{
-  assert(idx <= n->keys);
-  index_t *index = node_index(n);
-  get_key_info(n, index[idx], buf, buf_len);
-  if (n->pre) {
-    assert(n->level == 0);
-    memcpy(key, n->data, n->pre);
-  }
-  memcpy(key + n->pre, buf, buf_len);
-  *len = buf_len + n->pre;
 }
 
 // try to move some key from `left` to `right`, keeping their balance at the same time,
@@ -563,8 +576,12 @@ int node_adjust_few(node *left, node *right, char *okey, uint32_t *olen, char *k
   // try to reach a balance
   uint32_t max_keys = left->keys > right->keys ? ((left->keys - right->keys) / 2) : 32;
   if (moved_key > max_keys) moved_key = max_keys;
-  // we don't want to move too few keys, 4 is just an experienced value
-  if (moved_key < 4) return 0;
+  // we don't want to move too few keys, 8 is just an experienced value
+  if (moved_key < 8) return 0;
+
+  // printf("node %u before move few %u %u %u\n", left->id, right->id, left->keys, right->keys);
+  // node_print(left, 1);
+  // node_print(right, 1);
 
   // now move it!
 
@@ -586,6 +603,12 @@ int node_adjust_few(node *left, node *right, char *okey, uint32_t *olen, char *k
   // record new fence key
   node_get_whole_key(right, 0, key, len);
 
+  // printf("node %u after move few %u %u %u\n", left->id, right->id, left->keys, right->keys);
+  // node_print(left, 1);
+  // node_print(right, 1);
+  // btree_node_validate(left);
+  // btree_node_validate(right);
+
   return moved_key;
 }
 
@@ -602,6 +625,7 @@ void node_adjust_many(node *new, node *left, node *right, char *okey, uint32_t *
   //     break;
   //   ++cpl;
   // }
+  // printf("node %u before move many\n", left->id);
 
   // record old fence key
   node_get_whole_key(right, 0, okey, olen);
@@ -648,6 +672,11 @@ void node_adjust_many(node *new, node *left, node *right, char *okey, uint32_t *
 
   left->next = new;
   new->next  = right;
+
+  // printf("node %u after move many\n", left->id);
+  // btree_node_validate(left);
+  // btree_node_validate(new);
+  // btree_node_validate(right);
 }
 
 // replace old key with new key, if old key and new key have the same key length, this is just an in-place update,
@@ -672,7 +701,8 @@ int node_replace_key(node *n, const void *okey, uint32_t olen, const void *val,
         return 1;
       } else {
         node_delete_range(n, mid, mid + 1);
-        return node_insert(n, key, len, val);
+        int r = node_insert(n, key, len, val);
+        return r;
       }
     } else if (r < 0) {
       low  = mid + 1;
@@ -681,8 +711,7 @@ int node_replace_key(node *n, const void *okey, uint32_t olen, const void *val,
     }
   }
 
-  assert(0);
-  return 0;
+  return 2;
 }
 
 /****** BATCH operation ******/
@@ -930,6 +959,7 @@ static void validate(node *n, int is_batch)
     get_key_info(n, index[i], cur_key, cur_len);
     if (is_batch == 0) {
       if (compare_key(pre_key, pre_len, cur_key, cur_len) >= 0) {
+        printf("%u\n", i);
         node_print(n, 1);
       }
       assert(compare_key(pre_key, pre_len, cur_key, cur_len) < 0);
@@ -975,7 +1005,12 @@ void btree_node_validate(node *n)
     char next_key[max_key_size];
     uint32_t next_len;
     node_get_whole_key(n->next, 0, next_key, &next_len);
-    assert(compare_key(last_key, last_len, next_key, next_len) < 0);
+    int r = compare_key(last_key, last_len, next_key, next_len);
+    if (r >= 0) {
+      node_print(n, 1);
+      node_print(n->next, 1);
+    }
+    assert(r < 0);
   }
 
   if (n->level) {
@@ -991,7 +1026,15 @@ void btree_node_validate(node *n)
     index_t *index = node_index(n);
     node *last_child = (node *)get_val(n, index[n->keys - 1]);
     node_get_whole_key(last_child, 0, child_first_key, &child_first_len);
-    assert(compare_key(last_key, last_len, child_first_key, child_first_len) <= 0); // equal is valid
+    int r = compare_key(last_key, last_len, child_first_key, child_first_len);
+    if (r > 0) {
+      // last_child = (node *)get_val(n, index[n->keys - 2]);
+      // node_print(last_child, 1);
+      // last_child = (node *)get_val(n, index[n->keys - 1]);
+      node_print(last_child, 1);
+      node_print(n, 1);
+    }
+    assert(r <= 0); // equal is valid
 
   } else {
     assert(n->first == 0);

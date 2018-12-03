@@ -134,20 +134,9 @@ void worker_switch_fence(worker *w, uint32_t level)
   w->cur_fence[level % 2] = 0;
 }
 
-fence* worker_get_new_fence(worker *w, uint32_t level)
-{
-  uint32_t idx = level % 2;
-  if (unlikely(w->cur_fence[idx] == w->max_fence)) {
-    w->max_fence = w->max_fence * 2;
-    assert(w->fences[idx] = (fence *)realloc(w->fences[idx], sizeof(fence) * w->max_fence));
-  }
-  assert(w->cur_fence[idx] < w->max_fence);
-  return &w->fences[idx][w->cur_fence[idx]++];
-}
-
 // insert fence info in fence key order for later promotion
 // return insert position for later fence info update
-uint32_t worker_insert_fence(worker *w, uint32_t level, fence *f)
+static uint32_t worker_insert_fence(worker *w, uint32_t level, fence *f)
 {
   uint32_t idx = level % 2;
   uint32_t cur = w->cur_fence[idx];
@@ -183,7 +172,7 @@ uint32_t worker_insert_fence(worker *w, uint32_t level, fence *f)
   return j;
 }
 
-inline void worker_update_fence(worker *w, uint32_t level, fence *f, uint32_t i)
+static inline void worker_advance_fence(worker *w, uint32_t level, fence *f, uint32_t i)
 {
   uint32_t idx = level % 2;
   uint32_t cur = w->cur_fence[idx];
@@ -191,10 +180,27 @@ inline void worker_update_fence(worker *w, uint32_t level, fence *f, uint32_t i)
 
   if (i == cur - 1) {
     f->ptr = 0;
-  } else if (w->fences[idx][i + 1].type != fence_replace) {
+  } else {
     memcpy(f, &w->fences[idx][i + 1], sizeof(fence));
   }
 }
+
+static inline uint32_t worker_get_fence_number(worker *w, uint32_t level)
+{
+  return w->cur_fence[level % 2];
+}
+
+#ifdef BStar // B* node
+// only called when in level 0
+static inline fence* worker_get_last_insert_fence(worker *w)
+{
+  uint32_t cur = w->cur_fence[0];
+  assert(cur > 1);
+  fence *f = &w->fences[0][cur - 2];
+  assert(f->type == fence_insert);
+  return f;
+}
+#endif // B* node
 
 // loop all the workers to find the fence info for root split, this function should
 // only be called by worker 0
@@ -413,11 +419,11 @@ void worker_redistribute_work(worker *w, uint32_t level)
 // process keys assigned to this worker in leaf nodes, worker has already obtained the path information
 void worker_execute_on_leaf_nodes(worker *w, batch *b)
 {
-  fence ifnc, rfnc; // insert fence key and replace fence key
-  ifnc.ptr = 0, rfnc.ptr = 0;
+  fence fnc; fnc.ptr = 0;
   node *pn   = 0; // previous path node
   node *curr = 0; // node actually to process the key
 
+  int move_left = 0;
   path_iter iter;
   path *cp;
   init_path_iter(&iter, w);
@@ -433,34 +439,70 @@ void worker_execute_on_leaf_nodes(worker *w, batch *b)
     void    *val;
     batch_read_at(b, path_get_kv_id(cp), &op, &key, &len, &val);
 
+    int step = 5;
     // get the actual leaf node to insert
   #ifdef BStar // B* node
-    if (cn == rfnc.ptr) {
-      if (compare_key(key, len, rfnc.key, rfnc.len) < 0) {
-        curr = ifnc.ptr;
+    if (cn != pn) {
+      if (pn && node_is_after_key(cn, key, len)) {
+      // {
+      //   char k[11];
+      //   memcpy(k, key, len);
+      //   k[len] = 0;
+      //   printf("%s\n", k);
+      //   node_print(cn, 1);
+      // }
+        curr = worker_get_last_insert_fence(w)->ptr;
+        move_left = 1;
+        step = 1;
       } else {
         curr = cn;
-        ifnc.ptr = 0;
-        rfnc.ptr = 0;
+        move_left = 0;
+        fnc.ptr = 0;
+        step = 2;
+        // {
+        //   char k[11];
+        //   memcpy(k, key, len);
+        //   k[len] = 0;
+        //   printf("%s\n", k);
+        //   node_print(cn, 1);
+        //   getchar();
+        // }
       }
     } else {
-      if (cn != pn) {
-        curr = cn;
-        ifnc.ptr = 0;
-      } else if (ifnc.ptr && compare_key(key, len, ifnc.key, ifnc.len) >= 0) {
-        curr = ifnc.ptr;
+      if (move_left) {
+        if (node_is_after_key(cn, key, len) == 0) {
+          curr = cn;
+          move_left = 0;
+          fnc.ptr = 0;
+          step = 3;
+        }
+      } else {
+        if (fnc.ptr && compare_key(key, len, fnc.key, fnc.len) >= 0) {
+          curr = fnc.ptr;
+          fnc.ptr = 0;
+          step = 4;
+        }
       }
     }
   #else
+    (void)step;
+    (void)move_left;
     if (cn != pn) {
       curr = cn;
-      ifnc.ptr = 0;
-    } else if (ifnc.ptr && compare_key(key, len, ifnc.key, ifnc.len) >= 0) {
-      curr = ifnc.ptr;
+      fnc.ptr = 0;
+    } else if (fnc.ptr && compare_key(key, len, fnc.key, fnc.len) >= 0) {
+      curr = fnc.ptr;
+      fnc.ptr = 0;
     }
-  #endif // BStar
+  #endif // B* node
 
     if (op == Write) {
+      // {
+      //   char k[11];
+      //   memcpy(k, key, len);
+      //   k[len] = 0;
+      //   printf("%s %u %u %d\n", k, cn->id, curr->id, step);
+      // }
       switch (node_insert(curr, key, len, (const void *)*(val_t *)val)) {
       case 1:  // key insert succeed, we set value to 1
         set_val(val, 1);
@@ -473,7 +515,7 @@ void worker_execute_on_leaf_nodes(worker *w, batch *b)
       //       seems really hard to reduce this complexity
 
       case -1: { // node does not have enough space
-        #ifdef BStar // B* node
+      #ifdef BStar // B* node
         // try to move some key to next node if all of them are satisfied
         //   1. next node does not belong to next worker
         //   2. next node share the same parent with this node
@@ -488,7 +530,7 @@ void worker_execute_on_leaf_nodes(worker *w, batch *b)
           node *parent_next = parent->next;
           if (likely(parent_next == 0 || parent_next->first != next)) {
             // `curr` and `next` belong to the same parent
-            int r = node_adjust_few(curr, next, ifnc.okey, &ifnc.olen, ifnc.key, &ifnc.len);
+            int r = node_adjust_few(curr, next, fnc.okey, &fnc.olen, fnc.key, &fnc.len);
             if (likely(r == -1)) {
               // key prefix conflict, intentionally fall through
             } else {
@@ -497,33 +539,37 @@ void worker_execute_on_leaf_nodes(worker *w, batch *b)
                 // `next` does not have enough room, we move
                 // 1/3 key of `curr` and 1/3 key of `next` into a new node
                 node *nn = new_node(Leaf, 0);
-                node_adjust_many(nn, curr, next, rfnc.okey, &rfnc.olen, rfnc.key, &rfnc.len, ifnc.key, &ifnc.len);
+                char nkey[max_key_size];
+                uint32_t nlen;
+                node_adjust_many(nn, curr, next, fnc.okey, &fnc.olen, fnc.key, &fnc.len, nkey, &nlen);
                 // there are 2 fence key, this is for replace
-                rfnc.pth = cp;
+                fnc.pth = cp;
                 // record `next` for verification and avoid the same node being replaced more than one time
-                rfnc.ptr = next;
-                rfnc.type = fence_replace;
-                worker_insert_fence(w, 0, &rfnc);
+                fnc.ptr = next;
+                fnc.type = fence_replace;
+                worker_insert_fence(w, 0, &fnc);
 
                 // this is for insert
-                ifnc.pth = cp;
-                ifnc.ptr = nn;
-                ifnc.type = fence_insert;
-                idx = worker_insert_fence(w, 0, &ifnc);
+                fnc.pth = cp;
+                fnc.ptr = nn;
+                fnc.type = fence_insert;
+                memcpy(fnc.key, nkey, nlen);
+                fnc.len = nlen;
+                idx = worker_insert_fence(w, 0, &fnc);
                 next = nn;
               } else {
                 // `next` have free space, now we can avoid splitting the node
 
                 // record information to replace fence key in parent
-                ifnc.pth = cp;
-                ifnc.ptr = next; // store `next` for verification
-                ifnc.type = fence_replace;
-                idx = worker_insert_fence(w, 0, &ifnc);
+                fnc.pth = cp;
+                fnc.ptr = next; // store `next` for verification
+                fnc.type = fence_replace;
+                idx = worker_insert_fence(w, 0, &fnc);
               }
-              if (compare_key(key, len, ifnc.key, ifnc.len) > 0) { // equal is not possible
+              if (compare_key(key, len, fnc.key, fnc.len) > 0) { // equal is not possible
                 curr = next;
-                // we need to update fence because next key may fall into next-next node
-                worker_update_fence(w, 0, &ifnc, idx);
+                // advance fence because next key may fall into next-next node
+                worker_advance_fence(w, 0, &fnc, idx);
               }
               assert(node_insert(curr, key, len, (const void *)*(val_t *)val) == 1);
 
@@ -532,7 +578,7 @@ void worker_execute_on_leaf_nodes(worker *w, batch *b)
             }
           }
         }
-        #endif // BStar
+      #endif // BStar
       }
       // intentionally fall through
       case -2: { // has conflict key prefix
@@ -544,9 +590,9 @@ void worker_execute_on_leaf_nodes(worker *w, batch *b)
         // 5. `curr` and `next` belongs to different parents
 
         node *nn = new_node(Leaf, 0);
-        ifnc.pth = cp;
-        ifnc.ptr = nn;
-        ifnc.type = fence_insert;
+        fnc.pth = cp;
+        fnc.ptr = nn;
+        fnc.type = fence_insert;
         // if the key we are going to insert will be the last key in this node,
         // we don't split the node, we just put this key into a new node,
         // also the key after will probably fall into the new node,
@@ -554,28 +600,30 @@ void worker_execute_on_leaf_nodes(worker *w, batch *b)
         int move_next = 0;
         uint32_t flen;
         if ((flen = node_not_include_key(curr, key, len))) {
-          #ifdef BStar
+        #ifdef BStar
           (void)flen;
-          memcpy(ifnc.key, key, len);
-          ifnc.len = len;
-          #else
-          memcpy(ifnc.key, key, flen);
-          ifnc.len = flen;
-          #endif // BStar
+          memcpy(fnc.key, key, len);
+          fnc.len = len;
+        #else
+          memcpy(fnc.key, key, flen);
+          fnc.len = flen;
+        #endif // BStar
           move_next = 1;
           nn->next = curr->next;
           curr->next = nn;
         } else {
           // else we do the normal 1/2 and 1/2 split
-          node_split(curr, nn, ifnc.key, &ifnc.len);
-          move_next = compare_key(key, len, ifnc.key, ifnc.len) > 0; // equal is not possible
+          node_split(curr, nn, fnc.key, &fnc.len);
+          move_next = compare_key(key, len, fnc.key, fnc.len) > 0; // equal is not possible
         }
+        // fnc.key[fnc.len] = 0;
+        // printf("%s\n", fnc.key);
 
-        uint32_t idx = worker_insert_fence(w, 0, &ifnc);
+        uint32_t idx = worker_insert_fence(w, 0, &fnc);
         if (move_next) {
           curr = nn;
-          // we need to update fence because next key may fall into the next split node
-          worker_update_fence(w, 0, &ifnc, idx);
+          // update fence because next key may fall into the next split node
+          worker_advance_fence(w, 0, &fnc, idx);
         }
 
         assert(node_insert(curr, key, len, (const void *)*(val_t *)val) == 1);
@@ -617,16 +665,36 @@ void worker_execute_on_branch_nodes(worker *w, uint32_t level)
     if (cn != pn) { // previous split has no influence on current key
       curr = cn;
       fnc.ptr = 0;
-    } else if (fnc.ptr && compare_key(key, len, fnc.key, fnc.len) >= 0) {  // equal is possible
+    } else if (fnc.ptr && compare_key(key, len, fnc.key, fnc.len) >= 0) {
       curr = fnc.ptr;
       fnc.ptr = 0;
     }
+
+    // {
+    //   char *k = (char *)key;
+    //   k[len] = 0;
+    //   if (compare_key("edptggnzes", 10, k, len) == 0) {
+    //     fnc.key[fnc.len] = 0;
+    //     printf("%s\n", fnc.key);
+    //     worker_print_fence_info(w, level);
+    //   }
+    // }
 
     if (cf->type == fence_replace) {
       int r = node_replace_key(curr, cf->okey, cf->olen, val, key, len);
       if (unlikely(r == -1)) { // the key to replace can't fit in, not enough space
         // key is already deleted, so we can treat it as insert now
         cf->type = fence_insert;
+      } else if (unlikely(r == 2)) {
+        // the key we are going to replace is about to be promoted to upper level due to a split
+        fence f;
+        memcpy(&f, cf, sizeof(fence));
+        f.ptr = curr;
+        uint32_t before = worker_get_fence_number(w, level);
+        worker_insert_fence(w, level, &f);
+        uint32_t after = worker_get_fence_number(w, level);
+        // make sure this fence key is replaced in fence info
+        assert(before == after);
       } else {
         assert(r == 1);
       }
@@ -646,8 +714,8 @@ void worker_execute_on_branch_nodes(worker *w, uint32_t level)
         // compare current key with fence key to determine which node to insert
         if (compare_key(key, len, fnc.key, fnc.len) > 0) { // equal is not possible
           curr = nn;
-          // we need to update fence because next key may fall into the next split node
-          worker_update_fence(w, level, &fnc, idx);
+          // advance fence because next key may fall into the next split node
+          worker_advance_fence(w, level, &fnc, idx);
         }
         assert(node_insert(curr, key, len, val) == 1);
         break;
@@ -736,6 +804,10 @@ void worker_print_fence_info(worker *w, uint32_t level)
   init_fence_iter(&fi, w, level);
   while ((f = next_fence(&fi))) {
     node *n = path_get_node_at_level(f->pth, level);
+    if (f->type == fence_replace) {
+      f->okey[f->olen] = '\0';
+      printf("%s\n", f->okey);
+    }
     f->key[f->len] = '\0';
     printf("%u %s  parent:%u\n", f->ptr->id, f->key, n->id);
   }

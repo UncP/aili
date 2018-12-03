@@ -395,4 +395,7 @@ static void do_palm_tree_execute(palm_tree *pt, batch *b, worker *w)
 
   // do a global synchronization, not really needed, but just make things consistent
   worker_sync(w, level + 1, root_level); update_metric(w->id, stage_sync, &c);
+
+  // node_print(pt->root, 1);
+  // palm_tree_validate(pt);
 }
