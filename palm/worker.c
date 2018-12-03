@@ -423,7 +423,7 @@ void worker_redistribute_work(worker *w, uint32_t level)
 // and then insert k-v pair
 // for now we pessimisticly assume that `w->last`'s next node belongs to next worker,
 // because it's a little bit hard to determine whether next node belongs to next worker,
-// so use `curr != w->my_last` instead
+// so use `*curr != w->my_last` instead
 // TODO: get the real next worker's first node
 static int worker_handle_full_leaf_node(worker *w, node **curr, path *cp, fence *fnc,
   const void *key, uint32_t len, void *val)
@@ -450,8 +450,7 @@ static int worker_handle_full_leaf_node(worker *w, node **curr, path *cp, fence 
     node_adjust_many(nn, *curr, next, fnc->okey, &fnc->olen, fnc->key, &fnc->len, nkey, &nlen);
     // there are 2 fence key, this is for replace
     fnc->pth = cp;
-    // record `next` for verification and avoid the same node being replaced more than one time
-    fnc->ptr = next;
+    fnc->ptr = next; // store `next` for verification
     fnc->type = fence_replace;
     worker_insert_fence(w, 0, fnc);
 
@@ -485,9 +484,9 @@ static int worker_handle_full_leaf_node(worker *w, node **curr, path *cp, fence 
 // split `*curr` and insert kv-pair, if we reach here, it means one of them happened:
 // 1. there is key prefix conflict
 // 2. this is the right-most leaf node
-// 3. `next` belongs to next worker
-// 4. there is only level 0, which makes `curr` root node
-// 5. `curr` and `next` belongs to different parents
+// 3. `(*curr)->next` belongs to next worker
+// 4. there is only level 0, which makes `*curr` root node
+// 5. `*curr` and `(*curr)->next` belongs to different parents
 static void worker_handle_leaf_node_split(worker *w, node **curr, path *cp, fence *fnc,
   const void *key, uint32_t len, void *val)
 {
