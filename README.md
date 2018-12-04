@@ -12,8 +12,8 @@
 
 #### Version
 
-see `Version.md` for brief information about each version  
-see `ChangeLog.md` for detail information about each version
+see `Version.md` for **brief** info  
+see `ChangeLog.md` for **detail** info
 
 
 

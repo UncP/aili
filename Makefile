@@ -5,7 +5,7 @@ LFLAGS=./third_party/c_hashmap/libhashmap.a -lpthread
 PFLAGS=-DLazy -DPrefix
 DFLAGS=
 BFLAGS=
-MFLAGS=
+MFLAGS=-DTest
 
 PALMFLAGS=$(CC) $(CFLAGS) $(PFLAGS) $(IFLAGS) $(DFLAGS)
 BLINKFLAGS=$(CC) $(CFLAGS) $(BFLAGS) $(DFLAGS)

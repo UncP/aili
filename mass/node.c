@@ -12,11 +12,11 @@
 #include "node.h"
 
 #define max_key_count  15
-#define magic_link     13 // a magic value
-#define magic_unstable 14 // a magic value
+#define magic_link     ((uint8_t)13) // a magic value
+#define magic_unstable ((uint8_t)14) // a magic value
 
 // `permutation` is uint64_t
-#define get_count(permutation) ((int)(((permutation) >> 60) & 0xf))
+#define get_count(permutation) ((int)((permutation) >> 60))
 #define get_index(permutation, index) ((int)(((permutation) >> (4 * (14 - index))) & 0xf))
 #define update_permutation(permutation, index, value) {                       \
   uint64_t right = (permutation << ((index + 1) * 4)) >> ((index + 2) * 4);   \
@@ -148,21 +148,21 @@ void free_node(node *n)
     free_interior_node((interior_node *)n);
 }
 
-uint32_t node_get_version(node *n)
+inline uint32_t node_get_version(node *n)
 {
   uint32_t version;
   __atomic_load(&n->version, &version, __ATOMIC_ACQUIRE);
   return version;
 }
 
-static uint32_t node_get_version_unsafe(node *n)
+static inline uint32_t node_get_version_unsafe(node *n)
 {
   uint32_t version;
   __atomic_load(&n->version, &version, __ATOMIC_RELAXED);
   return version;
 }
 
-void node_set_version(node *n, uint32_t version)
+inline void node_set_version(node *n, uint32_t version)
 {
   __atomic_store(&n->version, &version, __ATOMIC_RELEASE);
 }
@@ -185,19 +185,19 @@ static inline int node_get_count(node *n)
   return get_count(permutation);
 }
 
-node* node_get_parent(node *n)
+inline node* node_get_parent(node *n)
 {
   node *parent;
   __atomic_load(&n->parent, &parent, __ATOMIC_ACQUIRE);
   return parent;
 }
 
-void node_set_parent(node *n, node *p)
+inline void node_set_parent(node *n, node *p)
 {
   __atomic_store(&n->parent, &p, __ATOMIC_RELEASE);
 }
 
-node* node_get_next(node *n)
+inline node* node_get_next(node *n)
 {
   border_node *next;
   __atomic_load(&((border_node *)n)->next, &next, __ATOMIC_ACQUIRE);
@@ -331,7 +331,7 @@ void node_set_first_child(node *n, node *c)
 }
 
 // require: `n` is locked and is border node
-int node_get_conflict_key(node *n, const void *key, uint32_t len, uint32_t *ptr, void **ckey, uint32_t *clen)
+int node_get_conflict_key_index(node *n, const void *key, uint32_t len, uint32_t *ptr, void **ckey, uint32_t *clen)
 {
   // TODO: remove this
   uint32_t version = node_get_version(n);
@@ -366,13 +366,19 @@ int node_get_conflict_key(node *n, const void *key, uint32_t len, uint32_t *ptr,
 
 // replace value with new node
 // require: `n` is locked and is border node
-void node_update_at(node *n, int index, node *n1)
+void node_replace_at_index(node *n, int index, node *n1)
 {
   // TODO: remove this
   uint32_t version = node_get_version(n);
   assert(is_locked(version) && is_border(version));
 
   border_node *bn = (border_node *)n;
+
+  // for safety
+  uint8_t state;
+  __atomic_load(&bn->keylen[index], &state, __ATOMIC_RELAXED);
+  assert(state != magic_unstable && state != magic_link);
+
   uint8_t unstable = magic_unstable;
   __atomic_store(&bn->keylen[index], &unstable, __ATOMIC_RELEASE);
   // atomic operation is not needed here
@@ -442,11 +448,11 @@ node* node_locate_child(node *n, const void *key, uint32_t len, uint32_t *ptr)
 // require: `n` is locked
 void* node_insert(node *n, const void *key, uint32_t len, uint32_t *ptr, const void *val, int is_link)
 {
-  // TODO: no need to use atomic operation
+  // TODO: no need to use memory barrier
   uint32_t version = node_get_version(n);
   assert(is_locked(version));
 
-  // TODO: no need to use atomic operation
+  // TODO: no need to use memory barrier
   uint64_t permutation = node_get_permutation(n);
 
   uint8_t  keylen;
@@ -476,7 +482,7 @@ void* node_insert(node *n, const void *key, uint32_t len, uint32_t *ptr, const v
     } else {
       assert(is_border(version));
       border_node *bn = (border_node *)n;
-      // TODO: atomic operation is not necessary
+      // TODO: no need to use memory barrier
       uint8_t link;
       __atomic_load(&bn->keylen[index], &link, __ATOMIC_ACQUIRE);
       assert(link != magic_unstable);
@@ -514,7 +520,7 @@ void* node_insert(node *n, const void *key, uint32_t len, uint32_t *ptr, const v
       bn->suffix[count] = (void *)key;
       uint32_t *len_ptr = (uint32_t *)&(bn->lv[count]);
       uint32_t *off_ptr = len_ptr + 1;
-      *len_ptr =  len;
+      *len_ptr = len;
       *off_ptr = *ptr;
     } else {
       bn->keylen[count] = magic_link;
@@ -639,7 +645,6 @@ static uint64_t border_node_split(border_node *bn, border_node *bn1)
   // `__ATOMIC_RELEASE` will make sure all the relaxed operation above been seen by other threads
   __atomic_store(&bn->next, &bn1, __ATOMIC_RELEASE);
 
-  // return fence key
   return bn1->keyslice[0];
 }
 
@@ -682,7 +687,6 @@ static uint64_t interior_node_split(interior_node *in, interior_node *in1)
   node_set_permutation((node *)in, permutation);
   node_set_permutation((node *)in1, permutation);
 
-  // return fence key
   return fence;
 }
 
@@ -695,6 +699,7 @@ node* node_split(node *n, uint64_t *fence)
   int border = is_border(version);
   node *n1 = new_node(border ? Border : Interior);
 
+  // TODO: no need to use memory barrier?
   version = set_split(version);
   node_set_version(n, version);
   node_set_version(n1, version);
@@ -721,8 +726,8 @@ void node_print(node *n, int detail)
   int count = get_count(permutation);
 
   printf("is_locked:    %u\n", !!is_locked(version));
-  printf("is_inserting: %u  vinsert: %d\n", !!is_inserting(version), get_vinsert(version));
-  printf("is_spliting:  %u  vsplit:  %d\n", !!is_spliting(version), get_vsplit(version));
+  printf("is_inserting: %u  vinsert: %u\n", !!is_inserting(version), get_vinsert(version));
+  printf("is_spliting:  %u  vsplit:  %u\n", !!is_spliting(version), get_vsplit(version));
   printf("is_border:    %u\n", !!is_border(version));
   printf("is_root:      %u\n", !!is_root(version));
 
