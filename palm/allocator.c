@@ -4,8 +4,6 @@
  *    license:    BSD-3
 **/
 
-#ifdef Allocator
-
 #include <stdlib.h>
 #include <assert.h>
 #include <sys/mman.h>
@@ -123,7 +121,7 @@ void* allocator_alloc(size_t size)
   void *ptr = block_alloc(a->curr, size, &success);
   if (unlikely(success == 0)) {
     block *new = new_block(a->meta_curr);
-    if (new == 0) {
+    if (unlikely(new == 0)) {
       block *meta = new_meta_block();
       meta->next = a->meta_curr;
       a->meta_curr = meta;
@@ -143,5 +141,3 @@ void allocator_free(void *ptr)
   // do nothing
   (void)ptr;
 }
-
-#endif /* Allocator */

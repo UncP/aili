@@ -4,8 +4,6 @@
  *    license:    BSD-3
 **/
 
-#ifdef Allocator
-
 #ifndef _allocator_h_
 #define _allocator_h_
 
@@ -36,5 +34,3 @@ void* allocator_alloc(size_t size);
 void allocator_free(void *ptr);
 
 #endif /* _allocator_h_ */
-
-#endif /* Allocator */

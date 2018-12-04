@@ -13,6 +13,7 @@ MASSFLAGS=$(CC) $(CFLAGS) $(MFLAGS) $(DFLAGS)
 
 PALM_OBJ=palm/node.o palm/bounded_queue.o palm/worker.o palm/palm_tree.o palm/metric.o palm/allocator.o
 BLINK_OBJ=palm/node.o palm/allocator.o blink/node.o blink/blink_tree.o blink/mapping_array.o
+MASS_OBJ=mass/node.o mass/mass_tree.o
 
 default: lib
 
@@ -51,7 +52,7 @@ mass/%.o: mass/%.c
 node_test: test/mass_node_test.c mass/node.o
 	$(MASSFLAGS) -o $@ $^ -lpthread
 
-tree_test: test/mass_tree_test.c mass/node.o mass/mass_tree.o
+tree_test: test/mass_tree_test.c mass/node.o mass/mass_tree.o palm/allocator.o
 	$(MASSFLAGS) -o $@ $^ -lpthread
 
 third_party: third_party/c_hashmap

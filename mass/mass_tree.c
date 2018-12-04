@@ -10,8 +10,9 @@
 
 #include "mass_tree.h"
 
-mass_tree* new_mass_tree()
+mass_tree* new_mass_tree(int thread_num)
 {
+  (void)thread_num;
   mass_tree *mt = (mass_tree *)malloc(sizeof(mass_tree));
 
   node *r = new_node(Border);
@@ -196,7 +197,7 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
         assert((int)node_insert(n, key, len, &off, val, 0 /* is_link */) == 1);
       else
         assert((int)node_insert(n1, key, len, &off, val, 0 /* is_link */) == 1);
-      promote_node(mt, n, fence, n1);
+      promote_split_node(mt, n, fence, n1);
       return 1;
     }
     default: // need to go to a deeper layer
