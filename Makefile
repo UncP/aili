@@ -49,10 +49,10 @@ blink_tree_test: test/blink_tree_test.c blink/node.o blink/blink_tree.o blink/ma
 mass/%.o: mass/%.c
 	$(MASSFLAGS) -c $^ -o $@
 
-node_test: test/mass_node_test.c mass/node.o
+mass_node_test: test/mass_node_test.c mass/node.o
 	$(MASSFLAGS) -o $@ $^ -lpthread
 
-tree_test: test/mass_tree_test.c mass/node.o mass/mass_tree.o palm/allocator.o
+mass_tree_test: test/mass_tree_test.c mass/node.o mass/mass_tree.o palm/allocator.o
 	$(MASSFLAGS) -o $@ $^ -lpthread
 
 third_party: third_party/c_hashmap

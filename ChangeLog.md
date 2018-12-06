@@ -1,4 +1,14 @@
+### 3.0.0
+
+**Mass Tree**
+
+1. 改进版的 B<sup>link</sup> Tree
+2. （BUG）border 节点分裂时没有 fence key 截断，对应的，interior 节点下降时只有 keyslice 相等时，才能进行偏移的更新
+
+
+
 ### 2.3.0
+
 **将 level 0 节点从1/2满提高到2/3，即 B<sup>*</sup> Tree**
 1. 更紧凑的节点布局，大幅节省节点内存。
 2. 由于这个优化会带来新的 cache miss，并且需要额外的一些 CPU 计算，所以预计并不会对 palm tree 性能提升有帮助，甚至有可能下降？

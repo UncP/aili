@@ -75,6 +75,7 @@ void test_mass_tree()
   }
 
   // mass_tree_flush(mt);
+  node_print(mt->root);
 
   long long after = mstime();
   printf("\033[31mtotal: %d\033[0m\n\033[32mput time: %.4f  s\033[0m\n", total_keys, (float)(after - before) / 1000);
@@ -104,7 +105,8 @@ void test_mass_tree()
       }
 
       void *value = mass_tree_get(mt, key, len);
-      assert(value && memcpy(value, key, len) == 0);
+      assert(value);
+      assert(memcmp(value, key, len) == 0);
     }
   }
 

@@ -287,7 +287,7 @@ node* node_get_locked_parent(node *n)
 }
 
 // require: `n` is locked
-int node_is_full(node *n)
+inline int node_is_full(node *n)
 {
   // TODO: remove this
   uint32_t version = node_get_version(n);
@@ -295,6 +295,53 @@ int node_is_full(node *n)
 
   // TODO: no need to use atomic operation
   return node_get_count(n) == max_key_count;
+}
+
+inline int compare_key(uint64_t k1, uint64_t k2)
+{
+  return memcmp(&k1, &k2, sizeof(uint64_t));
+}
+
+inline uint64_t get_next_keyslice(const void *key, uint32_t len, uint32_t off)
+{
+  uint64_t cur = 0;
+  if ((off + sizeof(uint64_t)) > len)
+    memcpy(&cur, key + off, len - off); // other bytes will be 0
+  else
+    cur = *((uint64_t *)((char *)key + off));
+
+  return cur;
+}
+
+static inline uint64_t get_next_keyslice_and_advance(const void *key, uint32_t len, uint32_t *off)
+{
+  uint64_t cur = 0;
+  if ((*off + sizeof(uint64_t)) > len) {
+    memcpy(&cur, key + *off, len - *off); // other bytes will be 0
+    *off = len;
+  } else {
+    cur = *((uint64_t *)((char *)key + *off));
+    *off += sizeof(uint64_t);
+  }
+
+  return cur;
+}
+
+static inline uint64_t get_next_keyslice_and_advance_and_record(const void *key, uint32_t len, uint32_t *off,
+  uint8_t *keylen)
+{
+  uint64_t cur = 0;
+  if ((*off + sizeof(uint64_t)) > len) {
+    memcpy(&cur, key + *off, len - *off); // other bytes will be 0
+    *keylen = len - *off;
+    *off = len;
+  } else {
+    cur = *((uint64_t *)((char *)key + *off));
+    *keylen = sizeof(uint64_t);
+    *off  += sizeof(uint64_t);
+  }
+
+  return cur;
 }
 
 // require: `n` is border node
@@ -307,20 +354,14 @@ int node_include_key(node *n, const void *key, uint32_t len, uint32_t off)
   uint64_t permutation = node_get_permutation(n);
   int index = get_index(permutation, 0);
 
-  // border node's lowkey should always be at index 0
-  assert(index == 0);
+  uint64_t cur = get_next_keyslice(key, len, off);
 
-  uint64_t cur = 0;
-  if ((off + sizeof(uint64_t)) > len)
-    memcpy(&cur, key, len - off); // other bytes will be 0
-  else
-    cur = *((uint64_t *)((char *)key + off));
-
-  return n->keyslice[index] <= cur;
+  // return n->keyslice[index] <= cur;
+  return compare_key(n->keyslice[index], cur) <= 0;
 }
 
 // require: `n` is interior node
-void node_set_first_child(node *n, node *c)
+inline void node_set_first_child(node *n, node *c)
 {
   // TODO: remove this
   uint32_t version = node_get_version(n);
@@ -337,14 +378,7 @@ int node_get_conflict_key_index(node *n, const void *key, uint32_t len, uint32_t
   uint32_t version = node_get_version(n);
   assert(is_locked(version) && is_border(version));
 
-  uint64_t cur = 0;
-  if ((*off + sizeof(uint64_t)) > len) {
-    memcpy(&cur, key, len - *off); // other bytes will be 0
-    *off = len;
-  } else {
-    cur = *((uint64_t *)((char *)key + *off));
-    *off  += sizeof(uint64_t);
-  }
+  uint64_t cur = get_next_keyslice_and_advance(key, len, off);
 
   // TODO: no need to use atomic operation
   int count = node_get_count(n);
@@ -404,28 +438,22 @@ void node_swap_child(node *n, node *c, node *c1)
     if (bn->lv[i] == (void *)c)
       break;
 
-  // must have the child
+  // must have this child
   assert(i != count);
 
   bn->lv[i] = c1;
 }
 
 // require: `n` is interior node
-node* node_locate_child(node *n, const void *key, uint32_t len, uint32_t *off)
+node* node_descend(node *n, const void *key, uint32_t len, uint32_t *off)
 {
   uint32_t version = node_get_version(n);
   assert(is_interior(version));
 
   uint64_t permutation = node_get_permutation(n);
 
-  uint64_t cur = 0;
-  if ((*off + sizeof(uint64_t)) > len) {
-    memcpy(&cur, key, len - *off); // other bytes will be 0
-    *off = len;
-  } else {
-    cur = *((uint64_t *)((char *)key + *off));
-    *off += sizeof(uint64_t);
-  }
+  uint32_t ptr = *off;
+  uint64_t cur = get_next_keyslice_and_advance(key, len, &ptr);
 
   int first = 0, count = get_count(permutation);
   while (count > 0) {
@@ -434,13 +462,25 @@ node* node_locate_child(node *n, const void *key, uint32_t len, uint32_t *off)
 
     int index = get_index(permutation, middle);
 
-    if (n->keyslice[index] <= cur) {
+    int r = compare_key(n->keyslice[index], cur);
+    if (r == 0) {
+      *off = ptr;
+      first = middle + 1;
+      break;
+    } else if (r < 0) {
       first = middle + 1;
       count -= half + 1;
     } else {
       count = half;
     }
   }
+
+  // {
+  //   char buf[256];
+  //   memcpy(buf, key, len);
+  //   buf[len] = 0;
+  //   printf("%u %s\n", first, buf);
+  // }
 
   return ((interior_node *)n)->child[first];
 }
@@ -457,16 +497,7 @@ void* node_insert(node *n, const void *key, uint32_t len, uint32_t *off, const v
 
   uint8_t  keylen;
   uint32_t pre = *off;
-  uint64_t cur = 0;
-  if ((*off + sizeof(uint64_t)) > len) {
-    memcpy(&cur, key, len - *off); // other bytes will be 0
-    keylen = len - *off;
-    *off = len;
-  } else {
-    cur = *((uint64_t *)((char *)key + *off));
-    keylen = sizeof(uint64_t);
-    *off  += sizeof(uint64_t);
-  }
+  uint64_t cur = get_next_keyslice_and_advance_and_record(key, len, off, &keylen);
 
   int low = 0, count = get_count(permutation), high = count - 1;
 
@@ -475,9 +506,13 @@ void* node_insert(node *n, const void *key, uint32_t len, uint32_t *off, const v
 
     int index = get_index(permutation, mid);
 
-    if (n->keyslice[index] < cur) {
+    int r = compare_key(n->keyslice[index], cur);
+
+    // if (n->keyslice[index] < cur) {
+    if (r < 0) {
       low  = mid + 1;
-    } else if (n->keyslice[index] > cur) {
+    // } else if (n->keyslice[index] > cur) {
+    } else if (r > 0) {
       high = mid - 1;
     } else {
       assert(is_border(version));
@@ -491,8 +526,8 @@ void* node_insert(node *n, const void *key, uint32_t len, uint32_t *off, const v
         return bn->lv[index];
       } else {
         uint32_t clen = *(uint32_t *)&(bn->lv[index]);
-        uint32_t cptr = *((uint32_t *)&(bn->lv[index]) + 1);
-        assert(cptr == *off);
+        uint32_t coff = *((uint32_t *)&(bn->lv[index]) + 1);
+        assert(coff == *off);
         if (clen == len && !memcmp((char *)key + *off, (char *)(bn->suffix[index]) + *off, len - *off))
           // key existed
           return (void *)0;
@@ -509,6 +544,7 @@ void* node_insert(node *n, const void *key, uint32_t len, uint32_t *off, const v
     return (void *)-2;
   }
 
+  // set `insert` before actually write this node
   node_set_version(n, set_insert(version));
 
   n->keyslice[count] = cur;
@@ -549,14 +585,7 @@ node* node_search(node *n, const void *key, uint32_t len, uint32_t *off, void **
   uint64_t permutation = node_get_permutation(n);
 
   uint32_t pre = *off;
-  uint64_t cur = 0;
-  if ((*off + sizeof(uint64_t)) > len) {
-    memcpy(&cur, key, len - *off); // other bytes will be 0
-    *off = len;
-  } else {
-    cur = *((uint64_t *)((char *)key + *off));
-    *off += sizeof(uint64_t);
-  }
+  uint64_t cur = get_next_keyslice_and_advance(key, len, off);
 
   int low = 0, high = get_count(permutation) - 1;
   while (low <= high) {
@@ -564,25 +593,29 @@ node* node_search(node *n, const void *key, uint32_t len, uint32_t *off, void **
 
     int index = get_index(permutation, mid);
 
-    if (n->keyslice[index] < cur) {
+    int r = compare_key(n->keyslice[index], cur);
+
+    // if (n->keyslice[index] < cur) {
+    if (r < 0) {
       low  = mid + 1;
-    } else if (n->keyslice[index] > cur) {
+    // } else if (n->keyslice[index] > cur) {
+    } else if (r > 0) {
       high = mid - 1;
     } else {
       border_node *bn = (border_node *)n;
       uint8_t status;
       __atomic_load(&bn->keylen[index], &status, __ATOMIC_ACQUIRE);
-      if (status == magic_link) {
+      if (unlikely(status == magic_link)) {
         // need to go to a deeper layer
         return bn->lv[index];
-      } else if (status == magic_unstable) {
+      } else if (unlikely(status == magic_unstable)) {
         // restore offset for retry
         *off = pre;
         return (void *)1;
       } else {
         uint32_t clen = *(uint32_t *)&(bn->lv[index]);
-        uint32_t cptr = *((uint32_t *)&(bn->lv[index]) + 1);
-        assert(cptr == *off);
+        uint32_t coff = *((uint32_t *)&(bn->lv[index]) + 1);
+        assert(coff == *off);
         if (clen == len && !memcmp((char *)key + *off, (char *)(bn->suffix[index]) + *off, len - *off))
           // found value
           *suffix = bn->suffix[index];
@@ -627,6 +660,14 @@ static uint64_t border_node_split(border_node *bn, border_node *bn1)
     bn1->lv[i]       = bn1->lv[i + 7];
   }
 
+  uint64_t fence = bn1->keyslice[0];
+
+  // now trim the fence key
+  uint32_t  len = *(uint32_t *)&(bn1->lv[0]);
+  uint32_t *off = ((uint32_t *)&(bn1->lv[0])) + 1;
+  uint64_t cur = get_next_keyslice_and_advance_and_record(bn1->suffix[0], len, off, &bn1->keylen[0]);
+  bn1->keyslice[0] = cur;
+
   // then we set each node's `permutation` field
   permutation = 0;
   for (int i = 0; i < 7; ++i) update_permutation(permutation, i, i);
@@ -645,7 +686,7 @@ static uint64_t border_node_split(border_node *bn, border_node *bn1)
   // `__ATOMIC_RELEASE` will make sure all the relaxed operation above been seen by other threads
   __atomic_store(&bn->next, &bn1, __ATOMIC_RELEASE);
 
-  return bn1->keyslice[0];
+  return fence;
 }
 
 // require: `in` and `in1` is locked
@@ -691,7 +732,7 @@ static uint64_t interior_node_split(interior_node *in, interior_node *in1)
 }
 
 // require: `n` is locked
-node* node_split_and_insert(node *n, uint64_t *fence)
+node* node_split(node *n, uint64_t *fence)
 {
   uint32_t version = node_get_version(n);
   assert(is_locked(version));
@@ -719,32 +760,57 @@ void free_node_raw(node *n)
   free((void *)n);
 }
 
-void node_print(node *n, int detail)
+static void border_node_print_at_index(border_node *bn, int index)
+{
+  assert(bn->keylen[index] != magic_unstable);
+  if (bn->keylen[index] != magic_link) {
+    char buf[256];
+    uint32_t len = *(uint32_t *)&(bn->lv[index]);
+    uint32_t off = *((uint32_t *)&(bn->lv[index]) + 1);
+    memcpy(buf, bn->suffix[index], len);
+    buf[len] = 0;
+    printf("slicelen: %u offset: %u  %s\n", bn->keylen[index], off, buf);
+  } else {
+    printf("subtree\n");
+  }
+}
+
+static void interior_node_print_at_index(interior_node *in, int index)
+{
+  node *n = in->child[index];
+  uint32_t v = node_get_version(n);
+  if (is_border(v)) {
+    node_print(n);
+  } else {
+    printf("\n");
+  }
+}
+
+void node_print(node *n)
 {
   uint32_t version = node_get_version(n);
   uint64_t permutation = node_get_permutation(n);
   int count = get_count(permutation);
 
+  printf("is_root:      %u\n", !!is_root(version));
+  printf("is_border:    %u\n", !!is_border(version));
   printf("is_locked:    %u\n", !!is_locked(version));
   printf("is_inserting: %u  vinsert: %u\n", !!is_inserting(version), get_vinsert(version));
-  printf("is_spliting:  %u  vsplit:  %u\n", !!is_spliting(version), get_vsplit(version));
-  printf("is_border:    %u\n", !!is_border(version));
-  printf("is_root:      %u\n", !!is_root(version));
+  printf("is_spliting:  %u  vsplit:  %u\n\n", !!is_spliting(version), get_vsplit(version));
 
-  if (detail) {
-    for (int i = 0; i < count; ++i) {
-      int index = get_index(permutation, i);
-      printf("%2d %llu\n", index, n->keyslice[index]);
-    }
-  } else {
-    if (count > 0) {
-      int index = get_index(permutation, 0);
-      printf("%llu\n", n->keyslice[index]);
-    }
-    if (count > 1) {
-      int index = get_index(permutation, count - 1);
-      printf("%llu\n", n->keyslice[index]);
-    }
+  if (is_interior(version))
+    interior_node_print_at_index((interior_node *)n, 0);
+
+  for (int i = 0; i < count; ++i) {
+    int index = get_index(permutation, i);
+    char buf[9];
+    memcpy(buf, &n->keyslice[index], sizeof(uint64_t));
+    buf[8] = 0;
+    printf("%-2d slice: %s  ", index, buf);
+    if (is_border(version))
+      border_node_print_at_index((border_node *)n, index);
+    else
+      interior_node_print_at_index((interior_node *)n, index + 1);
   }
   printf("\n");
 }

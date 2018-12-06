@@ -8,6 +8,9 @@
 #include <assert.h>
 #include <string.h>
 
+// TODO: remove this
+#include <stdio.h>
+
 #include "mass_tree.h"
 
 mass_tree* new_mass_tree(int thread_num)
@@ -16,9 +19,7 @@ mass_tree* new_mass_tree(int thread_num)
   mass_tree *mt = (mass_tree *)malloc(sizeof(mass_tree));
 
   node *r = new_node(Border);
-  uint32_t v = node_get_version(r);
-  v = set_root(v);
-  node_set_version(r, v);
+  node_set_root(r);
 
   mt->root = r;
 
@@ -28,13 +29,18 @@ mass_tree* new_mass_tree(int thread_num)
 // require: no other thread is visiting this tree
 void free_mass_tree(mass_tree *mt)
 {
-  free_node(mt->root);
+  (void)mt;
+  // TODO: uncomment this
+  // free_node(mt->root);
 }
 
 // require: `n` and `n1` are locked
 static node* mass_tree_grow(node *n, uint64_t fence, node *n1)
 {
   node *r = new_node(Interior);
+
+  // TODO: not necessary, lock it to make `node_insert` happy
+  node_lock(r);
 
   // TODO: some operations below is not required to be atomic
   node_set_root(r);
@@ -48,6 +54,8 @@ static node* mass_tree_grow(node *n, uint64_t fence, node *n1)
 
   node_unset_root(n);
   node_unset_root(n1);
+
+  node_unlock(r);
 
   return r;
 }
@@ -75,7 +83,7 @@ static node* find_border_node(node *r, const void *key, uint32_t len, uint32_t *
     }
 
     uint32_t pre = *off; // save the offset of comparation for retry
-    node *n1 = node_locate_child(n, key, len, off);
+    node *n1 = node_descend(n, key, len, off);
     assert(n1);
     uint32_t v1 = node_get_stable_version(n1);
 
@@ -140,7 +148,7 @@ static void mass_tree_promote_split_node(mass_tree *mt, node *n, uint64_t fence,
     p1 = node_split(p, &fence1);
     assert(fence1);
     uint32_t tmp = 0;
-    if (fence < fence1)
+    if (compare_key(fence, fence1) < 0)
       assert((int)node_insert(p, &fence, sizeof(uint64_t), &tmp, n1, 1 /* is_link */) == 1);
     else
       assert((int)node_insert(p1, &fence, sizeof(uint64_t), &tmp, n1, 1 /* is_link */) == 1);
@@ -184,12 +192,12 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
     }
   }
 
-  void *v = node_insert(n, key, len, &off, val, 0 /* is_link */);
-  switch ((uint64_t)v) {
+  void *ret = node_insert(n, key, len, &off, val, 0 /* is_link */);
+  switch ((uint64_t)ret) {
     case 0: // key existed
     case 1: // key inserted
       node_unlock(n);
-      return (int)v;
+      return (int)ret;
     case -1: { // need to create a deeper layer
       node *n1 = new_node(Border);
       node_set_root(n1);
@@ -211,13 +219,9 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
       uint64_t fence = 0;
       node *n1 = node_split(n, &fence);
       assert(fence);
-      uint64_t cur = 0;
-      if ((off + sizeof(uint64_t)) > len)
-        memcpy(&cur, key, len - off); // other bytes will be 0
-      else
-        cur = *((uint64_t *)((char *)key + off));
+      uint64_t cur = get_next_keyslice(key, len, off);
       // equal is not possible
-      if (cur < fence)
+      if (compare_key(cur, fence) < 0)
         assert((int)node_insert(n, key, len, &off, val, 0 /* is_link */) == 1);
       else
         assert((int)node_insert(n1, key, len, &off, val, 0 /* is_link */) == 1);
@@ -227,7 +231,7 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
     }
     default: // need to go to a deeper layer
       node_unlock(n);
-      r = (node *)v;
+      r = (node *)ret;
       goto again;
   }
 }
@@ -242,8 +246,10 @@ void* mass_tree_get(mass_tree *mt, const void *key, uint32_t len)
   n = find_border_node(r, key, len, &off, &v);
 
   forward:
-  if (is_deleted(v))
+  if (is_deleted(v)) {
+    assert(0);
     goto again;
+  }
 
   void *suffix;
   node *next_layer = node_search(n, key, len, &off, &suffix);
@@ -263,7 +269,16 @@ void* mass_tree_get(mass_tree *mt, const void *key, uint32_t len)
   }
 
   if (suffix) return suffix; // key found
-  if (!next_layer) return 0; // key not exists
+  if (!next_layer) {
+    {
+      char buf[256];
+      memcpy(buf, key, len);
+      buf[len] = 0;
+      printf("%s\n", buf);
+    }
+    node_print(n);
+    return 0; // key not exists
+  }
   if ((uint64_t)next_layer == 1) goto forward; // unstable
 
   r = next_layer;
