@@ -16,9 +16,9 @@ mass_tree* new_mass_tree(int thread_num)
   mass_tree *mt = (mass_tree *)malloc(sizeof(mass_tree));
 
   node *r = new_node(Border);
-  uint32_t version = node_get_version(r);
-  version = set_root(version);
-  node_set_version(r, version);
+  uint32_t v = node_get_version(r);
+  v = set_root(v);
+  node_set_version(r, v);
 
   mt->root = r;
 
@@ -52,53 +52,56 @@ static node* mass_tree_grow(node *n, uint64_t fence, node *n1)
   return r;
 }
 
-static node* find_border_node(node *r, const void *key, uint32_t len, uint32_t *off)
+// finx the border node and record stable version
+static node* find_border_node(node *r, const void *key, uint32_t len, uint32_t *off, uint32_t *version)
 {
-  uint32_t version, ori = *off;
+  uint32_t v, ori = *off;
   node *n;
   retry:
     *off = ori; // index to start comparation
     n = r;
     assert(n);
-    version = node_get_stable_version(n);
+    v = node_get_stable_version(n);
     // it's possible that a root has split
-    if (!is_root(version)) {
+    if (!is_root(v)) {
       n = node_get_parent(n);
       goto retry;
     }
 
   descend:
-    if (is_border(version))
+    if (is_border(v)) {
+      *version = v;
       return n;
+    }
 
     uint32_t pre = *off; // save the offset of comparation for retry
     node *n1 = node_locate_child(n, key, len, off);
     assert(n1);
-    uint32_t version1 = node_get_stable_version(n1);
+    uint32_t v1 = node_get_stable_version(n1);
 
     // if there is any state change happened to this node, we need to retry
-    uint32_t diff = node_get_version(n) ^ version;
+    uint32_t diff = node_get_version(n) ^ v;
     if (diff == LOCK_BIT || diff == 0) {
       // case 1: neither insert nor split happens between last stable version and current version,
       //         descend to child node
       n = n1;
-      version = version1;
+      v = v1;
       goto descend;
     }
 
-    uint32_t version2 = node_get_stable_version(n);
-    if (get_vsplit(version2) != get_vsplit(version))
-      // case 2: this node had a split, retry from root, pessimistic
+    uint32_t v2 = node_get_stable_version(n);
+    // case 2: this node had a split, retry from root, pessimistic
+    if (get_vsplit(v2) != get_vsplit(v))
       goto retry;
 
-    *off = pre; // restore offset
-    version = version2;
     // case 3: this node inserted a key, retry this node
+    *off = pre; // restore offset
+    v = v2;
     goto descend;
 }
 
 // require: `n` and `n1` is locked
-static void promote_split_node(mass_tree *mt, node *n, uint64_t fence, node *n1)
+static void mass_tree_promote_split_node(mass_tree *mt, node *n, uint64_t fence, node *n1)
 {
   node *p;
   ascend:
@@ -114,10 +117,10 @@ static void promote_split_node(mass_tree *mt, node *n, uint64_t fence, node *n1)
   // need to set parent here instead of `node_split`
   node_set_parent(n1, p);
 
-  uint32_t version;
+  uint32_t v;
   node *p1;
-  version = node_get_version(p);
-  if (unlikely(is_border(version))) { // `n` is a sub tree
+  v = node_get_version(p);
+  if (unlikely(is_border(v))) { // `n` is a sub tree
     p1 = mass_tree_grow(n, fence, n1);
     node_swap_child(p, n, p1);
     node_unlock(n);
@@ -130,8 +133,8 @@ static void promote_split_node(mass_tree *mt, node *n, uint64_t fence, node *n1)
     node_unlock(n1);
     node_unlock(p);
   } else { // node is full
-    version = set_split(version);
-    node_set_version(p, version);
+    v = set_split(v);
+    node_set_version(p, v);
     node_unlock(n);
     uint64_t fence1 = 0;
     p1 = node_split(p, &fence1);
@@ -151,14 +154,35 @@ static void promote_split_node(mass_tree *mt, node *n, uint64_t fence, node *n1)
 
 int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
 {
-  uint32_t off = 0;
+  uint32_t off = 0, v;
   node *r, *n;
   __atomic_load(&mt->root, &r, __ATOMIC_ACQUIRE);
 
   again:
-  n = find_border_node(r, key, len, &off);
+  n = find_border_node(r, key, len, &off, &v);
   // before we write this node, a lock must be obtained
   node_lock(n);
+
+  uint32_t diff = node_get_version(n) ^ v;
+  if (diff != LOCK_BIT) { // node has changed between we acquire this node and lock this node
+    while (1) {
+      node *next = node_get_next(n);
+      if (next == 0)
+        // there is no split happened, node is valid
+        break;
+      // must lock `next` first
+      node_lock(next);
+      // there might be splits happened, traverse through the link
+      if (!node_include_key(next, key, len, off)) {
+        node_unlock(next);
+        break;
+      } else {
+        // move to next node
+        node_unlock(n);
+        n = next;
+      }
+    }
+  }
 
   void *v = node_insert(n, key, len, &off, val, 0 /* is_link */);
   switch ((uint64_t)v) {
@@ -197,7 +221,8 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
         assert((int)node_insert(n, key, len, &off, val, 0 /* is_link */) == 1);
       else
         assert((int)node_insert(n1, key, len, &off, val, 0 /* is_link */) == 1);
-      promote_split_node(mt, n, fence, n1);
+
+      mass_tree_promote_split_node(mt, n, fence, n1);
       return 1;
     }
     default: // need to go to a deeper layer
@@ -209,29 +234,29 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
 
 void* mass_tree_get(mass_tree *mt, const void *key, uint32_t len)
 {
-  uint32_t off = 0, version;
+  uint32_t off = 0, v;
   node *r, *n;
   __atomic_load(&mt->root, &r, __ATOMIC_ACQUIRE);
 
   again:
-  n = find_border_node(r, key, len, &off);
-  version = node_get_version(n);
+  n = find_border_node(r, key, len, &off, &v);
 
   forward:
-  if (is_deleted(version))
+  if (is_deleted(v))
     goto again;
 
   void *suffix;
   node *next_layer = node_search(n, key, len, &off, &suffix);
 
-  uint32_t diff = node_get_version(n) ^ version;
+  uint32_t diff = node_get_version(n) ^ v;
   if (diff != LOCK_BIT && diff != 0) {
-    version = node_get_stable_version(n);
+    v = node_get_stable_version(n);
     node *next = node_get_next(n);
     // there might be splits happened, traverse through the link
-    while (!is_deleted(version) && next && node_include_key(next, key, len, off)) {
+    // WARN: is there any problem???
+    while (!is_deleted(v) && next && node_include_key(next, key, len, off)) {
       n = next;
-      version = node_get_stable_version(n);
+      v = node_get_stable_version(n);
       next = node_get_next(n);
     }
     goto forward;
@@ -241,6 +266,6 @@ void* mass_tree_get(mass_tree *mt, const void *key, uint32_t len)
   if (!next_layer) return 0; // key not exists
   if ((uint64_t)next_layer == 1) goto forward; // unstable
 
-  n = next_layer;
+  r = next_layer;
   goto again;
 }

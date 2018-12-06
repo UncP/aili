@@ -416,6 +416,7 @@ void worker_redistribute_work(worker *w, uint32_t level)
   }
 }
 
+#ifdef BStar // B* node
 // try to move some key to next node if all of below situations are satisfied
 //   1. next node does not belong to next worker
 //   2. next node share the same parent with this node
@@ -477,9 +478,10 @@ static int worker_handle_full_leaf_node(worker *w, node **curr, path *cp, fence 
   }
   assert(node_insert(*curr, key, len, (const void *)*(val_t *)val) == 1);
 
-  set_val(val, 1);
+  // set_val(val, 1);
   return 1;
 }
+#endif // BStar
 
 // split `*curr` and insert kv-pair, if we reach here, it means one of them happened:
 // 1. there is key prefix conflict
@@ -526,7 +528,7 @@ static void worker_handle_leaf_node_split(worker *w, node **curr, path *cp, fenc
   }
 
   assert(node_insert(*curr, key, len, (const void *)*(val_t *)val) == 1);
-  set_val(val, 1);
+  // set_val(val, 1);
 }
 
 // process keys assigned to this worker in leaf nodes, worker has already obtained the path information
@@ -591,10 +593,10 @@ void worker_execute_on_leaf_nodes(worker *w, batch *b)
     if (op == Write) {
       switch (node_insert(curr, key, len, (const void *)*(val_t *)val)) {
       case 1:  // key insert succeed, we set value to 1
-        set_val(val, 1);
+        // set_val(val, 1);
         break;
       case 0:  // key already exists, we set value to 0
-        set_val(val, 0);
+        // set_val(val, 0);
         break;
       case -1: { // node does not have enough space
         #ifdef BStar // B* node

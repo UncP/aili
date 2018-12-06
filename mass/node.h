@@ -84,14 +84,14 @@ void node_set_parent(node *n, node *p);
 node* node_get_locked_parent(node *n);
 void node_set_first_child(node *n, node *c);
 int node_is_full(node *n);
-int node_include_key(node *n, const void *key, uint32_t len, uint32_t ptr);
-int node_get_conflict_key_index(node *n, const void *key, uint32_t len, uint32_t *ptr, void **ckey, uint32_t *clen);
+int node_include_key(node *n, const void *key, uint32_t len, uint32_t off);
+int node_get_conflict_key_index(node *n, const void *key, uint32_t len, uint32_t *off, void **ckey, uint32_t *clen);
 void node_replace_at_index(node *n, int index, node *n1);
 void node_swap_child(node *n, node *c, node *c1);
-node* node_locate_child(node *n, const void *key, uint32_t len, uint32_t *ptr);
-void* node_insert(node *n, const void *key, uint32_t len, uint32_t *ptr, const void *val, int is_link);
+node* node_locate_child(node *n, const void *key, uint32_t len, uint32_t *off);
+void* node_insert(node *n, const void *key, uint32_t len, uint32_t *off, const void *val, int is_link);
 node* node_split(node *n, uint64_t *fence);
-node* node_search(node *n, const void *key, uint32_t len, uint32_t *ptr, void **suffix);
+node* node_search(node *n, const void *key, uint32_t len, uint32_t *off, void **suffix);
 
 #ifdef Test
 

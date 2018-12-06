@@ -298,7 +298,7 @@ int node_is_full(node *n)
 }
 
 // require: `n` is border node
-int node_include_key(node *n, const void *key, uint32_t len, uint32_t ptr)
+int node_include_key(node *n, const void *key, uint32_t len, uint32_t off)
 {
   // TODO: remove this
   uint32_t version = node_get_version(n);
@@ -311,10 +311,10 @@ int node_include_key(node *n, const void *key, uint32_t len, uint32_t ptr)
   assert(index == 0);
 
   uint64_t cur = 0;
-  if ((ptr + sizeof(uint64_t)) > len)
-    memcpy(&cur, key, len - ptr); // other bytes will be 0
+  if ((off + sizeof(uint64_t)) > len)
+    memcpy(&cur, key, len - off); // other bytes will be 0
   else
-    cur = *((uint64_t *)((char *)key + ptr));
+    cur = *((uint64_t *)((char *)key + off));
 
   return n->keyslice[index] <= cur;
 }
@@ -331,19 +331,19 @@ void node_set_first_child(node *n, node *c)
 }
 
 // require: `n` is locked and is border node
-int node_get_conflict_key_index(node *n, const void *key, uint32_t len, uint32_t *ptr, void **ckey, uint32_t *clen)
+int node_get_conflict_key_index(node *n, const void *key, uint32_t len, uint32_t *off, void **ckey, uint32_t *clen)
 {
   // TODO: remove this
   uint32_t version = node_get_version(n);
   assert(is_locked(version) && is_border(version));
 
   uint64_t cur = 0;
-  if ((*ptr + sizeof(uint64_t)) > len) {
-    memcpy(&cur, key, len - *ptr); // other bytes will be 0
-    *ptr = len;
+  if ((*off + sizeof(uint64_t)) > len) {
+    memcpy(&cur, key, len - *off); // other bytes will be 0
+    *off = len;
   } else {
-    cur = *((uint64_t *)((char *)key + *ptr));
-    *ptr  += sizeof(uint64_t);
+    cur = *((uint64_t *)((char *)key + *off));
+    *off  += sizeof(uint64_t);
   }
 
   // TODO: no need to use atomic operation
@@ -411,7 +411,7 @@ void node_swap_child(node *n, node *c, node *c1)
 }
 
 // require: `n` is interior node
-node* node_locate_child(node *n, const void *key, uint32_t len, uint32_t *ptr)
+node* node_locate_child(node *n, const void *key, uint32_t len, uint32_t *off)
 {
   uint32_t version = node_get_version(n);
   assert(is_interior(version));
@@ -419,12 +419,12 @@ node* node_locate_child(node *n, const void *key, uint32_t len, uint32_t *ptr)
   uint64_t permutation = node_get_permutation(n);
 
   uint64_t cur = 0;
-  if ((*ptr + sizeof(uint64_t)) > len) {
-    memcpy(&cur, key, len - *ptr); // other bytes will be 0
-    *ptr = len;
+  if ((*off + sizeof(uint64_t)) > len) {
+    memcpy(&cur, key, len - *off); // other bytes will be 0
+    *off = len;
   } else {
-    cur = *((uint64_t *)((char *)key + *ptr));
-    *ptr += sizeof(uint64_t);
+    cur = *((uint64_t *)((char *)key + *off));
+    *off += sizeof(uint64_t);
   }
 
   int first = 0, count = get_count(permutation);
@@ -446,7 +446,7 @@ node* node_locate_child(node *n, const void *key, uint32_t len, uint32_t *ptr)
 }
 
 // require: `n` is locked
-void* node_insert(node *n, const void *key, uint32_t len, uint32_t *ptr, const void *val, int is_link)
+void* node_insert(node *n, const void *key, uint32_t len, uint32_t *off, const void *val, int is_link)
 {
   // TODO: no need to use memory barrier
   uint32_t version = node_get_version(n);
@@ -456,16 +456,16 @@ void* node_insert(node *n, const void *key, uint32_t len, uint32_t *ptr, const v
   uint64_t permutation = node_get_permutation(n);
 
   uint8_t  keylen;
-  uint32_t pre = *ptr;
+  uint32_t pre = *off;
   uint64_t cur = 0;
-  if ((*ptr + sizeof(uint64_t)) > len) {
-    memcpy(&cur, key, len - *ptr); // other bytes will be 0
-    keylen = len - *ptr;
-    *ptr = len;
+  if ((*off + sizeof(uint64_t)) > len) {
+    memcpy(&cur, key, len - *off); // other bytes will be 0
+    keylen = len - *off;
+    *off = len;
   } else {
-    cur = *((uint64_t *)((char *)key + *ptr));
+    cur = *((uint64_t *)((char *)key + *off));
     keylen = sizeof(uint64_t);
-    *ptr  += sizeof(uint64_t);
+    *off  += sizeof(uint64_t);
   }
 
   int low = 0, count = get_count(permutation), high = count - 1;
@@ -492,11 +492,11 @@ void* node_insert(node *n, const void *key, uint32_t len, uint32_t *ptr, const v
       } else {
         uint32_t clen = *(uint32_t *)&(bn->lv[index]);
         uint32_t cptr = *((uint32_t *)&(bn->lv[index]) + 1);
-        assert(cptr == *ptr);
-        if (clen == len && !memcmp((char *)key + *ptr, (char *)(bn->suffix[index]) + *ptr, len - *ptr))
+        assert(cptr == *off);
+        if (clen == len && !memcmp((char *)key + *off, (char *)(bn->suffix[index]) + *off, len - *off))
           // key existed
           return (void *)0;
-        *ptr = pre;
+        *off = pre;
         // need to create a deeper layer
         return (void *)-1;
       }
@@ -505,7 +505,7 @@ void* node_insert(node *n, const void *key, uint32_t len, uint32_t *ptr, const v
 
   // node is full
   if (count == max_key_count) {
-    *ptr = pre;
+    *off = pre;
     return (void *)-2;
   }
 
@@ -521,7 +521,7 @@ void* node_insert(node *n, const void *key, uint32_t len, uint32_t *ptr, const v
       uint32_t *len_ptr = (uint32_t *)&(bn->lv[count]);
       uint32_t *off_ptr = len_ptr + 1;
       *len_ptr = len;
-      *off_ptr = *ptr;
+      *off_ptr = *off;
     } else {
       bn->keylen[count] = magic_link;
       bn->lv[count] = (void *)val;
@@ -539,7 +539,7 @@ void* node_insert(node *n, const void *key, uint32_t len, uint32_t *ptr, const v
 }
 
 // require: `n` is border node
-node* node_search(node *n, const void *key, uint32_t len, uint32_t *ptr, void **suffix)
+node* node_search(node *n, const void *key, uint32_t len, uint32_t *off, void **suffix)
 {
   uint32_t version = node_get_version(n);
   assert(is_border(version));
@@ -548,14 +548,14 @@ node* node_search(node *n, const void *key, uint32_t len, uint32_t *ptr, void **
 
   uint64_t permutation = node_get_permutation(n);
 
-  uint32_t pre = *ptr;
+  uint32_t pre = *off;
   uint64_t cur = 0;
-  if ((*ptr + sizeof(uint64_t)) > len) {
-    memcpy(&cur, key, len - *ptr); // other bytes will be 0
-    *ptr = len;
+  if ((*off + sizeof(uint64_t)) > len) {
+    memcpy(&cur, key, len - *off); // other bytes will be 0
+    *off = len;
   } else {
-    cur = *((uint64_t *)((char *)key + *ptr));
-    *ptr += sizeof(uint64_t);
+    cur = *((uint64_t *)((char *)key + *off));
+    *off += sizeof(uint64_t);
   }
 
   int low = 0, high = get_count(permutation) - 1;
@@ -577,13 +577,13 @@ node* node_search(node *n, const void *key, uint32_t len, uint32_t *ptr, void **
         return bn->lv[index];
       } else if (status == magic_unstable) {
         // restore offset for retry
-        *ptr = pre;
+        *off = pre;
         return (void *)1;
       } else {
         uint32_t clen = *(uint32_t *)&(bn->lv[index]);
         uint32_t cptr = *((uint32_t *)&(bn->lv[index]) + 1);
-        assert(cptr == *ptr);
-        if (clen == len && !memcmp((char *)key + *ptr, (char *)(bn->suffix[index]) + *ptr, len - *ptr))
+        assert(cptr == *off);
+        if (clen == len && !memcmp((char *)key + *off, (char *)(bn->suffix[index]) + *off, len - *off))
           // found value
           *suffix = bn->suffix[index];
         return (void *)0;
@@ -691,7 +691,7 @@ static uint64_t interior_node_split(interior_node *in, interior_node *in1)
 }
 
 // require: `n` is locked
-node* node_split(node *n, uint64_t *fence)
+node* node_split_and_insert(node *n, uint64_t *fence)
 {
   uint32_t version = node_get_version(n);
   assert(is_locked(version));

@@ -2,7 +2,7 @@ CC=gcc
 CFLAGS=-std=c99 -Wall -Werror -Wextra -O3
 IFLAGS=-I./third_party
 LFLAGS=./third_party/c_hashmap/libhashmap.a -lpthread
-PFLAGS=-DLazy -DPrefix
+PFLAGS=-DLazy
 DFLAGS=
 BFLAGS=
 MFLAGS=-DTest

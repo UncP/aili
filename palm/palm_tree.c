@@ -161,6 +161,7 @@ void palm_tree_validate(palm_tree *pt)
   node *ptr = pt->root;
   uint32_t total_count = 0;
   float total_coverage = 0;
+  float average_prefix = 0;
   while (ptr) {
     node *next = ptr->first;
     node *cur = ptr;
@@ -169,22 +170,27 @@ void palm_tree_validate(palm_tree *pt)
     uint32_t less50 = 0;
     uint32_t less60 = 0;
     uint32_t less70 = 0;
+    uint32_t less80 = 0;
     while (cur) {
       btree_node_validate(cur);
+      if (cur->level == 0) average_prefix += cur->pre;
       float c = node_get_coverage(cur);
       if (c < 0.5) ++less50;
       if (c < 0.6) ++less60;
       if (c < 0.7) ++less70;
+      if (c < 0.8) ++less80;
       coverage += c;
       ++count;
       cur = cur->next;
     }
-    printf("level %u:  count: %-4u  coverage: %.2f%%  <50%%: %-4u  <60%%: %-4u  <70%%: %-4u\n",
-      ptr->level, count, (coverage * 100 / count), less50, less60, less70);
+    printf("level %u:  count: %-4u  coverage: %.2f%%  <50%%: %-4u  <60%%: %-4u  <70%%: %-4u  <80%%: %-4u\n",
+      ptr->level, count, (coverage * 100 / count), less50, less60, less70, less80);
     total_count += count;
     total_coverage += coverage;
+    average_prefix /= count;
     ptr = next;
   }
+  printf("average prefix length: %.2f\n", average_prefix);
   printf("total node count: %u\naverage coverage: %.2f%%\n",
     total_count, total_coverage * 100 / total_count);
 }
