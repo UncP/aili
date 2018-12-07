@@ -356,7 +356,6 @@ int node_include_key(node *n, const void *key, uint32_t len, uint32_t off)
 
   uint64_t cur = get_next_keyslice(key, len, off);
 
-  // return n->keyslice[index] <= cur;
   return compare_key(n->keyslice[index], cur) <= 0;
 }
 
@@ -508,10 +507,8 @@ void* node_insert(node *n, const void *key, uint32_t len, uint32_t *off, const v
 
     int r = compare_key(n->keyslice[index], cur);
 
-    // if (n->keyslice[index] < cur) {
     if (r < 0) {
       low  = mid + 1;
-    // } else if (n->keyslice[index] > cur) {
     } else if (r > 0) {
       high = mid - 1;
     } else {
@@ -560,6 +557,7 @@ void* node_insert(node *n, const void *key, uint32_t len, uint32_t *off, const v
       *off_ptr = *off;
     } else {
       bn->keylen[count] = magic_link;
+      bn->suffix[count] = 0;
       bn->lv[count] = (void *)val;
     }
   } else {
@@ -652,29 +650,49 @@ static uint64_t border_node_split(border_node *bn, border_node *bn1)
     bn->lv[i]       = bn1->lv[i];
   }
 
-  // and move the other half
-  for (int i = 0; i < 8; ++i) {
-    bn1->keyslice[i] = bn1->keyslice[i + 7];
-    bn1->keylen[i]   = bn1->keylen[i + 7];
-    bn1->suffix[i]   = bn1->suffix[i + 7];
-    bn1->lv[i]       = bn1->lv[i + 7];
+  uint64_t fence = bn1->keyslice[7];
+
+  // TODO: remove this
+  assert(bn1->keylen[7] != magic_unstable);
+
+  if (likely(bn1->keylen[7] != magic_link)) {
+    void *key = bn1->suffix[7];
+    uint32_t len = *(uint32_t *)&(bn1->lv[7]);
+    uint32_t off = *((uint32_t *)&bn1->lv[7] + 1);
+
+    // and move the other half
+    for (int i = 0; i < 7; ++i) {
+      bn1->keyslice[i] = bn1->keyslice[i + 8];
+      bn1->keylen[i]   = bn1->keylen[i + 8];
+      bn1->suffix[i]   = bn1->suffix[i + 8];
+      bn1->lv[i]       = bn1->lv[i + 8];
+    }
+
+    // then we set each node's `permutation` field
+    permutation = 0;
+    for (int i = 0; i < 7; ++i) update_permutation(permutation, i, i);
+    node_set_permutation((node *)bn, permutation);
+    node_set_permutation((node *)bn1, permutation);
+
+    // now insert the trimmed fence key
+    node_insert((node *)bn1, key, len, &off, 0, 0 /* is_link */);
+  } else {
+    // and move the other half
+    for (int i = 0; i < 8; ++i) {
+      bn1->keyslice[i] = bn1->keyslice[i + 7];
+      bn1->keylen[i]   = bn1->keylen[i + 7];
+      bn1->suffix[i]   = bn1->suffix[i + 7];
+      bn1->lv[i]       = bn1->lv[i + 7];
+    }
+
+    // then we set each node's `permutation` field
+    permutation = 0;
+    for (int i = 0; i < 7; ++i) update_permutation(permutation, i, i);
+    node_set_permutation((node *)bn, permutation);
+
+    update_permutation(permutation, 7, 7);
+    node_set_permutation((node *)bn1, permutation);
   }
-
-  uint64_t fence = bn1->keyslice[0];
-
-  // now trim the fence key
-  uint32_t  len = *(uint32_t *)&(bn1->lv[0]);
-  uint32_t *off = ((uint32_t *)&(bn1->lv[0])) + 1;
-  uint64_t cur = get_next_keyslice_and_advance_and_record(bn1->suffix[0], len, off, &bn1->keylen[0]);
-  bn1->keyslice[0] = cur;
-
-  // then we set each node's `permutation` field
-  permutation = 0;
-  for (int i = 0; i < 7; ++i) update_permutation(permutation, i, i);
-  node_set_permutation((node *)bn, permutation);
-
-  update_permutation(permutation, 7, 7);
-  node_set_permutation((node *)bn1, permutation);
 
   // finally modify `next` and `prev` pointer
   border_node *old_next;
