@@ -46,8 +46,7 @@ static node* mass_tree_grow(node *n, uint64_t fence, node *n1)
   node_set_root(r);
 
   node_set_first_child(r, n);
-  uint32_t off = 0;
-  assert((int)node_insert(r, &fence, sizeof(uint64_t), &off, n1, 1 /* is_link */) == 1);
+  assert((int)node_insert(r, &fence, sizeof(uint64_t), 0 /* off */, n1, 1 /* is_link */) == 1);
 
   node_set_parent(n, r);
   node_set_parent(n1, r);
@@ -61,12 +60,11 @@ static node* mass_tree_grow(node *n, uint64_t fence, node *n1)
 }
 
 // finx the border node and record stable version
-static node* find_border_node(node *r, const void *key, uint32_t len, uint32_t *off, uint32_t *version)
+static node* find_border_node(node *r, const void *key, uint32_t len, uint32_t off, uint32_t *version)
 {
-  uint32_t v, ori = *off;
+  uint32_t v;
   node *n;
   retry:
-    *off = ori; // index to start comparation
     n = r;
     assert(n);
     v = node_get_stable_version(n);
@@ -82,7 +80,6 @@ static node* find_border_node(node *r, const void *key, uint32_t len, uint32_t *
       return n;
     }
 
-    uint32_t pre = *off; // save the offset of comparation for retry
     node *n1 = node_descend(n, key, len, off);
     assert(n1);
     uint32_t v1 = node_get_stable_version(n1);
@@ -103,7 +100,6 @@ static node* find_border_node(node *r, const void *key, uint32_t len, uint32_t *
       goto retry;
 
     // case 3: this node inserted a key, retry this node
-    *off = pre; // restore offset
     v = v2;
     goto descend;
 }
@@ -135,8 +131,7 @@ static void mass_tree_promote_split_node(mass_tree *mt, node *n, uint64_t fence,
     node_unlock(n1);
     node_unlock(p);
   } else if (likely(node_is_full(p) == 0)) {
-    uint32_t tmp = 0;
-    assert((int)node_insert(p, &fence, sizeof(uint64_t), &tmp, n1, 1 /* is_link */) == 1);
+    assert((int)node_insert(p, &fence, sizeof(uint64_t), 0 /* off */, n1, 1 /* is_link */) == 1);
     node_unlock(n);
     node_unlock(n1);
     node_unlock(p);
@@ -147,11 +142,10 @@ static void mass_tree_promote_split_node(mass_tree *mt, node *n, uint64_t fence,
     uint64_t fence1 = 0;
     p1 = node_split(p, &fence1);
     assert(fence1);
-    uint32_t tmp = 0;
     if (compare_key(fence, fence1) < 0)
-      assert((int)node_insert(p, &fence, sizeof(uint64_t), &tmp, n1, 1 /* is_link */) == 1);
+      assert((int)node_insert(p, &fence, sizeof(uint64_t), 0 /* off */, n1, 1 /* is_link */) == 1);
     else
-      assert((int)node_insert(p1, &fence, sizeof(uint64_t), &tmp, n1, 1 /* is_link */) == 1);
+      assert((int)node_insert(p1, &fence, sizeof(uint64_t), 0 /* off */, n1, 1 /* is_link */) == 1);
     node_unlock(n1);
     n = p;
     fence = fence1;
@@ -167,7 +161,7 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
   __atomic_load(&mt->root, &r, __ATOMIC_ACQUIRE);
 
   again:
-  n = find_border_node(r, key, len, &off, &v);
+  n = find_border_node(r, key, len, off, &v);
   // before we write this node, a lock must be obtained
   node_lock(n);
 
@@ -192,7 +186,7 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
     }
   }
 
-  void *ret = node_insert(n, key, len, &off, val, 0 /* is_link */);
+  void *ret = node_insert(n, key, len, off, val, 0 /* is_link */);
   switch ((uint64_t)ret) {
     case 0: // key existed
     case 1: // key inserted
@@ -203,12 +197,10 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
       node_set_root(n1);
       void *ckey;
       uint32_t clen;
-      int idx = node_get_conflict_key_index(n, key, len, &off, &ckey, &clen);
+      int idx = node_get_conflict_key_index(n, key, len, off, &ckey, &clen);
 
-      uint32_t pre = off;
-      assert((int)node_insert(n1, ckey, clen, &off, 0, 0 /* is_link */) == 1);
-      off = pre;
-      assert((int)node_insert(n1, key, len, &off, val, 0 /* is_link */) == 1);
+      assert((int)node_insert(n1, ckey, clen, off, 0, 0 /* is_link */) == 1);
+      assert((int)node_insert(n1, key, len, off, val, 0 /* is_link */) == 1);
 
       node_set_parent(n1, n);
 
@@ -222,9 +214,9 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
       uint64_t cur = get_next_keyslice(key, len, off);
       // equal is not possible
       if (compare_key(cur, fence) < 0)
-        assert((int)node_insert(n, key, len, &off, val, 0 /* is_link */) == 1);
+        assert((int)node_insert(n, key, len, off, val, 0 /* is_link */) == 1);
       else
-        assert((int)node_insert(n1, key, len, &off, val, 0 /* is_link */) == 1);
+        assert((int)node_insert(n1, key, len, off, val, 0 /* is_link */) == 1);
 
       mass_tree_promote_split_node(mt, n, fence, n1);
       return 1;
@@ -232,6 +224,7 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
     default: // need to go to a deeper layer
       node_unlock(n);
       r = (node *)ret;
+      off = advance_key_offset(len, off);
       goto again;
   }
 }
@@ -243,7 +236,7 @@ void* mass_tree_get(mass_tree *mt, const void *key, uint32_t len)
   __atomic_load(&mt->root, &r, __ATOMIC_ACQUIRE);
 
   again:
-  n = find_border_node(r, key, len, &off, &v);
+  n = find_border_node(r, key, len, off, &v);
 
   forward:
   if (is_deleted(v)) {
@@ -252,7 +245,7 @@ void* mass_tree_get(mass_tree *mt, const void *key, uint32_t len)
   }
 
   void *suffix;
-  node *next_layer = node_search(n, key, len, &off, &suffix);
+  node *next_layer = node_search(n, key, len, off, &suffix);
 
   uint32_t diff = node_get_version(n) ^ v;
   if (diff != LOCK_BIT && diff != 0) {
@@ -282,5 +275,6 @@ void* mass_tree_get(mass_tree *mt, const void *key, uint32_t len)
   if ((uint64_t)next_layer == 1) goto forward; // unstable
 
   r = next_layer;
+  off = advance_key_offset(len, off);
   goto again;
 }
