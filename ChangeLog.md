@@ -4,6 +4,7 @@
 
 1. 改进版的 B<sup>link</sup> Tree
 2. （BUG）border 节点分裂时没有 fence key 截断，对应的，interior 节点下降时只有 keyslice 相等时，才能进行偏移的更新
+3. （BUG）key 偏移更新问题。第二个 bug 是错的，只有当下降到 subtree 时，才需要进行 key 偏移的更新，同时只有当生成 subtree 时才需要进行截断
 
 
 

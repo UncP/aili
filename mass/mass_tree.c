@@ -199,7 +199,9 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
       uint32_t clen;
       int idx = node_get_conflict_key_index(n, key, len, off, &ckey, &clen);
 
-      assert((int)node_insert(n1, ckey, clen, off, 0, 0 /* is_link */) == 1);
+      uint32_t coff = advance_key_offset(clen, off);
+      assert((int)node_insert(n1, ckey, clen, coff, 0, 0 /* is_link */) == 1);
+      off = advance_key_offset(len, off);
       assert((int)node_insert(n1, key, len, off, val, 0 /* is_link */) == 1);
 
       node_set_parent(n1, n);
