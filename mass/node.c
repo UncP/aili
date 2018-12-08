@@ -17,11 +17,11 @@
 
 // `permutation` is uint64_t
 #define get_count(permutation) ((int)((permutation) >> 60))
-#define get_index(permutation, index) ((int)(((permutation) >> (4 * (14 - index))) & 0xf))
-#define update_permutation(permutation, index, value) {                       \
-  uint64_t right = (permutation << ((index + 1) * 4)) >> ((index + 2) * 4);   \
-  uint64_t left = (permutation >> ((15 - index) * 4)) << ((15 - index) * 4);  \
-  uint64_t middle = ((uint64_t)value & 0xf) << ((14 - index) * 4);            \
+#define get_index(permutation, index) ((int)(((permutation) >> (4 * (14 - (index)))) & 0xf))
+#define update_permutation(permutation, index, value) {                           \
+  uint64_t right = (permutation << (((index) + 1) * 4)) >> (((index) + 2) * 4);   \
+  uint64_t left = (permutation >> ((15 - (index)) * 4)) << ((15 - (index)) * 4);  \
+  uint64_t middle = ((uint64_t)(value) & 0xf) << ((14 - (index)) * 4);            \
   permutation = left | middle | right;                                        \
   permutation = permutation + ((uint64_t)1 << 60);                            \
 }
@@ -470,10 +470,7 @@ node* node_descend(node *n, const void *key, uint32_t len, uint32_t off)
     int index = get_index(permutation, middle);
 
     int r = compare_key(n->keyslice[index], cur);
-    if (r == 0) {
-      first = middle + 1;
-      break;
-    } else if (r < 0) {
+    if (r <= 0) {
       first = middle + 1;
       count -= half + 1;
     } else {
@@ -481,14 +478,17 @@ node* node_descend(node *n, const void *key, uint32_t len, uint32_t off)
     }
   }
 
+  int index = likely(first) ? (get_index(permutation, first - 1) + 1) : 0;
+
   // {
   //   char buf[256];
   //   memcpy(buf, key, len);
   //   buf[len] = 0;
   //   printf("%u %s\n", first, buf);
+  //   node_print(((interior_node *)n)->child[index]);
   // }
 
-  return ((interior_node *)n)->child[first];
+  return ((interior_node *)n)->child[index];
 }
 
 // require: `n` is locked
@@ -595,10 +595,8 @@ node* node_search(node *n, const void *key, uint32_t len, uint32_t off, void **s
 
     int r = compare_key(n->keyslice[index], cur);
 
-    // if (n->keyslice[index] < cur) {
     if (r < 0) {
       low  = mid + 1;
-    // } else if (n->keyslice[index] > cur) {
     } else if (r > 0) {
       high = mid - 1;
     } else {
@@ -676,15 +674,17 @@ static uint64_t border_node_split(border_node *bn, border_node *bn1)
   // `__ATOMIC_RELEASE` will make sure all the relaxed operation above been seen by other threads
   __atomic_store(&bn->next, &bn1, __ATOMIC_RELEASE);
 
+  // node_print((node *)bn);
+  // node_print((node *)bn1);
   return bn1->keyslice[0];
 }
 
 // require: `in` and `in1` is locked
 static uint64_t interior_node_split(interior_node *in, interior_node *in1)
 {
+  printf("fuck\n");
   // TODO: no need to use atomic operation
   uint64_t permutation = node_get_permutation((node *)in);
-  // TODO: no need to use atomic operation
   int count = get_count(permutation);
   assert(count == max_key_count);
 
@@ -718,6 +718,9 @@ static uint64_t interior_node_split(interior_node *in, interior_node *in1)
   node_set_permutation((node *)in, permutation);
   node_set_permutation((node *)in1, permutation);
 
+  // node_print((node *)in);
+  // node_print((node *)in1);
+  // printf("\ninterior node split over !!!\n");
   return fence;
 }
 
@@ -786,23 +789,110 @@ void node_print(node *n)
   printf("is_border:    %u\n", !!is_border(version));
   printf("is_locked:    %u\n", !!is_locked(version));
   printf("is_inserting: %u  vinsert: %u\n", !!is_inserting(version), get_vinsert(version));
-  printf("is_spliting:  %u  vsplit:  %u\n\n", !!is_spliting(version), get_vsplit(version));
+  printf("is_spliting:  %u  vsplit:  %u\n", !!is_spliting(version), get_vsplit(version));
+  printf("parent:  %p\n\n", node_get_parent(n));
 
-  if (is_interior(version))
+  if (is_interior(version)) {
+    printf("child count: %d\n\n", count + 1);
     interior_node_print_at_index((interior_node *)n, 0);
+  }
 
   for (int i = 0; i < count; ++i) {
     int index = get_index(permutation, i);
     char buf[9];
     memcpy(buf, &n->keyslice[index], sizeof(uint64_t));
     buf[8] = 0;
-    printf("%-2d slice: %s  ", index, buf);
+    printf("%-2d %-2d slice: %s  ", i, index, buf);
     if (is_border(version))
       border_node_print_at_index((border_node *)n, index);
     else
       interior_node_print_at_index((interior_node *)n, index + 1);
   }
   printf("\n");
+}
+
+static void validate(node *n)
+{
+  uint32_t version = node_get_version(n);
+  uint64_t permutation = node_get_permutation(n);
+  int count = get_count(permutation);
+
+  uint64_t pre = n->keyslice[get_index(permutation, 0)];
+  for (int i = 1; i < count; ++i) {
+    uint64_t cur = n->keyslice[get_index(permutation, i)];
+    assert(compare_key(pre, cur) < 0);
+    pre = cur;
+  }
+
+  uint64_t my_first = n->keyslice[get_index(permutation, 0)];
+  uint64_t my_last = n->keyslice[get_index(permutation, count - 1)];
+  if (is_border(version)) {
+    border_node *bn = (border_node *)n;
+    if (bn->prev) {
+      uint64_t ppermutation = node_get_permutation((node *)bn->prev);
+      uint64_t their_last = bn->prev->keyslice[get_index(ppermutation, get_count(ppermutation) - 1)];
+      assert(compare_key(their_last, my_first) < 0);
+    }
+    if (bn->next) {
+      uint64_t npermutation = node_get_permutation((node *)bn->next);
+      uint64_t their_first = bn->next->keyslice[get_index(npermutation, 0)];
+
+      int r = compare_key(my_last, their_first);
+      if (r >= 0)
+      {
+        char buf1[8];
+        memcpy(buf1, &my_last, sizeof(uint64_t));
+        char buf2[8];
+        memcpy(buf2, &their_first, sizeof(uint64_t));
+        printf("%s %s\n", buf1, buf2);
+      }
+
+      assert(r < 0);
+    }
+  } else {
+    interior_node *in = (interior_node *)n;
+    uint64_t fpermutation = node_get_permutation(in->child[0]);
+    uint64_t lpermutation = node_get_permutation(in->child[get_index(permutation, get_count(permutation) - 1) + 1]);
+    uint64_t their_last = in->child[0]->keyslice[get_index(fpermutation, get_count(fpermutation) - 1)];
+    uint64_t their_first = in->child[get_index(permutation, get_count(permutation) - 1) + 1]->keyslice[get_index(lpermutation, 0)];
+
+    int r = compare_key(their_last, my_first);
+    if (r >= 0) {
+      char buf1[9];
+      memcpy(buf1, &their_last, sizeof(uint64_t));
+      buf1[8] = 0;
+      char buf2[9];
+      memcpy(buf2, &my_first, sizeof(uint64_t));
+      buf2[8] = 0;
+      printf("%s %s\n", buf1, buf2);
+      node_print(n);
+      // node_print(in->child[0]);
+    }
+    assert(r < 0);
+    r = compare_key(my_last, their_first);
+    if (r > 0) {
+      char buf1[9];
+      memcpy(buf1, &my_last, sizeof(uint64_t));
+      buf1[8] = 0;
+      char buf2[9];
+      memcpy(buf2, &their_first, sizeof(uint64_t));
+      buf2[8] = 0;
+      printf("%s %s\n", buf1, buf2);
+      // node_print(n);
+      node_print(in->child[count]);
+    }
+    assert(r <= 0); // equal is possible
+  }
+}
+
+void node_validate(node *n)
+{
+  validate(n);
+  if (is_interior(node_get_version(n))) {
+    int count = node_get_count(n);
+    for (int i = 0; i <= count; ++i)
+      node_validate(((interior_node *)n)->child[i]);
+  }
 }
 
 #endif /* Test */

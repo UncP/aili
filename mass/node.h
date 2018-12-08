@@ -101,6 +101,7 @@ uint64_t get_next_keyslice(const void *key, uint32_t len, uint32_t off);
 
 void free_node_raw(node *n);
 void node_print(node *n);
+void node_validate(node *n);
 
 #endif /* Test */
 

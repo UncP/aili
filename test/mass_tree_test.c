@@ -71,14 +71,26 @@ void test_mass_tree()
       }
 
       assert(mass_tree_put(mt, slice, len, (const void *)3190) == 1);
+      mass_tree_validate(mt);
+      void *value = mass_tree_get(mt, key, len);
+      if (value == 0) {
+      	char buf[len + 1];
+      	memcpy(buf, key, len);
+      	buf[len] = 0;
+      	printf("%s\n", buf);
+      }
+      assert(value);
+      assert(memcmp(value, key, len) == 0);
     }
   }
 
   // mass_tree_flush(mt);
-  node_print(mt->root);
 
   long long after = mstime();
   printf("\033[31mtotal: %d\033[0m\n\033[32mput time: %.4f  s\033[0m\n", total_keys, (float)(after - before) / 1000);
+
+  node_print(mt->root);
+  mass_tree_validate(mt);
 
   curr = 0;
   flag = 1;
@@ -105,6 +117,12 @@ void test_mass_tree()
       }
 
       void *value = mass_tree_get(mt, key, len);
+      if (value == 0) {
+      	char buf[len + 1];
+      	memcpy(buf, key, len);
+      	buf[len] = 0;
+      	printf("%s\n", buf);
+      }
       assert(value);
       assert(memcmp(value, key, len) == 0);
     }

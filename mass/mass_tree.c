@@ -22,6 +22,7 @@ mass_tree* new_mass_tree(int thread_num)
   node_set_root(r);
 
   mt->root = r;
+  mt->keys = 0;
 
   return mt;
 }
@@ -33,6 +34,15 @@ void free_mass_tree(mass_tree *mt)
   // TODO: uncomment this
   // free_node(mt->root);
 }
+
+#ifdef Test
+
+void mass_tree_validate(mass_tree *mt)
+{
+  node_validate(mt->root);
+}
+
+#endif // Test
 
 // require: `n` and `n1` are locked
 static node* mass_tree_grow(node *n, uint64_t fence, node *n1)
@@ -118,19 +128,28 @@ static void mass_tree_promote_split_node(mass_tree *mt, node *n, uint64_t fence,
     return ;
   }
 
-  // need to set parent here instead of `node_split`
-  node_set_parent(n1, p);
+  // char buf[8] = "va1qwx7h";
+  // if (fence == *(uint64_t *)buf) {
+  //   node_print(n);
+  //   node_print(n1);
+  // }
 
   uint32_t v;
   node *p1;
   v = node_get_version(p);
   if (unlikely(is_border(v))) { // `n` is a sub tree
+    node_set_parent(n1, p);
     p1 = mass_tree_grow(n, fence, n1);
     node_swap_child(p, n, p1);
     node_unlock(n);
     node_unlock(n1);
     node_unlock(p);
   } else if (likely(node_is_full(p) == 0)) {
+    // if (fence == *(uint64_t *)buf) {
+    //   node_print(p);
+    //   assert(0);
+    // }
+    node_set_parent(n1, p);
     assert((int)node_insert(p, &fence, sizeof(uint64_t), 0 /* off */, n1, 1 /* is_link */) == 1);
     node_unlock(n);
     node_unlock(n1);
@@ -142,10 +161,13 @@ static void mass_tree_promote_split_node(mass_tree *mt, node *n, uint64_t fence,
     uint64_t fence1 = 0;
     p1 = node_split(p, &fence1);
     assert(fence1);
-    if (compare_key(fence, fence1) < 0)
+    if (compare_key(fence, fence1) < 0) {
+      node_set_parent(n1, p);
       assert((int)node_insert(p, &fence, sizeof(uint64_t), 0 /* off */, n1, 1 /* is_link */) == 1);
-    else
+    } else {
+      node_set_parent(n1, p1);
       assert((int)node_insert(p1, &fence, sizeof(uint64_t), 0 /* off */, n1, 1 /* is_link */) == 1);
+    }
     node_unlock(n1);
     n = p;
     fence = fence1;
@@ -186,6 +208,8 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
     }
   }
 
+  ++mt->keys;
+
   void *ret = node_insert(n, key, len, off, val, 0 /* is_link */);
   switch ((uint64_t)ret) {
     case 0: // key existed
@@ -219,6 +243,11 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
         assert((int)node_insert(n, key, len, off, val, 0 /* is_link */) == 1);
       else
         assert((int)node_insert(n1, key, len, off, val, 0 /* is_link */) == 1);
+
+      // if (memcmp("vv2yr90l0g", key, len) == 0) {
+      //   node_print(n);
+      //   node_print(n1);
+      // }
 
       mass_tree_promote_split_node(mt, n, fence, n1);
       return 1;
