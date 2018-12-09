@@ -58,8 +58,8 @@ static node* mass_tree_grow(node *n, uint64_t fence, node *n1)
   node_set_first_child(r, n);
   assert((int)node_insert(r, &fence, sizeof(uint64_t), 0 /* off */, n1, 1 /* is_link */) == 1);
 
-  node_set_parent(n, r);
-  node_set_parent(n1, r);
+  node_set_parent_unsafe(n, r);
+  node_set_parent_unsafe(n1, r);
 
   node_unset_root(n);
   node_unset_root(n1);
@@ -138,7 +138,7 @@ static void mass_tree_promote_split_node(mass_tree *mt, node *n, uint64_t fence,
   node *p1;
   v = node_get_version(p);
   if (unlikely(is_border(v))) { // `n` is a sub tree
-    node_set_parent(n1, p);
+    node_set_parent_unsafe(n1, p);
     p1 = mass_tree_grow(n, fence, n1);
     node_swap_child(p, n, p1);
     node_unlock(n);
@@ -149,7 +149,7 @@ static void mass_tree_promote_split_node(mass_tree *mt, node *n, uint64_t fence,
     //   node_print(p);
     //   assert(0);
     // }
-    node_set_parent(n1, p);
+    node_set_parent_unsafe(n1, p);
     assert((int)node_insert(p, &fence, sizeof(uint64_t), 0 /* off */, n1, 1 /* is_link */) == 1);
     node_unlock(n);
     node_unlock(n1);
@@ -162,10 +162,10 @@ static void mass_tree_promote_split_node(mass_tree *mt, node *n, uint64_t fence,
     p1 = node_split(p, &fence1);
     assert(fence1);
     if (compare_key(fence, fence1) < 0) {
-      node_set_parent(n1, p);
+      node_set_parent_unsafe(n1, p);
       assert((int)node_insert(p, &fence, sizeof(uint64_t), 0 /* off */, n1, 1 /* is_link */) == 1);
     } else {
-      node_set_parent(n1, p1);
+      node_set_parent_unsafe(n1, p1);
       assert((int)node_insert(p1, &fence, sizeof(uint64_t), 0 /* off */, n1, 1 /* is_link */) == 1);
     }
     node_unlock(n1);
@@ -220,7 +220,7 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
       node *n1 = new_node(Border);
       // NOTE: not necessary, lock it to make `node_insert` happy
       node_lock(n1);
-      node_set_root(n1);
+      node_set_root_unsafe(n1);
       void *ckey;
       uint32_t clen;
       int idx = node_get_conflict_key_index(n, key, len, off, &ckey, &clen);
@@ -230,7 +230,7 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
       off = advance_key_offset(len, off);
       assert((int)node_insert(n1, key, len, off, val, 0 /* is_link */) == 1);
 
-      node_set_parent(n1, n);
+      node_set_parent_unsafe(n1, n);
 
       node_unlock(n1);
 

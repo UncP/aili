@@ -215,9 +215,18 @@ inline node* node_get_parent(node *n)
   return parent;
 }
 
-inline void node_set_parent(node *n, node *p)
+static inline void node_set_parent(node *n, node *p)
 {
   __atomic_store(&n->parent, &p, __ATOMIC_RELEASE);
+}
+
+inline void node_set_parent_unsafe(node *n, node *p)
+{
+  // TODO: remove this
+  uint32_t version = node_get_version_unsafe(n);
+  assert(is_locked(version));
+
+  __atomic_store(&n->parent, &p, __ATOMIC_RELAXED);
 }
 
 inline node* node_get_next(node *n)
@@ -243,6 +252,15 @@ void node_set_root(node *n)
   assert(!is_root(version));
   version = set_root(version);
   node_set_version(n, version);
+}
+
+// require: `n` is locked and is not root
+void node_set_root_unsafe(node *n)
+{
+  uint32_t version = node_get_version_unsafe(n);
+  assert(is_locked(version) && !is_root(version));
+  version = set_root(version);
+  node_set_version_unsafe(n, version);
 }
 
 // require: `n` is root
@@ -421,7 +439,7 @@ int node_get_conflict_key_index(node *n, const void *key, uint32_t len, uint32_t
 
   border_node *bn = (border_node *)n;
   *ckey = bn->suffix[i];
-  *clen = *(uint32_t *)bn->lv[i];
+  *clen = *(uint32_t *)&(bn->lv[i]);
 
   return i;
 }
