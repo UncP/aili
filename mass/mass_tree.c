@@ -49,10 +49,10 @@ static node* mass_tree_grow(node *n, uint64_t fence, node *n1)
 {
   node *r = new_node(Interior);
 
-  // TODO: not necessary, lock it to make `node_insert` happy
+  // NOTE: not necessary, lock it to make `node_insert` happy
   node_lock(r);
 
-  // TODO: some operations below is not required to be atomic
+  // there is no point to make this `relaxed`
   node_set_root(r);
 
   node_set_first_child(r, n);
@@ -69,7 +69,7 @@ static node* mass_tree_grow(node *n, uint64_t fence, node *n1)
   return r;
 }
 
-// finx the border node and record stable version
+// find the border node and record stable version
 static node* find_border_node(node *r, const void *key, uint32_t len, uint32_t off, uint32_t *version)
 {
   uint32_t v;
@@ -80,7 +80,7 @@ static node* find_border_node(node *r, const void *key, uint32_t len, uint32_t o
     v = node_get_stable_version(n);
     // it's possible that a root has split
     if (!is_root(v)) {
-      n = node_get_parent(n);
+      r = node_get_parent(n);
       goto retry;
     }
 
@@ -218,6 +218,8 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
       return (int)ret;
     case -1: { // need to create a deeper layer
       node *n1 = new_node(Border);
+      // NOTE: not necessary, lock it to make `node_insert` happy
+      node_lock(n1);
       node_set_root(n1);
       void *ckey;
       uint32_t clen;
@@ -230,7 +232,11 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
 
       node_set_parent(n1, n);
 
+      node_unlock(n1);
+
       node_replace_at_index(n, idx, n1);
+
+      node_unlock(n);
       return 1;
     }
     case -2: { // node is full, need to split and promote
@@ -283,8 +289,9 @@ void* mass_tree_get(mass_tree *mt, const void *key, uint32_t len)
     v = node_get_stable_version(n);
     node *next = node_get_next(n);
     // there might be splits happened, traverse through the link
-    // WARN: is there any problem???
-    while (!is_deleted(v) && next && node_include_key(next, key, len, off)) {
+    // TODO: check `node_include_key`
+    // while (!is_deleted(v) && next && node_include_key(next, key, len, off)) {
+    while (next && node_include_key(next, key, len, off)) {
       n = next;
       v = node_get_stable_version(n);
       next = node_get_next(n);
