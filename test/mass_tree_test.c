@@ -88,7 +88,6 @@ void test_mass_tree()
   long long after = mstime();
   printf("\033[31mtotal: %d\033[0m\n\033[32mput time: %.4f  s\033[0m\n", total_keys, (float)(after - before) / 1000);
 
-  node_print(mt->root);
   mass_tree_validate(mt);
 
   curr = 0;

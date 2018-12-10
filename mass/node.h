@@ -71,17 +71,21 @@ typedef struct node
 
 node* new_node(int type);
 void free_node(node *n);
+void node_lock_unsafe(node *n);
+void node_unlock_unsafe(node *n);
 void node_lock(node *n);
 void node_unlock(node *n);
 void node_set_root(node *n);
 void node_set_root_unsafe(node *n);
 void node_unset_root(node *n);
+void node_unset_root_unsafe(node *n);
 uint32_t node_get_version(node *n);
 uint32_t node_get_stable_version(node *n);
 void node_set_version(node *n, uint32_t version);
 node* node_get_next(node *n);
-node* node_get_parent(node *n);
 void node_set_parent_unsafe(node *n, node *p);
+void node_set_parent(node *n, node *p);
+node* node_get_parent(node *n);
 node* node_get_locked_parent(node *n);
 void node_set_first_child(node *n, node *c);
 int node_is_full(node *n);
@@ -95,7 +99,6 @@ node* node_split(node *n, uint64_t *fence);
 node* node_search(node *n, const void *key, uint32_t len, uint32_t off, void **suffix);
 
 int compare_key(uint64_t k1, uint64_t k2);
-uint32_t advance_key_offset(uint32_t len, uint32_t off);
 uint64_t get_next_keyslice(const void *key, uint32_t len, uint32_t off);
 
 #ifdef Test

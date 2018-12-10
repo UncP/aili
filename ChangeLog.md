@@ -11,6 +11,8 @@
 7. （BUG）生成 subtree 后没有解锁节点
 8. （BUG）替换节点时没有修改指示位
 9. （BUG）获取冲突 key 长度时指针使用错误，造成 segment fault
+10. （BUG）生成 subtree 时没有考虑到 keyslice 冲突的问题，通过生成多层 subtree 并且懒惰生成的方式解决
+11. （BUG）生成 subtree 没有设置 subtree 的父节点
 
 
 

@@ -215,17 +215,13 @@ inline node* node_get_parent(node *n)
   return parent;
 }
 
-static inline void node_set_parent(node *n, node *p)
+inline void node_set_parent(node *n, node *p)
 {
   __atomic_store(&n->parent, &p, __ATOMIC_RELEASE);
 }
 
 inline void node_set_parent_unsafe(node *n, node *p)
 {
-  // TODO: remove this
-  uint32_t version = node_get_version_unsafe(n);
-  assert(is_locked(version));
-
   __atomic_store(&n->parent, &p, __ATOMIC_RELAXED);
 }
 
@@ -250,17 +246,15 @@ void node_set_root(node *n)
 {
   uint32_t version = node_get_version(n);
   assert(!is_root(version));
-  version = set_root(version);
-  node_set_version(n, version);
+  node_set_version(n, set_root(version));
 }
 
-// require: `n` is locked and is not root
+// require: `n` is not root
 void node_set_root_unsafe(node *n)
 {
   uint32_t version = node_get_version_unsafe(n);
-  assert(is_locked(version) && !is_root(version));
-  version = set_root(version);
-  node_set_version_unsafe(n, version);
+  assert(!is_root(version));
+  node_set_version_unsafe(n, set_root(version));
 }
 
 // require: `n` is root
@@ -268,8 +262,37 @@ void node_unset_root(node *n)
 {
   uint32_t version = node_get_version(n);
   assert(is_root(version));
-  version = unset_root(version);
-  node_set_version(n, version);
+  node_set_version(n, unset_root(version));
+}
+
+// require: `n` is root
+void node_unset_root_unsafe(node *n)
+{
+  uint32_t version = node_get_version_unsafe(n);
+  assert(is_root(version));
+  node_set_version_unsafe(n, unset_root(version));
+}
+
+void node_lock_unsafe(node *n)
+{
+  node_set_version_unsafe(n, set_lock(node_get_version_unsafe(n)));
+}
+
+void node_unlock_unsafe(node *n)
+{
+  uint32_t version = node_get_version_unsafe(n);
+  assert(is_locked(version));
+
+  if (is_inserting(version)) {
+    version = incr_vinsert(version);
+    version = unset_insert(version);
+  }
+  if (is_spliting(version)) {
+    version = incr_vsplit(version);
+    version = unset_split(version);
+  }
+
+  node_set_version_unsafe(n, unset_lock(version));
 }
 
 // TODO: optimize
@@ -343,18 +366,10 @@ inline int compare_key(uint64_t k1, uint64_t k2)
   return memcmp(&k1, &k2, sizeof(uint64_t));
 }
 
-inline uint32_t advance_key_offset(uint32_t len, uint32_t off)
-{
-  if ((off + sizeof(uint64_t)) > len)
-    off = len;
-  else
-    off += sizeof(uint64_t);
-  return off;
-}
-
 inline uint64_t get_next_keyslice(const void *key, uint32_t len, uint32_t off)
 {
   uint64_t cur = 0;
+  assert(off <= len);
   if ((off + sizeof(uint64_t)) > len)
     memcpy(&cur, key + off, len - off); // other bytes will be 0
   else
@@ -366,6 +381,7 @@ inline uint64_t get_next_keyslice(const void *key, uint32_t len, uint32_t off)
 static inline uint64_t get_next_keyslice_and_advance(const void *key, uint32_t len, uint32_t *off)
 {
   uint64_t cur = 0;
+  assert(*off <= len);
   if ((*off + sizeof(uint64_t)) > len) {
     memcpy(&cur, key + *off, len - *off); // other bytes will be 0
     *off = len;
@@ -381,6 +397,7 @@ static inline uint64_t get_next_keyslice_and_advance_and_record(const void *key,
   uint8_t *keylen)
 {
   uint64_t cur = 0;
+  assert(*off <= len);
   if ((*off + sizeof(uint64_t)) > len) {
     memcpy(&cur, key + *off, len - *off); // other bytes will be 0
     *keylen = len - *off;
@@ -461,6 +478,7 @@ void node_replace_at_index(node *n, int index, node *n1)
   uint8_t unstable = magic_unstable;
   __atomic_store(&bn->keylen[index], &unstable, __ATOMIC_RELEASE);
 
+  bn->suffix[index] = 0;
   bn->lv[index] = n1;
 
   uint8_t link = magic_link;
@@ -529,6 +547,10 @@ node* node_descend(node *n, const void *key, uint32_t len, uint32_t off)
 }
 
 // require: `n` is locked
+// if succeed, return 1;
+// if existed, return 0;
+// if need to go to a deeper layer, return that layer's pointer;
+// if need to create a new layer, return -1
 void* node_insert(node *n, const void *key, uint32_t len, uint32_t off, const void *val, int is_link)
 {
   uint32_t version = node_get_version_unsafe(n);
@@ -815,7 +837,8 @@ static void interior_node_print_at_index(interior_node *in, int index)
   node *n = in->child[index];
   uint32_t v = node_get_version(n);
   if (is_border(v)) {
-    node_print(n);
+    // node_print(n);
+    printf("\n");
   } else {
     printf("\n");
   }

@@ -50,21 +50,21 @@ static node* mass_tree_grow(node *n, uint64_t fence, node *n1)
   node *r = new_node(Interior);
 
   // NOTE: not necessary, lock it to make `node_insert` happy
-  node_lock(r);
+  node_lock_unsafe(r);
 
-  // there is no point to make this `relaxed`
-  node_set_root(r);
+  node_set_root_unsafe(r);
 
   node_set_first_child(r, n);
+
+  node_set_parent_unsafe(n1, r);
+  node_set_parent(n, r);
+
   assert((int)node_insert(r, &fence, sizeof(uint64_t), 0 /* off */, n1, 1 /* is_link */) == 1);
 
-  node_set_parent_unsafe(n, r);
-  node_set_parent_unsafe(n1, r);
-
+  node_unset_root_unsafe(n1);
   node_unset_root(n);
-  node_unset_root(n1);
 
-  node_unlock(r);
+  node_unlock_unsafe(r);
 
   return r;
 }
@@ -114,6 +114,78 @@ static node* find_border_node(node *r, const void *key, uint32_t len, uint32_t o
     goto descend;
 }
 
+// require: `n` is locked
+// create a subtree and then insert kv
+static void create_new_layer(node *n, const void *key, uint32_t len, uint32_t off, const void *val)
+{
+  void *ckey;
+  uint32_t clen;
+  int idx = node_get_conflict_key_index(n, key, len, off, &ckey, &clen);
+
+  // {
+  //   char buf1[256];
+  //   memcpy(buf1, ckey, clen);
+  //   buf1[clen] = 0;
+  //   char buf2[256];
+  //   memcpy(buf2, key, len);
+  //   buf2[len] = 0;
+  //   printf("%u %s\n%u %s\n", clen, buf1, len, buf2);
+  // }
+
+  // advance key offset that causes this conflict
+  off += sizeof(uint64_t);
+
+  // these 2 key can still be have mutiple common prefix keyslice, but it is assured
+  // that they are not the same in previous `node_insert`
+  node *head = 0, *parent = 0;
+  uint64_t lks;
+  uint32_t noff = off + sizeof(uint64_t);
+  while (noff <= clen && noff <= len) {
+    uint64_t ks1 = get_next_keyslice(ckey, clen, off);
+    uint64_t ks2 = get_next_keyslice(key, len, off);
+    // no need to use `compare_key`
+    if (ks1 != ks2) break;
+
+    node *bn = new_node(Border);
+    node_set_root_unsafe(bn);
+    if (head == 0) head = bn;
+    if (parent) {
+      node_lock_unsafe(parent);
+      assert((int)node_insert(parent, &lks, sizeof(uint64_t), 0 /* off */, bn, 1 /* is_link */) == 1);
+      node_unlock_unsafe(parent);
+      node_set_parent_unsafe(bn, parent);
+    }
+    lks = ks1;
+    parent = bn;
+    off += sizeof(uint64_t);
+    noff = off + sizeof(uint64_t);
+  }
+
+  // insert these 2 keys without conflict into border node
+  node *bn = new_node(Border);
+  node_set_root_unsafe(bn);
+  node_lock_unsafe(bn);
+  assert((int)node_insert(bn, ckey, clen, off, 0, 0 /* is_link */) == 1);
+  assert((int)node_insert(bn, key, len, off, val, 0 /* is_link */) == 1);
+  node_unlock_unsafe(bn);
+
+  if (parent) {
+    node_lock_unsafe(parent);
+    assert((int)node_insert(parent, &lks, sizeof(uint64_t), 0 /* off */, bn, 1 /* is_link */) == 1);
+    node_unlock_unsafe(parent);
+    node_set_parent_unsafe(bn, parent);
+  } else {
+    node_set_parent_unsafe(bn, n);
+  }
+
+  // now replace previous key with new subtree link,
+  // all the unsafe operation will be seen by other threads
+  if (head == 0)
+    node_replace_at_index(n, idx, bn);
+  else
+    node_replace_at_index(n, idx, head);
+}
+
 // require: `n` and `n1` is locked
 static void mass_tree_promote_split_node(mass_tree *mt, node *n, uint64_t fence, node *n1)
 {
@@ -135,12 +207,11 @@ static void mass_tree_promote_split_node(mass_tree *mt, node *n, uint64_t fence,
   // }
 
   uint32_t v;
-  node *p1;
   v = node_get_version(p);
   if (unlikely(is_border(v))) { // `n` is a sub tree
-    node_set_parent_unsafe(n1, p);
-    p1 = mass_tree_grow(n, fence, n1);
-    node_swap_child(p, n, p1);
+    node *sub_root = mass_tree_grow(n, fence, n1);
+    node_set_parent_unsafe(sub_root, p);
+    node_swap_child(p, n, sub_root);
     node_unlock(n);
     node_unlock(n1);
     node_unlock(p);
@@ -159,7 +230,7 @@ static void mass_tree_promote_split_node(mass_tree *mt, node *n, uint64_t fence,
     node_set_version(p, v);
     node_unlock(n);
     uint64_t fence1 = 0;
-    p1 = node_split(p, &fence1);
+    node *p1 = node_split(p, &fence1);
     assert(fence1);
     if (compare_key(fence, fence1) < 0) {
       node_set_parent_unsafe(n1, p);
@@ -217,25 +288,7 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
       node_unlock(n);
       return (int)ret;
     case -1: { // need to create a deeper layer
-      node *n1 = new_node(Border);
-      // NOTE: not necessary, lock it to make `node_insert` happy
-      node_lock(n1);
-      node_set_root_unsafe(n1);
-      void *ckey;
-      uint32_t clen;
-      int idx = node_get_conflict_key_index(n, key, len, off, &ckey, &clen);
-
-      uint32_t coff = advance_key_offset(clen, off);
-      assert((int)node_insert(n1, ckey, clen, coff, 0, 0 /* is_link */) == 1);
-      off = advance_key_offset(len, off);
-      assert((int)node_insert(n1, key, len, off, val, 0 /* is_link */) == 1);
-
-      node_set_parent_unsafe(n1, n);
-
-      node_unlock(n1);
-
-      node_replace_at_index(n, idx, n1);
-
+      create_new_layer(n, key, len, off, val);
       node_unlock(n);
       return 1;
     }
@@ -261,7 +314,7 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
     default: // need to go to a deeper layer
       node_unlock(n);
       r = (node *)ret;
-      off = advance_key_offset(len, off);
+      off += sizeof(uint64_t);
       goto again;
   }
 }
@@ -277,6 +330,7 @@ void* mass_tree_get(mass_tree *mt, const void *key, uint32_t len)
 
   forward:
   if (is_deleted(v)) {
+    // NOTE: remove this if we ever implement `mass_tree_delete`
     assert(0);
     goto again;
   }
@@ -313,6 +367,6 @@ void* mass_tree_get(mass_tree *mt, const void *key, uint32_t len)
   if ((uint64_t)next_layer == 1) goto forward; // unstable
 
   r = next_layer;
-  off = advance_key_offset(len, off);
+  off += sizeof(uint64_t);
   goto again;
 }
