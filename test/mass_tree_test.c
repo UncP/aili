@@ -11,13 +11,10 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/time.h>
+#include <pthread.h>
 
 #include "../mass/mass_tree.h"
 #include "../palm/allocator.h"
-
-static char *file_str;
-static int thread_number;
-static int total_keys;
 
 static long long mstime()
 {
@@ -30,16 +27,32 @@ static long long mstime()
   return ust / 1000;
 }
 
-void test_mass_tree()
+struct thread_arg
 {
-  init_allocator();
+  mass_tree *mt;
+  int file;
+  int total_keys;
+  int write;
+  int validate;
+};
 
-  mass_tree *mt = new_mass_tree(thread_number);
+static void* run(void *arg)
+{
+  struct thread_arg *ta = (struct thread_arg *)arg;
+  mass_tree *mt = ta->mt;
+  int file = ta->file;
+  int total_keys = ta->total_keys;
+  int write = ta->write;
+  int validate = ta->validate;
+
+  init_allocator();
 
   char file_name[32];
   memset(file_name, 0, 32);
   memcpy(file_name, "./data/", 7);
-  memcpy(file_name + 7, file_str, strlen(file_str));
+  char file_buf[32];
+  int file_len = snprintf(file_buf, 32, "%d", file);
+  memcpy(file_name + 7, file_buf, file_len);
 
   int fd = open(file_name, O_RDONLY);
   assert(fd > 0);
@@ -59,9 +72,6 @@ void test_mass_tree()
       tmp[len] = '\0';
       i += len;
 
-      void *slice = allocator_alloc(len);
-      memcpy(slice, key, len);
-
       if (count && (count % 1000000) == 0)
         printf("%d\n", count);
 
@@ -70,68 +80,74 @@ void test_mass_tree()
         break;
       }
 
-      assert(mass_tree_put(mt, slice, len, (const void *)3190) == 1);
-      // void *value = mass_tree_get(mt, key, len);
-      // if (value == 0) {
-      //   char buf[len + 1];
-      //   memcpy(buf, key, len);
-      //   buf[len] = 0;
-      //   printf("%s\n", buf);
-      // }
-      // assert(value);
-      // assert(memcmp(value, key, len) == 0);
+      if (write) {
+        void *slice = allocator_alloc(len);
+        memcpy(slice, key, len);
+        assert(mass_tree_put(mt, slice, len, (const void *)3190) == 1);
+      } else {
+        void *value = mass_tree_get(mt, key, len);
+        if (value == 0) {
+          char buf[len + 1];
+          memcpy(buf, key, len);
+          buf[len] = 0;
+          printf("%s\n", buf);
+        }
+        assert(value);
+        assert(memcmp(value, key, len) == 0);
+      }
     }
   }
 
-  // mass_tree_flush(mt);
-
   long long after = mstime();
-  printf("\033[31mtotal: %d\033[0m\n\033[32mput time: %.4f  s\033[0m\n", total_keys, (float)(after - before) / 1000);
+  printf("\033[31mtotal: %d\033[0m\n\033[32mtime: %.4f  s\033[0m\n", total_keys, (float)(after - before) / 1000);
+
+  close(fd);
+
+  if (validate)
+    mass_tree_validate(mt);
+
+  return (void *)ta;
+}
+
+void test_mass_tree(int file, int thread_number, int total_keys)
+{
+  mass_tree *mt = new_mass_tree(thread_number);
+
+  int thread_keys = total_keys / thread_number;
+  pthread_t ids[thread_number];
+  for (int i = 0; i < thread_number; ++i) {
+    struct thread_arg *ta = malloc(sizeof(struct thread_arg));
+    ta->mt = mt;
+    ta->file = i + file;
+    ta->total_keys = thread_keys;
+    ta->write = 1;
+    ta->validate = 0;
+    assert(pthread_create(&ids[i], 0, run, (void *)ta) == 0);
+  }
+
+  for (int i = 0; i < thread_number; ++i) {
+    struct thread_arg *ta;
+    assert(pthread_join(ids[i], (void **)&ta) == 0);
+    free(ta);
+  }
 
   mass_tree_validate(mt);
 
-  curr = 0;
-  flag = 1;
-  count = 0;
-  before = mstime();
-  for (; (ptr = pread(fd, buf, block, curr)) > 0 && flag; curr += ptr) {
-    while (--ptr && buf[ptr] != '\n' && buf[ptr] != '\0') buf[ptr] = '\0';
-    if (ptr) buf[ptr++] = '\0';
-    else break;
-    for (int i = 0; i < ptr; ++i) {
-      char *key = buf + i, *tmp = key;
-      uint32_t len = 0;
-      while (tmp[len] != '\0' && tmp[len] != '\n')
-        ++len;
-      tmp[len] = '\0';
-      i += len;
-
-      if (count && (count % 1000000) == 0)
-        printf("%d\n", count);
-
-      if (count++ == total_keys) {
-        flag = 0;
-        break;
-      }
-
-      void *value = mass_tree_get(mt, key, len);
-      if (value == 0) {
-      	char buf[len + 1];
-      	memcpy(buf, key, len);
-      	buf[len] = 0;
-      	printf("%s\n", buf);
-      }
-      assert(value);
-      assert(memcmp(value, key, len) == 0);
-    }
+  for (int i = 0; i < thread_number; ++i) {
+    struct thread_arg *ta = malloc(sizeof(struct thread_arg));
+    ta->mt = mt;
+    ta->file = i + file;
+    ta->total_keys = thread_keys;
+    ta->write = 0;
+    ta->validate = 0;
+    assert(pthread_create(&ids[i], 0, run, (void *)ta) == 0);
   }
 
-  // mass_tree_flush(mt);
-
-  after = mstime();
-  printf("\033[34mget time: %.4f  s\033[0m\n", (float)(after - before) / 1000);
-
-  close(fd);
+  for (int i = 0; i < thread_number; ++i) {
+    struct thread_arg *ta;
+    assert(pthread_join(ids[i], (void **)&ta) == 0);
+    free(ta);
+  }
 
   free_mass_tree(mt);
 }
@@ -143,13 +159,13 @@ int main(int argc, char **argv)
     exit(1);
   }
 
-  file_str = argv[1];
-  thread_number = atoi(argv[2]);
-  total_keys = atoi(argv[3]);
+  int file = atoi(argv[1]);
+  int thread_number = atoi(argv[2]);
+  int total_keys = atoi(argv[3]);
   if (total_keys <= 0) total_keys = 1;
   if (thread_number <= 0) thread_number = 1;
 
-  test_mass_tree();
+  test_mass_tree(file, thread_number, total_keys);
 
   return 0;
 }

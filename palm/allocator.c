@@ -66,6 +66,9 @@ static void free_block(block *b)
 
 void destroy_allocator(void *arg)
 {
+  // for test reason don't dealloc memory when this thread exit,
+  // memory will be munmaped when process exit
+  return ;
   allocator *a = (allocator *)arg;
 
   block *curr = a->curr;
