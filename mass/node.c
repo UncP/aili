@@ -676,8 +676,8 @@ node* node_search(node *n, const void *key, uint32_t len, uint32_t off, void **v
         return (void *)lv; // need to go to a deeper layer
       // could be two different values, but that means an split happened, which will be invalidated
       // when we return
-      uint32_t clen = (uint32_t)(lv >> 32);
-      uint32_t coff = (uint32_t)lv;
+      uint32_t clen = (uint32_t)lv;
+      uint32_t coff = (uint32_t)(lv >> 32);
       assert(coff == off);
       if (clen == len && !memcmp((char *)key + off, (char *)suffix + off, len - off))
         *value = suffix; // value found

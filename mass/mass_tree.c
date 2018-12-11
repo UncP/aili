@@ -22,7 +22,6 @@ mass_tree* new_mass_tree(int thread_num)
   node_set_root(r);
 
   mt->root = r;
-  mt->keys = 0;
 
   return mt;
 }
@@ -278,8 +277,6 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
       }
     }
   }
-
-  ++mt->keys;
 
   void *ret = node_insert(n, key, len, off, val, 0 /* is_link */);
   switch ((uint64_t)ret) {

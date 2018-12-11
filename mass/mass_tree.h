@@ -12,7 +12,6 @@
 typedef struct mass_tree
 {
   node     *root;
-  uint32_t keys;
 }mass_tree;
 
 mass_tree* new_mass_tree(int thread_num);
