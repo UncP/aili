@@ -15,6 +15,7 @@
 11. （BUG）替换 subtree 时没有设置 subtree 的父节点
 12. （BUG）生成 subtree 时没有连接所有节点
 13. （BUG）搜索节点时没有正确处理中间状态（unstable state）
+14. （BUG）（13衍生）获取 key 偏移时错误理解小端字节序
 
 
 
