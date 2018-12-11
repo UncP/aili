@@ -2,6 +2,6 @@
 *.a
 *_test
 .tags
-gen_data
+generate_data
 data
 run.sh
