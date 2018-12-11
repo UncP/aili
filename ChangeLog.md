@@ -14,6 +14,7 @@
 10. （BUG）生成 subtree 时没有考虑到 keyslice 冲突的问题，通过生成多层 subtree 并且懒惰生成的方式解决
 11. （BUG）替换 subtree 时没有设置 subtree 的父节点
 12. （BUG）生成 subtree 时没有连接所有节点
+13. （BUG）搜索节点时没有正确处理中间状态（unstable state）
 
 
 

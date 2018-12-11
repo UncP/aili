@@ -633,14 +633,14 @@ void* node_insert(node *n, const void *key, uint32_t len, uint32_t off, const vo
 }
 
 // require: `n` is border node
-node* node_search(node *n, const void *key, uint32_t len, uint32_t off, void **suffix)
+node* node_search(node *n, const void *key, uint32_t len, uint32_t off, void **value)
 {
   // it's ok to use `relaxed` operation here because we only use it to verify node type,
   // and node type stays the same the entire time
   uint32_t version = node_get_version_unsafe(n);
   assert(is_border(version));
 
-  *suffix = 0;
+  *value = 0;
 
   uint64_t permutation = node_get_permutation(n);
 
@@ -660,24 +660,28 @@ node* node_search(node *n, const void *key, uint32_t len, uint32_t off, void **s
       high = mid - 1;
     } else {
       border_node *bn = (border_node *)n;
-      uint8_t status;
-      // need to use `acquire` operation
-      __atomic_load(&bn->keylen[index], &status, __ATOMIC_ACQUIRE);
-      if (unlikely(status == magic_link)) {
-        // need to go to a deeper layer
-        return bn->lv[index];
-      } else if (unlikely(status == magic_unstable)) {
-        // restore offset for retry
+      uint8_t status1, status2;
+      __atomic_load(&bn->keylen[index], &status1, __ATOMIC_ACQUIRE);
+      uint64_t lv = (uint64_t)bn->lv[index];
+      void *suffix = bn->suffix[index];
+      __atomic_load(&bn->keylen[index], &status2, __ATOMIC_ACQUIRE);
+      if (status1 == magic_unstable || status2 == magic_unstable)
+        // has intermediate state, need to retry
         return (void *)1;
-      } else {
-        uint32_t clen = *(uint32_t *)&(bn->lv[index]);
-        uint32_t coff = *((uint32_t *)&(bn->lv[index]) + 1);
-        assert(coff == off);
-        if (clen == len && !memcmp((char *)key + off, (char *)(bn->suffix[index]) + off, len - off))
-          // found value
-          *suffix = bn->suffix[index];
-        return (void *)0;
-      }
+
+      // check the latest status
+
+      // could be two different links, but we will verify whether it is root when we descend
+      if (status2 == magic_link)
+        return (void *)lv; // need to go to a deeper layer
+      // could be two different values, but that means an split happened, which will be invalidated
+      // when we return
+      uint32_t clen = (uint32_t)(lv >> 32);
+      uint32_t coff = (uint32_t)lv;
+      assert(coff == off);
+      if (clen == len && !memcmp((char *)key + off, (char *)suffix + off, len - off))
+        *value = suffix; // value found
+      return (void *)0;
     }
   }
   return 0;

@@ -96,7 +96,7 @@ void node_swap_child(node *n, node *c, node *c1);
 node* node_descend(node *n, const void *key, uint32_t len, uint32_t off);
 void* node_insert(node *n, const void *key, uint32_t len, uint32_t off, const void *val, int is_link);
 node* node_split(node *n, uint64_t *fence);
-node* node_search(node *n, const void *key, uint32_t len, uint32_t off, void **suffix);
+node* node_search(node *n, const void *key, uint32_t len, uint32_t off, void **value);
 
 int compare_key(uint64_t k1, uint64_t k2);
 uint64_t get_next_keyslice(const void *key, uint32_t len, uint32_t off);
