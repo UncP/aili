@@ -57,12 +57,12 @@ static node* mass_tree_grow(node *n, uint64_t fence, node *n1)
   node_set_first_child(r, n);
 
   node_set_parent_unsafe(n1, r);
-  node_set_parent(n, r);
+  node_set_parent_unsafe(n, r);
 
   assert((int)node_insert(r, &fence, sizeof(uint64_t), 0 /* off */, n1, 1 /* is_link */) == 1);
 
   node_unset_root_unsafe(n1);
-  node_unset_root(n);
+  node_unset_root_unsafe(n);
 
   node_unlock_unsafe(r);
 
@@ -174,16 +174,17 @@ static void create_new_layer(node *n, const void *key, uint32_t len, uint32_t of
     assert((int)node_insert(parent, &lks, sizeof(uint64_t), 0 /* off */, bn, 1 /* is_link */) == 1);
     node_unlock_unsafe(parent);
     node_set_parent_unsafe(bn, parent);
-  } else {
-    node_set_parent_unsafe(bn, n);
   }
 
   // now replace previous key with new subtree link,
   // all the unsafe operation will be seen by other threads
-  if (head == 0)
+  if (head == 0) {
+    node_set_parent_unsafe(bn, n);
     node_replace_at_index(n, idx, bn);
-  else
+  } else {
+    node_set_parent_unsafe(head, n);
     node_replace_at_index(n, idx, head);
+  }
 }
 
 // require: `n` and `n1` is locked
@@ -258,14 +259,13 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
   // before we write this node, a lock must be obtained
   node_lock(n);
 
+  // TODO: use `node_get_version_unsafe`
   uint32_t diff = node_get_version(n) ^ v;
   if (diff != LOCK_BIT) { // node has changed between we acquire this node and lock this node
     while (1) {
       node *next = node_get_next(n);
       if (next == 0)
-        // there is no split happened, node is valid
         break;
-      // must lock `next` first
       node_lock(next);
       // there might be splits happened, traverse through the link
       if (!node_include_key(next, key, len, off)) {

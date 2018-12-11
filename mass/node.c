@@ -578,7 +578,7 @@ void* node_insert(node *n, const void *key, uint32_t len, uint32_t off, const vo
       assert(is_border(version));
       border_node *bn = (border_node *)n;
       uint8_t status;
-      // need to use `acquire` operation
+      // TODO: use relaxed operation
       __atomic_load(&bn->keylen[index], &status, __ATOMIC_ACQUIRE);
       assert(status != magic_unstable);
       if (status == magic_link) {
