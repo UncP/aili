@@ -19,9 +19,11 @@ mass_tree* new_mass_tree(int thread_num)
   mass_tree *mt = (mass_tree *)malloc(sizeof(mass_tree));
 
   node *r = new_node(Border);
-  node_set_root(r);
+  node_set_root_unsafe(r);
 
-  mt->root = r;
+  node_insert_lowest_key(r);
+
+  __atomic_store(&mt->root, &r, __ATOMIC_RELEASE);
 
   return mt;
 }
@@ -147,6 +149,7 @@ static void create_new_layer(node *n, const void *key, uint32_t len, uint32_t of
 
     node *bn = new_node(Border);
     node_set_root_unsafe(bn);
+    node_insert_lowest_key(bn);
     if (head == 0) head = bn;
     if (parent) {
       node_lock_unsafe(parent);
@@ -163,6 +166,7 @@ static void create_new_layer(node *n, const void *key, uint32_t len, uint32_t of
   // insert these 2 keys without conflict into border node
   node *bn = new_node(Border);
   node_set_root_unsafe(bn);
+  node_insert_lowest_key(bn);
   node_lock_unsafe(bn);
   assert((int)node_insert(bn, ckey, clen, off, 0, 0 /* is_link */) == 1);
   assert((int)node_insert(bn, key, len, off, val, 0 /* is_link */) == 1);
@@ -341,7 +345,6 @@ void* mass_tree_get(mass_tree *mt, const void *key, uint32_t len)
     v = node_get_stable_version(n);
     node *next = node_get_next(n);
     // there might be splits happened, traverse through the link
-    // TODO: check `node_include_key`
     // while (!is_deleted(v) && next && node_include_key(next, key, len, off)) {
     while (next && node_include_key(next, key, len, off)) {
       n = next;

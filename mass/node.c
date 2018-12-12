@@ -426,15 +426,18 @@ static inline uint64_t get_next_keyslice_and_advance_and_record(const void *key,
 // require: `n` is border node
 int node_include_key(node *n, const void *key, uint32_t len, uint32_t off)
 {
-  uint32_t version = node_get_version(n);
+  // TODO: remove this
+  uint32_t version = node_get_version_unsafe(n);
   assert(is_border(version));
 
-  uint64_t permutation = node_get_permutation(n);
-  int index = get_index(permutation, 0);
+  // TODO: remove this
+  int index = get_index(node_get_permutation(n), 0);
+  // lower key must be at index 0
+  assert(index == 0);
 
   uint64_t cur = get_next_keyslice(key, len, off);
 
-  return compare_key(n->keyslice[index], cur) <= 0;
+  return compare_key(n->keyslice[0], cur) < 0;
 }
 
 // require: `n` is locked and is interior node
@@ -462,8 +465,8 @@ int node_get_conflict_key_index(node *n, const void *key, uint32_t len, uint32_t
     if (n->keyslice[i] == cur)
       break;
 
-  // must have the same key slice
-  assert(i != count);
+  // must have same key slice
+  assert(i && i != count);
 
   border_node *bn = (border_node *)n;
   *ckey = bn->suffix[i];
@@ -476,6 +479,8 @@ int node_get_conflict_key_index(node *n, const void *key, uint32_t len, uint32_t
 // require: `n` is locked and is border node
 void node_replace_at_index(node *n, int index, node *n1)
 {
+  assert(index);
+
   uint32_t version = node_get_version_unsafe(n);
   assert(is_locked(version) && is_border(version));
 
@@ -513,9 +518,25 @@ void node_swap_child(node *n, node *c, node *c1)
       break;
 
   // must have this child
-  assert(i != count);
+  assert(i && i != count);
 
   node_replace_at_index(n, i, c1);
+}
+
+void node_insert_lowest_key(node *n)
+{
+  uint32_t version = node_get_version_unsafe(n);
+  assert(is_border(version));
+
+  border_node *bn = (border_node *)n;
+  bn->keyslice[0] = 0;
+  bn->keylen[0]   = 0;
+  bn->suffix[0]   = 0;
+  bn->lv[0]       = 0;
+
+  uint64_t permutation = 0;
+  update_permutation(permutation, 0, 0);
+  node_set_permutation_unsafe(n, permutation);
 }
 
 // require: `n` is interior node
@@ -572,7 +593,7 @@ void* node_insert(node *n, const void *key, uint32_t len, uint32_t off, const vo
   uint8_t  keylen;
   uint64_t cur = get_next_keyslice_and_advance_and_record(key, len, &off, &keylen);
 
-  int low = 0, count = get_count(permutation), high = count - 1;
+  int low = likely(is_border(version)) ? 1 : 0, count = get_count(permutation), high = count - 1;
 
   while (low <= high) {
     int mid = (low + high) / 2;
@@ -657,7 +678,7 @@ node* node_search(node *n, const void *key, uint32_t len, uint32_t off, void **v
 
   uint64_t cur = get_next_keyslice_and_advance(key, len, &off);
 
-  int low = 0, high = get_count(permutation) - 1;
+  int low = 1, high = get_count(permutation) - 1;
   while (low <= high) {
     int mid = (low + high) / 2;
 
@@ -706,39 +727,47 @@ static uint64_t border_node_split(border_node *bn, border_node *bn1)
   int count = get_count(permutation);
   assert(count == max_key_count);
 
-  // first we copy all the key from `bn` to `bn1` in key order
-  for (int i = 0; i < count; ++i) {
+  // make sure lower key is where we want it to be
+  assert(get_index(permutation, 0) == 0);
+
+  // first we copy all the key[1, 14](except lower key) from `bn` to `bn1` in key order
+  for (int i = 1; i < count; ++i) {
     int index = get_index(permutation, i);
-    bn1->keyslice[i] = bn->keyslice[index];
-    bn1->keylen[i]   = bn->keylen[index];
-    bn1->suffix[i]   = bn->suffix[index];
-    bn1->lv[i]       = bn->lv[index];
+    bn1->keyslice[i-1] = bn->keyslice[index];
+    bn1->keylen[i-1]   = bn->keylen[index];
+    bn1->suffix[i-1]   = bn->suffix[index];
+    bn1->lv[i-1]       = bn->lv[index];
   }
 
-  // then we move first half of the key from `bn1` to `bn`
+  // then we move first half [1-7] of the key from `bn1` to `bn`
   for (int i = 0; i < 7; ++i) {
-    bn->keyslice[i] = bn1->keyslice[i];
-    bn->keylen[i]   = bn1->keylen[i];
-    bn->suffix[i]   = bn1->suffix[i];
-    bn->lv[i]       = bn1->lv[i];
+    bn->keyslice[i+1] = bn1->keyslice[i];
+    bn->keylen[i+1]   = bn1->keylen[i];
+    bn->suffix[i+1]   = bn1->suffix[i];
+    bn->lv[i+1]       = bn1->lv[i];
   }
 
-  // and move the other half
-  for (int i = 0; i < 8; ++i) {
-    bn1->keyslice[i] = bn1->keyslice[i + 7];
-    bn1->keylen[i]   = bn1->keylen[i + 7];
-    bn1->suffix[i]   = bn1->suffix[i + 7];
-    bn1->lv[i]       = bn1->lv[i + 7];
+  // set new node's lower key
+  bn1->keyslice[0] = bn->keyslice[7];
+  bn1->keylen[0]   = sizeof(uint64_t);
+  bn1->suffix[0]   = 0;
+  bn1->lv[0]       = 0;
+
+  // and move the other half [8, 14]
+  for (int i = 0; i < 7; ++i) {
+    bn1->keyslice[i+1] = bn1->keyslice[i + 7];
+    bn1->keylen[i+1]   = bn1->keylen[i + 7];
+    bn1->suffix[i+1]   = bn1->suffix[i + 7];
+    bn1->lv[i+1]       = bn1->lv[i + 7];
   }
 
   // then we set each node's `permutation` field
   permutation = 0;
-  for (int i = 0; i < 7; ++i) update_permutation(permutation, i, i);
-  node_set_permutation((node *)bn, permutation);
-
-  update_permutation(permutation, 7, 7);
-  // it's ok to use `relaxed` operation due to the `release` operation below
+  for (int i = 0; i < 8; ++i) update_permutation(permutation, i, i);
+  // it's ok to use `relaxed` operation,
   node_set_permutation_unsafe((node *)bn1, permutation);
+  // due to this `release` operation
+  node_set_permutation((node *)bn, permutation);
 
   // finally modify `next` and `prev` pointer
   border_node *old_next;
@@ -752,7 +781,8 @@ static uint64_t border_node_split(border_node *bn, border_node *bn1)
 
   // node_print((node *)bn);
   // node_print((node *)bn1);
-  return bn1->keyslice[0];
+  // `bn1->keyslice[0]` is lower key
+  return bn1->keyslice[1];
 }
 
 // require: `in` and `in1` is locked
@@ -813,7 +843,7 @@ node* node_split(node *n, uint64_t *fence)
   node *n1 = new_node(border ? Border : Interior);
 
   version = set_split(version);
-  // it's ok to use `relaxed` opeartion here
+  // it's ok to use `relaxed` operation here
   node_set_version_unsafe(n1, version);
   node_set_version(n, version);
 
@@ -900,11 +930,15 @@ static void validate(node *n)
   uint64_t pre = n->keyslice[get_index(permutation, 0)];
   for (int i = 1; i < count; ++i) {
     uint64_t cur = n->keyslice[get_index(permutation, i)];
-    assert(compare_key(pre, cur) < 0);
+    int r = compare_key(pre, cur);
+    if (r >= 0) {
+      node_print(n);
+    }
+    assert(r < 0);
     pre = cur;
   }
 
-  uint64_t my_first = n->keyslice[get_index(permutation, 0)];
+  uint64_t my_first = n->keyslice[get_index(permutation, 1)];
   uint64_t my_last = n->keyslice[get_index(permutation, count - 1)];
   if (is_border(version)) {
     border_node *bn = (border_node *)n;
@@ -915,7 +949,7 @@ static void validate(node *n)
     }
     if (bn->next) {
       uint64_t npermutation = node_get_permutation((node *)bn->next);
-      uint64_t their_first = bn->next->keyslice[get_index(npermutation, 0)];
+      uint64_t their_first = bn->next->keyslice[get_index(npermutation, 1)];
 
       int r = compare_key(my_last, their_first);
       if (r >= 0)
@@ -934,7 +968,12 @@ static void validate(node *n)
     uint64_t fpermutation = node_get_permutation(in->child[0]);
     uint64_t lpermutation = node_get_permutation(in->child[get_index(permutation, get_count(permutation) - 1) + 1]);
     uint64_t their_last = in->child[0]->keyslice[get_index(fpermutation, get_count(fpermutation) - 1)];
-    uint64_t their_first = in->child[get_index(permutation, get_count(permutation) - 1) + 1]->keyslice[get_index(lpermutation, 0)];
+    node *last_child = in->child[get_index(permutation, get_count(permutation) - 1) + 1];
+    uint64_t their_first;
+    if (is_border(node_get_version(last_child)))
+      their_first = last_child->keyslice[get_index(lpermutation, 1)];
+    else
+      their_first = last_child->keyslice[get_index(lpermutation, 0)];
 
     int r = compare_key(their_last, my_first);
     if (r >= 0) {
