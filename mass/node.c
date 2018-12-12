@@ -938,9 +938,10 @@ static void validate(node *n)
     pre = cur;
   }
 
-  uint64_t my_first = n->keyslice[get_index(permutation, 1)];
+  uint64_t my_first;
   uint64_t my_last = n->keyslice[get_index(permutation, count - 1)];
   if (is_border(version)) {
+    my_first = n->keyslice[get_index(permutation, 1)];
     border_node *bn = (border_node *)n;
     if (bn->prev) {
       uint64_t ppermutation = node_get_permutation((node *)bn->prev);
@@ -964,6 +965,8 @@ static void validate(node *n)
       assert(r < 0);
     }
   } else {
+    my_first = n->keyslice[get_index(permutation, 0)];
+
     interior_node *in = (interior_node *)n;
     uint64_t fpermutation = node_get_permutation(in->child[0]);
     uint64_t lpermutation = node_get_permutation(in->child[get_index(permutation, get_count(permutation) - 1) + 1]);
