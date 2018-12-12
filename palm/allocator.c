@@ -69,6 +69,7 @@ void destroy_allocator(void *arg)
   // for test reason don't dealloc memory when this thread exit,
   // memory will be munmaped when process exit
   return ;
+
   allocator *a = (allocator *)arg;
 
   block *curr = a->curr;
@@ -76,6 +77,13 @@ void destroy_allocator(void *arg)
     block *next = curr->next;
     free_block(curr);
     curr = next;
+  }
+
+  block *small_curr = a->small_curr;
+  while (small_curr) {
+    block *next = small_curr->next;
+    free_block(small_curr);
+    small_curr = next;
   }
 
   curr = a->meta_curr;
@@ -96,7 +104,10 @@ void init_allocator()
     initialized = 1;
   }
   pthread_mutex_unlock(&mutex);
+}
 
+static void init_thread_allocator()
+{
   allocator *a;
   assert(posix_memalign((void **)&a, 64, sizeof(allocator)) == 0);
   block *meta = new_meta_block();
@@ -106,19 +117,39 @@ void init_allocator()
   assert(curr);
   a->curr = curr;
 
+  block *small_curr = new_block(a->meta_curr);
+  assert(small_curr);
+  a->small_curr = small_curr;
+
   assert(pthread_setspecific(key, (void *)a) == 0);
+}
+
+static inline allocator* get_thread_allocator()
+{
+  allocator *a;
+
+  #ifdef __linux__
+    pthread_getspecific(key, &a);
+    assert(a);
+    if (unlikely(a == 0)) {
+      init_thread_allocator();
+      pthread_getspecific(key, &a);
+      assert(a);
+    }
+  #else
+    a = pthread_getspecific(key);
+    if (unlikely(a == 0)) {
+      init_thread_allocator();
+      assert((a = pthread_getspecific(key)));
+    }
+  #endif
+
+  return a;
 }
 
 void* allocator_alloc(size_t size)
 {
-  allocator *a;
-
-#ifdef __linux__
-  pthread_getspecific(key, &a);
-  assert(a);
-#else
-  assert((a = pthread_getspecific(key)));
-#endif
+  allocator *a = get_thread_allocator();
 
   // cache line alignment
   size = (size + 63) & (~((size_t)63));
@@ -137,6 +168,29 @@ void* allocator_alloc(size_t size)
     new->next = a->curr;
     a->curr = new;
     ptr = block_alloc(a->curr, size, &success);
+  }
+  assert(success);
+  return ptr;
+}
+
+void* allocator_alloc_small(size_t size)
+{
+  allocator *a = get_thread_allocator();
+
+  int success;
+  void *ptr = block_alloc(a->small_curr, size, &success);
+  if (unlikely(success == 0)) {
+    block *new = new_block(a->meta_curr);
+    if (unlikely(new == 0)) {
+      block *meta = new_meta_block();
+      meta->next = a->meta_curr;
+      a->meta_curr = meta;
+      new = new_block(a->meta_curr);
+      assert(new);
+    }
+    new->next = a->small_curr;
+    a->small_curr = new;
+    ptr = block_alloc(a->small_curr, size, &success);
   }
   assert(success);
   return ptr;

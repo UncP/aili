@@ -43,8 +43,6 @@ static void* run(void *arg)
   int total_keys = ta->total_keys;
   int write = ta->write;
 
-  init_allocator();
-
   char file_name[32];
   memset(file_name, 0, 32);
   memcpy(file_name, "./data/", 7);
@@ -79,8 +77,12 @@ static void* run(void *arg)
       }
 
       if (write) {
-        // void *slice = allocator_alloc(len);
-        void *slice = malloc(len);
+        void *slice;
+        #ifdef Allocator
+          slice = allocator_alloc_small(len);
+        #else
+          slice = malloc(len);
+        #endif // Allocator
         memcpy(slice, key, len);
         assert(mass_tree_put(mt, slice, len, (const void *)3190) == 1);
       } else {

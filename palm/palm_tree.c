@@ -48,11 +48,6 @@ static void free_thread_arg(thread_arg *j)
 
 static void* run(void *arg)
 {
-#ifdef Allocator
-  // initialize each worker's allocator
-  init_allocator();
-#endif
-
   thread_arg *j = (thread_arg *)arg;
   palm_tree *pt = j->pt;
   worker *w= j->wrk;
@@ -79,9 +74,9 @@ static void* run(void *arg)
 
 palm_tree* new_palm_tree(int worker_num, int queue_size)
 {
-  #ifdef Allocator
-    init_allocator();
-  #endif
+#ifdef Allocator
+  init_allocator();
+#endif
 
   if (worker_num <= 0) worker_num = 1;
 

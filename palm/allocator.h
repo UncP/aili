@@ -27,10 +27,12 @@ typedef struct allocator
 {
   block *meta_curr;
   block *curr;
+  block *small_curr;
 }allocator;
 
 void init_allocator();
 void* allocator_alloc(size_t size);
+void* allocator_alloc_small(size_t size);
 void allocator_free(void *ptr);
 
 #endif /* _allocator_h_ */

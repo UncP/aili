@@ -15,11 +15,6 @@
 
 static void* run(void *arg)
 {
-#ifdef Allocator
-  // initialize each worker's allocator
-  init_allocator();
-#endif
-
   blink_tree *bt = (blink_tree *)arg;
   mapping_array *q = bt->array;
 

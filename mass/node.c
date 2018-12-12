@@ -731,12 +731,12 @@ static uint64_t border_node_split(border_node *bn, border_node *bn1)
   assert(get_index(permutation, 0) == 0);
 
   // first we copy all the key[1, 14](except lower key) from `bn` to `bn1` in key order
-  for (int i = 1; i < count; ++i) {
-    int index = get_index(permutation, i);
-    bn1->keyslice[i-1] = bn->keyslice[index];
-    bn1->keylen[i-1]   = bn->keylen[index];
-    bn1->suffix[i-1]   = bn->suffix[index];
-    bn1->lv[i-1]       = bn->lv[index];
+  for (int i = 0; i < count - 1; ++i) {
+    int index = get_index(permutation, i + 1);
+    bn1->keyslice[i] = bn->keyslice[index];
+    bn1->keylen[i]   = bn->keylen[index];
+    bn1->suffix[i]   = bn->suffix[index];
+    bn1->lv[i]       = bn->lv[index];
   }
 
   // then we move first half [1-7] of the key from `bn1` to `bn`
