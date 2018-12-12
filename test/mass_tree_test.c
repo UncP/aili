@@ -33,7 +33,6 @@ struct thread_arg
   int file;
   int total_keys;
   int write;
-  int validate;
 };
 
 static void* run(void *arg)
@@ -43,7 +42,6 @@ static void* run(void *arg)
   int file = ta->file;
   int total_keys = ta->total_keys;
   int write = ta->write;
-  int validate = ta->validate;
 
   init_allocator();
 
@@ -81,7 +79,8 @@ static void* run(void *arg)
       }
 
       if (write) {
-        void *slice = allocator_alloc(len);
+        // void *slice = allocator_alloc(len);
+        void *slice = malloc(len);
         memcpy(slice, key, len);
         assert(mass_tree_put(mt, slice, len, (const void *)3190) == 1);
       } else {
@@ -103,14 +102,15 @@ static void* run(void *arg)
 
   close(fd);
 
-  if (validate)
-    mass_tree_validate(mt);
-
   return (void *)ta;
 }
 
 void test_mass_tree(int file, int thread_number, int total_keys)
 {
+#ifdef Allocator
+  init_allocator();
+#endif // Allocator
+
   mass_tree *mt = new_mass_tree(thread_number);
 
   int thread_keys = total_keys / thread_number;
@@ -121,7 +121,6 @@ void test_mass_tree(int file, int thread_number, int total_keys)
     ta->file = i + file;
     ta->total_keys = thread_keys;
     ta->write = 1;
-    ta->validate = 0;
     assert(pthread_create(&ids[i], 0, run, (void *)ta) == 0);
   }
 
@@ -139,7 +138,6 @@ void test_mass_tree(int file, int thread_number, int total_keys)
     ta->file = i + file;
     ta->total_keys = thread_keys;
     ta->write = 0;
-    ta->validate = 0;
     assert(pthread_create(&ids[i], 0, run, (void *)ta) == 0);
   }
 

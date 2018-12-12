@@ -114,7 +114,7 @@ static node* find_border_node(node *r, const void *key, uint32_t len, uint32_t o
 }
 
 // require: `n` is locked
-// create a subtree and then insert kv
+// create a subtree and then insert kv into it, at last replace kv with subtree
 static void create_new_layer(node *n, const void *key, uint32_t len, uint32_t off, const void *val)
 {
   void *ckey;
@@ -267,6 +267,7 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
         break;
       node_lock(next);
       // there might be splits happened, traverse through the link
+      // we don't have to worry about the offset, it's valid
       if (!node_include_key(next, key, len, off)) {
         node_unlock(next);
         break;

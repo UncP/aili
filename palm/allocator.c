@@ -120,6 +120,9 @@ void* allocator_alloc(size_t size)
   assert((a = pthread_getspecific(key)));
 #endif
 
+  // cache line alignment
+  size = (size + 63) & (~((size_t)63));
+
   int success;
   void *ptr = block_alloc(a->curr, size, &success);
   if (unlikely(success == 0)) {

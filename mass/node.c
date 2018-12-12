@@ -11,6 +11,10 @@
 
 #include "node.h"
 
+#ifdef Allocator
+#include "../palm/allocator.h"
+#endif // Allocator
+
 #define max_key_count  15
 #define magic_link     ((uint8_t)13) // a magic value
 #define magic_unstable ((uint8_t)14) // a magic value
@@ -70,7 +74,11 @@ static int node_get_count(node *n);
 
 static interior_node* new_interior_node()
 {
+#ifdef Allocator
+  interior_node *in = (interior_node *)allocator_alloc(sizeof(interior_node));
+#else
   interior_node *in = (interior_node *)malloc(sizeof(interior_node));
+#endif // Allocator
 
   in->version = 0;
 
@@ -102,7 +110,11 @@ static void free_border_node(border_node *bn)
 
 static border_node* new_border_node()
 {
+#ifdef Allocator
+  border_node *bn = (border_node *)allocator_alloc(sizeof(border_node));
+#else
   border_node *bn = (border_node *)malloc(sizeof(border_node));
+#endif // Allocator
 
   uint32_t version = 0;
   bn->version = set_border(version);
@@ -411,7 +423,6 @@ static inline uint64_t get_next_keyslice_and_advance_and_record(const void *key,
   return cur;
 }
 
-// NOTE: need to look into this function
 // require: `n` is border node
 int node_include_key(node *n, const void *key, uint32_t len, uint32_t off)
 {
