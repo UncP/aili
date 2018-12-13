@@ -13,8 +13,16 @@
 
 #include "mass_tree.h"
 
+#ifdef Allocator
+#include "../palm/allocator.h"
+#endif // Allocator
+
 mass_tree* new_mass_tree(int thread_num)
 {
+#ifdef Allocator
+  init_allocator();
+#endif // Allocator
+
   (void)thread_num;
   mass_tree *mt = (mass_tree *)malloc(sizeof(mass_tree));
 
@@ -28,7 +36,6 @@ mass_tree* new_mass_tree(int thread_num)
   return mt;
 }
 
-// require: no other thread is visiting this tree
 void free_mass_tree(mass_tree *mt)
 {
   (void)mt;
@@ -93,9 +100,9 @@ static node* find_border_node(node *r, const void *key, uint32_t len, uint32_t o
 
     node *n1 = node_descend(n, key, len, off);
     assert(n1);
+    // this is a crucial step, must not move the line below to case 1
     uint32_t v1 = node_get_stable_version(n1);
 
-    // if there is any state change happened to this node, we need to retry
     uint32_t diff = node_get_version(n) ^ v;
     if (diff == LOCK_BIT || diff == 0) {
       // case 1: neither insert nor split happens between last stable version and current version,
@@ -136,8 +143,8 @@ static void create_new_layer(node *n, const void *key, uint32_t len, uint32_t of
   // advance key offset that causes this conflict
   off += sizeof(uint64_t);
 
-  // these 2 key can still be have mutiple common prefix keyslice, but it is assured
-  // that they are not the same in previous `node_insert`
+  // these 2 key can still be have mutiple common prefix keyslice, we need to loop and create
+  // subtree until they don't
   node *head = 0, *parent = 0;
   uint64_t lks;
   uint32_t noff = off + sizeof(uint64_t);
@@ -262,8 +269,8 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
   // before we write this node, a lock must be obtained
   node_lock(n);
 
-  // TODO: use `node_get_version_unsafe`
-  uint32_t diff = node_get_version(n) ^ v;
+  // it's ok to use `relaxed` operation since node is locked
+  uint32_t diff = node_get_version_unsafe(n) ^ v;
   if (diff != LOCK_BIT) { // node has changed between we acquire this node and lock this node
     while (1) {
       node *next = node_get_next(n);
@@ -362,7 +369,9 @@ void* mass_tree_get(mass_tree *mt, const void *key, uint32_t len)
       buf[len] = 0;
       printf("%s\n", buf);
     }
+    node_print(node_get_parent(n));
     node_print(n);
+    node_print(node_get_next(n));
     return 0; // key not exists
   }
   if ((uint64_t)next_layer == 1) goto forward; // unstable

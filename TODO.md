@@ -12,7 +12,7 @@
 - [x] palm tree 层级下降策略
 - [x] level 0 顺序插入优化
 - [x] palm tree 懒惰下降策略
-- [ ] Mass Tree
+- [x] Mass Tree
 - [x] palm tree 折线下降策略
 - [ ] 双向 early termination
 - [ ] 重构 B+ 树节点
@@ -22,4 +22,6 @@
 - [x] 重构 bounded mapping queue -> mapping array
 - [x] b<sup>*</sup> node
 - [ ] MRBTree
-- [ ] palm tree 信息统计
+- [x] palm tree 信息统计
+- [ ] mass tree border node 使用 higher key，取代 lower key
+- [ ] mass tree linearizability 测试

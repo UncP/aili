@@ -12,6 +12,7 @@
 // the memory allocated is always vaild until the allocator itself is destroyed
 
 #define meta_block_size ((size_t)4 << 10) // 4kb
+// TODO: linux huge page advise?
 #define block_size      ((size_t)4 << 20) // 4mb
 
 typedef struct block

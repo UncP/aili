@@ -80,6 +80,7 @@ void node_set_root_unsafe(node *n);
 void node_unset_root(node *n);
 void node_unset_root_unsafe(node *n);
 uint32_t node_get_version(node *n);
+uint32_t node_get_version_unsafe(node *n);
 uint32_t node_get_stable_version(node *n);
 void node_set_version(node *n, uint32_t version);
 node* node_get_next(node *n);

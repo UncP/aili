@@ -167,7 +167,7 @@ inline uint32_t node_get_version(node *n)
   return version;
 }
 
-static inline uint32_t node_get_version_unsafe(node *n)
+inline uint32_t node_get_version_unsafe(node *n)
 {
   uint32_t version;
   __atomic_load(&n->version, &version, __ATOMIC_RELAXED);
@@ -437,7 +437,7 @@ int node_include_key(node *n, const void *key, uint32_t len, uint32_t off)
 
   uint64_t cur = get_next_keyslice(key, len, off);
 
-  return compare_key(n->keyslice[0], cur) < 0;
+  return compare_key(n->keyslice[0], cur) <= 0;
 }
 
 // require: `n` is locked and is interior node
@@ -747,12 +747,6 @@ static uint64_t border_node_split(border_node *bn, border_node *bn1)
     bn->lv[i+1]       = bn1->lv[i];
   }
 
-  // set new node's lower key
-  bn1->keyslice[0] = bn->keyslice[7];
-  bn1->keylen[0]   = sizeof(uint64_t);
-  bn1->suffix[0]   = 0;
-  bn1->lv[0]       = 0;
-
   // and move the other half [8, 14]
   for (int i = 0; i < 7; ++i) {
     bn1->keyslice[i+1] = bn1->keyslice[i + 7];
@@ -760,6 +754,12 @@ static uint64_t border_node_split(border_node *bn, border_node *bn1)
     bn1->suffix[i+1]   = bn1->suffix[i + 7];
     bn1->lv[i+1]       = bn1->lv[i + 7];
   }
+
+  // set new node's lower key
+  bn1->keyslice[0] = bn1->keyslice[1];
+  bn1->keylen[0]   = sizeof(uint64_t);
+  bn1->suffix[0]   = 0;
+  bn1->lv[0]       = 0;
 
   // then we set each node's `permutation` field
   permutation = 0;
@@ -927,15 +927,17 @@ static void validate(node *n)
   uint64_t permutation = node_get_permutation(n);
   int count = get_count(permutation);
 
-  uint64_t pre = n->keyslice[get_index(permutation, 0)];
-  for (int i = 1; i < count; ++i) {
-    uint64_t cur = n->keyslice[get_index(permutation, i)];
-    int r = compare_key(pre, cur);
-    if (r >= 0) {
-      node_print(n);
+  if (count > 2) {
+    uint64_t pre = n->keyslice[get_index(permutation, 1)];
+    for (int i = 2; i < count; ++i) {
+      uint64_t cur = n->keyslice[get_index(permutation, i)];
+      int r = compare_key(pre, cur);
+      if (r >= 0) {
+        node_print(n);
+      }
+      assert(r < 0);
+      pre = cur;
     }
-    assert(r < 0);
-    pre = cur;
   }
 
   uint64_t my_first;
@@ -955,13 +957,16 @@ static void validate(node *n)
       int r = compare_key(my_last, their_first);
       if (r >= 0)
       {
-        char buf1[8];
+        char buf1[9];
         memcpy(buf1, &my_last, sizeof(uint64_t));
-        char buf2[8];
+        buf1[8] = 0;
+        char buf2[9];
         memcpy(buf2, &their_first, sizeof(uint64_t));
+        buf2[8] = 0;
         printf("%s %s\n", buf1, buf2);
+        node_print(n);
+        node_print((node *)bn->next);
       }
-
       assert(r < 0);
     }
   } else {
@@ -988,7 +993,7 @@ static void validate(node *n)
       buf2[8] = 0;
       printf("%s %s\n", buf1, buf2);
       node_print(n);
-      // node_print(in->child[0]);
+      node_print(in->child[0]);
     }
     assert(r < 0);
     r = compare_key(my_last, their_first);

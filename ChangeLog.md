@@ -16,7 +16,9 @@
 12. （BUG）生成 subtree 时没有连接所有节点
 13. （BUG）搜索节点时没有正确处理中间状态（unstable state）
 14. （BUG）（13衍生）获取 key 偏移时错误理解小端字节序
-15. （FIX）解决 border node 的 lower key 问题，但是降低了性能，同时增加了内存使用。A necessary evil。
+15. （FIX）解决 border node 的 lower key 问题，但是降低了性能，同时增加了内存使用。A necessary evil
+16. （BUG）border node 的 lower key 选取错误，应该选择分裂时新节点的第一个 key，而不是旧节点的最后一个 key
+17. 无论是顺序插入还是随机插入，性能出乎意料得好
 
 
 

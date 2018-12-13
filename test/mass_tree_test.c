@@ -14,7 +14,9 @@
 #include <pthread.h>
 
 #include "../mass/mass_tree.h"
+#ifdef Allocator
 #include "../palm/allocator.h"
+#endif // Allocator
 
 static long long mstime()
 {
