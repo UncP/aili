@@ -56,7 +56,7 @@ typedef struct border_node
 
   /* private fields */
 
-  uint8_t  nremoved;
+  uint8_t  nremoved; // should be `uint16_t`, but for alignment reason use `uint8_t` instead
   uint8_t  keylen[15];
 
   // TODO: memory usage optimization
@@ -285,8 +285,10 @@ void node_lock(node *n)
 {
   while (1) {
     uint32_t version = node_get_version(n);
-    if (is_locked(version))
+    if (is_locked(version)) {
+      // __asm__ __volatile__ ("pause");
       continue;
+    }
     if (__atomic_compare_exchange_n(&n->version, &version, set_lock(version),
       1 /* weak */, __ATOMIC_RELEASE, __ATOMIC_RELAXED))
       break;
@@ -573,8 +575,7 @@ void* node_insert(node *n, const void *key, uint32_t len, uint32_t off, const vo
       assert(is_border(version));
       border_node *bn = (border_node *)n;
       uint8_t status;
-      // TODO: use relaxed operation
-      __atomic_load(&bn->keylen[index], &status, __ATOMIC_ACQUIRE);
+      __atomic_load(&bn->keylen[index], &status, __ATOMIC_RELAXED);
       assert(status != magic_unstable);
       if (status == magic_link) {
         // need to go to a deeper layer
