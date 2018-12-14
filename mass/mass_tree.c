@@ -333,7 +333,7 @@ void* mass_tree_get(mass_tree *mt, const void *key, uint32_t len)
     v = node_get_stable_version(n);
     node *next = node_get_next(n);
     // there might be splits happened, traverse through the link
-    while (!is_deleted(v) && next && node_include_key(next, key, len, off)) {
+    while (!is_deleted(v) && next && node_include_key(next, cur)) {
       n = next;
       v = node_get_stable_version(n);
       next = node_get_next(n);
