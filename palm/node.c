@@ -510,10 +510,7 @@ static inline void node_get_whole_key(node *n, uint32_t idx, char *key, uint32_t
 
 inline int node_is_after_key(node *n, const void *key, uint32_t len)
 {
-  assert(n->level == 0);
-
-  if (unlikely(n->keys == 0))
-    return 0;
+  assert(n->level == 0 || (n->type & Blink));
 
   char     first[max_key_size];
   uint32_t flen;

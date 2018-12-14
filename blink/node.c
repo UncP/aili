@@ -77,9 +77,9 @@ void blink_node_split(blink_node *old, blink_node *new, char *pkey, uint32_t *pl
   node_insert_fence(old->pn, new->pn, (void *)new, pkey, plen);
 }
 
-int blink_node_is_before_key(blink_node *bn, const void *key, uint32_t len)
+int blink_node_is_after_key(blink_node *bn, const void *key, uint32_t len)
 {
-  return node_is_before_key(bn->pn, key, len);
+  return node_is_after_key(bn->pn, key, len);
 }
 
 void blink_node_insert_infinity_key(blink_node *bn)

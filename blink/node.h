@@ -37,7 +37,7 @@ int blink_node_insert(blink_node *bn, const void *key, uint32_t len, const void 
 void blink_node_insert_infinity_key(blink_node *bn);
 void* blink_node_search(blink_node *bn, const void *key, uint32_t len);
 void blink_node_split(blink_node *old, blink_node *new, char *pkey, uint32_t *plen);
-int blink_node_is_before_key(blink_node *bn, const void *key, uint32_t len);
+int blink_node_is_after_key(blink_node *bn, const void *key, uint32_t len);
 
 #ifdef Test
 
