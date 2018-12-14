@@ -323,6 +323,7 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
     default: // need to go to a deeper layer
       node_unlock(n);
       r = (node *)ret;
+      // if we need to advance to next layer, then key offset will not exceed key length
       off += sizeof(uint64_t);
       goto again;
   }
@@ -377,6 +378,7 @@ void* mass_tree_get(mass_tree *mt, const void *key, uint32_t len)
   if ((uint64_t)next_layer == 1) goto forward; // unstable
 
   r = next_layer;
+  // if we need to advance to next layer, then key offset will not exceed key length
   off += sizeof(uint64_t);
   goto again;
 }

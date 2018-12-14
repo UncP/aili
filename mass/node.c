@@ -584,7 +584,8 @@ void* node_insert(node *n, const void *key, uint32_t len, uint32_t off, const vo
         uint32_t clen = *(uint32_t *)&(bn->lv[index]);
         uint32_t coff = *((uint32_t *)&(bn->lv[index]) + 1);
         assert(coff == off);
-        if (clen == len && !memcmp((char *)key + off, (char *)(bn->suffix[index]) + off, len - off))
+        if (clen == len && len > off &&
+            !memcmp((char *)key + off, (char *)(bn->suffix[index]) + off, len - off))
           // key existed
           return (void *)0;
         // need to create a deeper layer
