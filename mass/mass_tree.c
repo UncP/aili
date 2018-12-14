@@ -78,10 +78,11 @@ static node* mass_tree_grow(node *n, uint64_t fence, node *n1)
 }
 
 // find the border node and record stable version
-static node* find_border_node(node *r, const void *key, uint32_t len, uint32_t off, uint32_t *version)
+static node* find_border_node(node *r, uint64_t cur, uint32_t *version)
 {
   uint32_t v;
   node *n;
+
   retry:
     n = r;
     assert(n);
@@ -98,7 +99,7 @@ static node* find_border_node(node *r, const void *key, uint32_t len, uint32_t o
       return n;
     }
 
-    node *n1 = node_descend(n, key, len, off);
+    node *n1 = node_descend(n, cur);
     assert(n1);
     // this is a crucial step, must not move the line below to case 1
     uint32_t v1 = node_get_stable_version(n1);
@@ -261,11 +262,13 @@ static void mass_tree_promote_split_node(mass_tree *mt, node *n, uint64_t fence,
 int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
 {
   uint32_t off = 0, v;
+  uint64_t cur;
   node *r, *n;
   __atomic_load(&mt->root, &r, __ATOMIC_ACQUIRE);
 
   again:
-  n = find_border_node(r, key, len, off, &v);
+  cur = get_next_keyslice(key, len, off);
+  n = find_border_node(r, cur, &v);
   // before we write this node, a lock must be obtained
   node_lock(n);
 
@@ -279,7 +282,7 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
       node_lock(next);
       // there might be splits happened, traverse through the link
       // we don't have to worry about the offset, it's valid
-      if (!node_include_key(next, key, len, off)) {
+      if (!node_include_key(next, cur)) {
         node_unlock(next);
         break;
       } else {
@@ -332,11 +335,13 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
 void* mass_tree_get(mass_tree *mt, const void *key, uint32_t len)
 {
   uint32_t off = 0, v;
+  uint64_t cur;
   node *r, *n;
   __atomic_load(&mt->root, &r, __ATOMIC_ACQUIRE);
 
   again:
-  n = find_border_node(r, key, len, off, &v);
+  cur = get_next_keyslice(key, len, off);
+  n = find_border_node(r, cur, &v);
 
   forward:
   if (is_deleted(v)) {
@@ -354,7 +359,7 @@ void* mass_tree_get(mass_tree *mt, const void *key, uint32_t len)
     node *next = node_get_next(n);
     // there might be splits happened, traverse through the link
     // while (!is_deleted(v) && next && node_include_key(next, key, len, off)) {
-    while (next && node_include_key(next, key, len, off)) {
+    while (next && node_include_key(next, cur)) {
       n = next;
       v = node_get_stable_version(n);
       next = node_get_next(n);
