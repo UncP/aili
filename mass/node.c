@@ -169,9 +169,7 @@ inline uint32_t node_get_version(node *n)
 
 inline uint32_t node_get_version_unsafe(node *n)
 {
-  uint32_t version;
-  __atomic_load(&n->version, &version, __ATOMIC_RELAXED);
-  return version;
+  return n->version;
 }
 
 inline void node_set_version(node *n, uint32_t version)
@@ -181,7 +179,7 @@ inline void node_set_version(node *n, uint32_t version)
 
 static inline void node_set_version_unsafe(node *n, uint32_t version)
 {
-  __atomic_store(&n->version, &version, __ATOMIC_RELAXED);
+  n->version = version;
 }
 
 static inline uint64_t node_get_permutation(node *n)
@@ -193,9 +191,7 @@ static inline uint64_t node_get_permutation(node *n)
 
 static inline uint64_t node_get_permutation_unsafe(node *n)
 {
-  uint64_t permutation;
-  __atomic_load(&n->permutation, &permutation, __ATOMIC_RELAXED);
-  return permutation;
+  return n->permutation;
 }
 
 static inline void node_set_permutation(node *n, uint64_t permutation)
@@ -205,7 +201,7 @@ static inline void node_set_permutation(node *n, uint64_t permutation)
 
 static inline void node_set_permutation_unsafe(node *n, uint64_t permutation)
 {
-  __atomic_store(&n->permutation, &permutation, __ATOMIC_RELAXED);
+  n->permutation = permutation;
 }
 
 static inline int node_get_count(node *n)
@@ -234,7 +230,7 @@ inline void node_set_parent(node *n, node *p)
 
 inline void node_set_parent_unsafe(node *n, node *p)
 {
-  __atomic_store(&n->parent, &p, __ATOMIC_RELAXED);
+  n->parent = p;
 }
 
 inline node* node_get_next(node *n)
@@ -253,36 +249,14 @@ uint32_t node_get_stable_version(node *n)
   return version;
 }
 
-// require: `n` is not root
-void node_set_root(node *n)
-{
-  uint32_t version = node_get_version(n);
-  assert(!is_root(version));
-  node_set_version(n, set_root(version));
-}
-
-// require: `n` is not root
 void node_set_root_unsafe(node *n)
 {
-  uint32_t version = node_get_version_unsafe(n);
-  assert(!is_root(version));
-  node_set_version_unsafe(n, set_root(version));
+  node_set_version_unsafe(n, set_root(node_get_version_unsafe(n)));
 }
 
-// require: `n` is root
-void node_unset_root(node *n)
-{
-  uint32_t version = node_get_version(n);
-  assert(is_root(version));
-  node_set_version(n, unset_root(version));
-}
-
-// require: `n` is root
 void node_unset_root_unsafe(node *n)
 {
-  uint32_t version = node_get_version_unsafe(n);
-  assert(is_root(version));
-  node_set_version_unsafe(n, unset_root(version));
+  node_set_version_unsafe(n, unset_root(node_get_version_unsafe(n)));
 }
 
 void node_lock_unsafe(node *n)
