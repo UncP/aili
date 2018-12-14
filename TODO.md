@@ -23,7 +23,6 @@
 - [x] b<sup>*</sup> node
 - [ ] MRBTree
 - [x] palm tree 信息统计
-- [ ] mass tree border node 使用 higher key，取代 lower key
 - [ ] mass tree linearizability 测试
 - [ ] mass tree 优化 `node_lock` 以及 `node_get_stable_version`
 - [ ] mass tree node prefetch

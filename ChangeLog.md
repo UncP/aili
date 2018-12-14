@@ -1,3 +1,12 @@
+### 3.1.0
+
+**Mass Tree 移除多余的 lower key**
+
+1. 优化 keyslice 获取，移除重试时 keyslice 的获取
+2. 去掉 border node 的 lower key，因为 lower key 始终位于 index 0 处，不需要多余的 lower key
+
+
+
 ### 3.0.0
 
 **Mass Tree**

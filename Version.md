@@ -14,6 +14,7 @@
 | [2.1.0](https://github.com/UncP/aili/tree/2.1.0)  | node allocator |
 | [2.2.0](https://github.com/UncP/aili/tree/2.2.0)  | Prefix B Tree |
 | [2.3.0](https://github.com/UncP/aili/tree/2.3.0)  | B<sup>*</sup> Tree |
-| [2.3.1](https://github.com/UncP/aili/tree/2.3.1)  | Palm Tree 节点信息统计 |
+| [2.3.1](https://github.com/UncP/aili/tree/2.3.1)  | Palm Tree node info collect |
 | [3.0.0](https://github.com/UncP/aili/tree/3.0.0) | Mass Tree |
+| [3.1.0](https://github.com/UncP/aili/tree/3.1.0) | Mass Tree remove redundant lower key |
 

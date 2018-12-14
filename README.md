@@ -1,7 +1,7 @@
 # aili
 
 [![Author](https://img.shields.io/badge/Author-UncP-brightgreen.svg)](https://github.com/UncP)
-[![Version](https://img.shields.io/badge/Version-3.0.0-blue.svg)](https://github.com/UncP/aili)
+[![Version](https://img.shields.io/badge/Version-3.1.0-blue.svg)](https://github.com/UncP/aili)
 
 
 #### Algorithms
