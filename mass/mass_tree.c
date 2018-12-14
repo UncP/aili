@@ -131,16 +131,6 @@ static void create_new_layer(node *n, const void *key, uint32_t len, uint32_t of
   uint32_t clen;
   int idx = node_get_conflict_key_index(n, key, len, off, &ckey, &clen);
 
-  // {
-  //   char buf1[256];
-  //   memcpy(buf1, ckey, clen);
-  //   buf1[clen] = 0;
-  //   char buf2[256];
-  //   memcpy(buf2, key, len);
-  //   buf2[len] = 0;
-  //   printf("%u %s\n%u %s\n", clen, buf1, len, buf2);
-  // }
-
   // advance key offset that causes this conflict
   off += sizeof(uint64_t);
 
@@ -212,12 +202,6 @@ static void mass_tree_promote_split_node(mass_tree *mt, node *n, uint64_t fence,
     return ;
   }
 
-  // char buf[8] = "va1qwx7h";
-  // if (fence == *(uint64_t *)buf) {
-  //   node_print(n);
-  //   node_print(n1);
-  // }
-
   uint32_t v;
   v = node_get_version(p);
   if (unlikely(is_border(v))) { // `n` is a sub tree
@@ -228,10 +212,6 @@ static void mass_tree_promote_split_node(mass_tree *mt, node *n, uint64_t fence,
     node_unlock(n1);
     node_unlock(p);
   } else if (likely(node_is_full(p) == 0)) {
-    // if (fence == *(uint64_t *)buf) {
-    //   node_print(p);
-    //   assert(0);
-    // }
     node_set_parent_unsafe(n1, p);
     assert((int)node_insert(p, &fence, sizeof(uint64_t), 0 /* off */, n1, 1 /* is_link */) == 1);
     node_unlock(n);
@@ -315,11 +295,6 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
       else
         assert((int)node_insert(n1, key, len, off, val, 0 /* is_link */) == 1);
 
-      // if (memcmp("vv2yr90l0g", key, len) == 0) {
-      //   node_print(n);
-      //   node_print(n1);
-      // }
-
       mass_tree_promote_split_node(mt, n, fence, n1);
       return 1;
     }
@@ -358,8 +333,7 @@ void* mass_tree_get(mass_tree *mt, const void *key, uint32_t len)
     v = node_get_stable_version(n);
     node *next = node_get_next(n);
     // there might be splits happened, traverse through the link
-    // while (!is_deleted(v) && next && node_include_key(next, key, len, off)) {
-    while (next && node_include_key(next, cur)) {
+    while (!is_deleted(v) && next && node_include_key(next, key, len, off)) {
       n = next;
       v = node_get_stable_version(n);
       next = node_get_next(n);
@@ -368,18 +342,7 @@ void* mass_tree_get(mass_tree *mt, const void *key, uint32_t len)
   }
 
   if (suffix) return suffix; // key found
-  if (!next_layer) {
-    {
-      char buf[256];
-      memcpy(buf, key, len);
-      buf[len] = 0;
-      printf("%s\n", buf);
-    }
-    node_print(node_get_parent(n));
-    node_print(n);
-    node_print(node_get_next(n));
-    return 0; // key not exists
-  }
+  if (!next_layer) return 0; // key not exists
   if ((uint64_t)next_layer == 1) goto forward; // unstable
 
   r = next_layer;
