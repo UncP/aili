@@ -96,7 +96,6 @@ node* node_descend(node *n, uint64_t cur);
 void* node_insert(node *n, const void *key, uint32_t len, uint32_t off, const void *val, int is_link);
 node* node_split(node *n, uint64_t *fence);
 node* node_search(node *n, const void *key, uint32_t len, uint32_t off, void **value);
-void node_insert_lowest_key(node *n);
 
 int compare_key(uint64_t k1, uint64_t k2);
 uint64_t get_next_keyslice(const void *key, uint32_t len, uint32_t off);

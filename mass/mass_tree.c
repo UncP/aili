@@ -29,8 +29,6 @@ mass_tree* new_mass_tree(int thread_num)
   node *r = new_node(Border);
   node_set_root_unsafe(r);
 
-  node_insert_lowest_key(r);
-
   __atomic_store(&mt->root, &r, __ATOMIC_RELEASE);
 
   return mt;
@@ -147,7 +145,6 @@ static void create_new_layer(node *n, const void *key, uint32_t len, uint32_t of
 
     node *bn = new_node(Border);
     node_set_root_unsafe(bn);
-    node_insert_lowest_key(bn);
     if (head == 0) head = bn;
     if (parent) {
       node_lock_unsafe(parent);
@@ -164,7 +161,6 @@ static void create_new_layer(node *n, const void *key, uint32_t len, uint32_t of
   // insert these 2 keys without conflict into border node
   node *bn = new_node(Border);
   node_set_root_unsafe(bn);
-  node_insert_lowest_key(bn);
   node_lock_unsafe(bn);
   assert((int)node_insert(bn, ckey, clen, off, 0, 0 /* is_link */) == 1);
   assert((int)node_insert(bn, key, len, off, val, 0 /* is_link */) == 1);

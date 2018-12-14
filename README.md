@@ -12,8 +12,8 @@
 
 #### Version
 
-see `Version.md` for **brief** info  
-see `ChangeLog.md` for **detail** 
+see `Version.md` for **brief** info
+see `ChangeLog.md` for **detail**
 
 
 
@@ -21,16 +21,17 @@ see `ChangeLog.md` for **detail**
 
 ```bash
 1. make third_party
-                                       #  key_num   key_len
-2. make generate_data && ./generate_data  10000000    10    # test data will be in ./data
-                                                        # f_name  n_size  b_size  t_num  q_num  k_num
-3.1 make "DFLAGS=-DTest" palm_tree_test && ./palm_tree_test  1      4096   4096     2      8    1000000
-                                                            # f_name  n_size  t_num  k_num
-3.2 make "DFLAGS=-DTest" blink_tree_test && ./blink_tree_test  1       4096    3     1000000
+                                       # file_num  key_num   key_len
+2. make generate_data && ./generate_data  4        10000000    10    # data will be in ./data, 4 random data files, 4 sequential data files
 
-# f_name can be 0 (sequential data) or 1 (random data);
-# if your machine supports N threads, t_num can be 1, 2, ..., (N-1), not N;
-# k_num can be [1, infinity), depending on how many test keys you generate
+# test palm tree  thread_num  total_key_num
+3.1 ./run.sh palm  2           100
+
+# test blink tree  thread_num  total_key_num
+3.2 ./run.sh blink  2           100
+
+# test mass tree  thread_num  total_key_num
+3.3 ./run.sh mass  2           100
 ```
 
 
@@ -38,6 +39,7 @@ see `ChangeLog.md` for **detail**
 
 + checkout `example/` for examples
 + follow my [知乎专栏](https://zhuanlan.zhihu.com/b-tree) for blogs about this repository
++ open an issue if you have any problem
 
 
 

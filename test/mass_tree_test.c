@@ -111,10 +111,6 @@ static void* run(void *arg)
 
 void test_mass_tree(int file, int thread_number, int total_keys)
 {
-#ifdef Allocator
-  init_allocator();
-#endif // Allocator
-
   mass_tree *mt = new_mass_tree(thread_number);
 
   int thread_keys = total_keys / thread_number;

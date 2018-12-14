@@ -15,7 +15,7 @@
 
 static const char *dir = "./data";
 
-static void generate_test_data(const char *file_name, int key_num, int key_len, int random)
+static void generate_test_data(int file_name, int key_num, int key_len, int random)
 {
   srand(time(NULL));
 
@@ -24,7 +24,7 @@ static void generate_test_data(const char *file_name, int key_num, int key_len, 
   char file[64];
   memset(file, 0, 64);
   memcpy(file, dir, strlen(dir));
-  sprintf(file + strlen(dir), "/%s", file_name);
+  sprintf(file + strlen(dir), "/%d", file_name);
   int fd = open(file, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP);
   assert(fd != -1);
 
@@ -67,15 +67,16 @@ static void generate_test_data(const char *file_name, int key_num, int key_len, 
 
 int main(int argc, char **argv)
 {
-  if (argc < 3) {
-    printf("key_number key_length\n");
+  if (argc < 4) {
+    printf("file_number key_number key_length\n");
     exit(1);
   }
 
-  int key_num = atoi(argv[1]);
-  int key_len = atoi(argv[2]);
-  char *file_name1 = "1\0";
-  char *file_name2 = "0\0";
+  int file_number = atoi(argv[1]);
+  int key_num = atoi(argv[2]);
+  int key_len = atoi(argv[3]);
+  int file = 1;
+  if (file_number <= 0) file_number = 1;
   if (key_num <= 0) key_num = 1000000;
   if (key_num > 100000000) key_num = 100000000;
   if (key_len <= 0) key_len = 16;
@@ -85,10 +86,12 @@ int main(int argc, char **argv)
     assert(mkdir(dir, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IROTH) >= 0);
 
   printf("generate random test data\n");
-  generate_test_data(file_name1, key_num, key_len, 1 /* random */);
+  for (int i = 0; i < file_number; ++i, ++file)
+    generate_test_data(file, key_num, key_len, 1 /* random */);
 
   printf("generate sequential test data\n");
-  generate_test_data(file_name2, key_num, key_len, 0 /* random */);
+  for (int i = 0; i < file_number; ++i, ++file)
+    generate_test_data(file, key_num, key_len, 0 /* sequential */);
 
   printf("key_num: %d  key_len: %d\n", key_num, key_len);
   return 0;

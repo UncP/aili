@@ -424,7 +424,7 @@ int node_get_conflict_key_index(node *n, const void *key, uint32_t len, uint32_t
       break;
 
   // must have same key slice
-  assert(i && i != count);
+  assert(i != count);
 
   border_node *bn = (border_node *)n;
   *ckey = bn->suffix[i];
@@ -437,22 +437,18 @@ int node_get_conflict_key_index(node *n, const void *key, uint32_t len, uint32_t
 // require: `n` is locked and is border node
 void node_replace_at_index(node *n, int index, node *n1)
 {
-  assert(index);
-
   uint32_t version = node_get_version_unsafe(n);
   assert(is_locked(version) && is_border(version));
 
   border_node *bn = (border_node *)n;
 
   // for safety
-  uint8_t status;
-  __atomic_load(&bn->keylen[index], &status, __ATOMIC_RELAXED);
-  assert(status != magic_unstable);
+  assert(bn->keylen[index] != magic_unstable);
 
   uint8_t unstable = magic_unstable;
   __atomic_store(&bn->keylen[index], &unstable, __ATOMIC_RELEASE);
 
-  bn->suffix[index] = 0;
+  // don't set `bn->suffix[index] = 0`
   bn->lv[index] = n1;
 
   uint8_t link = magic_link;
@@ -476,25 +472,9 @@ void node_swap_child(node *n, node *c, node *c1)
       break;
 
   // must have this child
-  assert(i && i != count);
+  assert(i != count);
 
   node_replace_at_index(n, i, c1);
-}
-
-void node_insert_lowest_key(node *n)
-{
-  uint32_t version = node_get_version_unsafe(n);
-  assert(is_border(version));
-
-  border_node *bn = (border_node *)n;
-  bn->keyslice[0] = 0;
-  bn->keylen[0]   = 0;
-  bn->suffix[0]   = 0;
-  bn->lv[0]       = 0;
-
-  uint64_t permutation = 0;
-  update_permutation(permutation, 0, 0);
-  node_set_permutation_unsafe(n, permutation);
 }
 
 // require: `n` is interior node
@@ -557,8 +537,7 @@ void* node_insert(node *n, const void *key, uint32_t len, uint32_t off, const vo
     } else {
       assert(is_border(version));
       border_node *bn = (border_node *)n;
-      uint8_t status;
-      __atomic_load(&bn->keylen[index], &status, __ATOMIC_RELAXED);
+      uint8_t status = bn->keylen[index];
       assert(status != magic_unstable);
       if (status == magic_link) {
         // need to go to a deeper layer
@@ -639,25 +618,20 @@ node* node_search(node *n, const void *key, uint32_t len, uint32_t off, void **v
       high = mid - 1;
     } else {
       border_node *bn = (border_node *)n;
-      uint8_t status1, status2;
-      __atomic_load(&bn->keylen[index], &status1, __ATOMIC_ACQUIRE);
+      uint8_t status;
+      // TODO: this is a potential bug
+      __atomic_load(&bn->keylen[index], &status, __ATOMIC_ACQUIRE);
+      // NOTE: if we put key info within suffix, things will be easier
       uint64_t lv = (uint64_t)bn->lv[index];
       void *suffix = bn->suffix[index];
-      __atomic_load(&bn->keylen[index], &status2, __ATOMIC_ACQUIRE);
-      if (status1 == magic_unstable || status2 == magic_unstable)
+      if (status == magic_unstable)
         // has intermediate state, need to retry
         return (void *)1;
-
-      // check the latest status
-
-      // could be two different links, but we will verify whether it is root when we descend
-      if (status2 == magic_link)
+      if (status == magic_link)
         return (void *)lv; // need to go to a deeper layer
-      // could be two different values, but that means an split happened, which will be invalidated
-      // when we return
       uint32_t clen = (uint32_t)lv;
       uint32_t coff = (uint32_t)(lv >> 32);
-      assert(coff == off);
+      assert(coff == off && suffix);
       if (clen == len && !memcmp((char *)key + off, (char *)suffix + off, len - off))
         *value = suffix; // value found
       return (void *)0;
@@ -674,31 +648,31 @@ static uint64_t border_node_split(border_node *bn, border_node *bn1)
   assert(count == max_key_count);
 
   // make sure lower key is where we want it to be
-  assert(get_index(permutation, 0) == 0);
+  assert(get_index(permutation, 0) == 0 || bn->prev == 0);
 
   // first we copy all the keys [1, 14] from `bn` to `bn1` in key order
-  for (int i = 0; i < count - 1; ++i) {
-    int index = get_index(permutation, i + 1);
+  for (int i = 0; i < count; ++i) {
+    int index = get_index(permutation, i);
     bn1->keyslice[i] = bn->keyslice[index];
     bn1->keylen[i]   = bn->keylen[index];
     bn1->suffix[i]   = bn->suffix[index];
     bn1->lv[i]       = bn->lv[index];
   }
 
-  // then we move first half [1-7] of the key from `bn1` to `bn`
-  for (int i = 0; i < 7; ++i) {
-    bn->keyslice[i+1] = bn1->keyslice[i];
-    bn->keylen[i+1]   = bn1->keylen[i];
-    bn->suffix[i+1]   = bn1->suffix[i];
-    bn->lv[i+1]       = bn1->lv[i];
+  // then we move first half [0-7] of the key from `bn1` to `bn`
+  for (int i = 0; i < 8; ++i) {
+    bn->keyslice[i] = bn1->keyslice[i];
+    bn->keylen[i]   = bn1->keylen[i];
+    bn->suffix[i]   = bn1->suffix[i];
+    bn->lv[i]       = bn1->lv[i];
   }
 
   // and move the other half [8, 14]
   for (int i = 0; i < 7; ++i) {
-    bn1->keyslice[i] = bn1->keyslice[i + 7];
-    bn1->keylen[i]   = bn1->keylen[i + 7];
-    bn1->suffix[i]   = bn1->suffix[i + 7];
-    bn1->lv[i]       = bn1->lv[i + 7];
+    bn1->keyslice[i] = bn1->keyslice[i + 8];
+    bn1->keylen[i]   = bn1->keylen[i + 8];
+    bn1->suffix[i]   = bn1->suffix[i + 8];
+    bn1->lv[i]       = bn1->lv[i + 8];
   }
 
   // then we set each node's `permutation` field
@@ -720,15 +694,12 @@ static uint64_t border_node_split(border_node *bn, border_node *bn1)
   // `__ATOMIC_RELEASE` will make sure all link operations above been seen by other threads
   __atomic_store(&bn->next, &bn1, __ATOMIC_RELEASE);
 
-  // node_print((node *)bn);
-  // node_print((node *)bn1);
   return bn1->keyslice[0];
 }
 
 // require: `in` and `in1` is locked
 static uint64_t interior_node_split(interior_node *in, interior_node *in1)
 {
-  // TODO: no need to use atomic operation
   uint64_t permutation = node_get_permutation_unsafe((node *)in);
   int count = get_count(permutation);
   assert(count == max_key_count);
@@ -767,9 +738,6 @@ static uint64_t interior_node_split(interior_node *in, interior_node *in1)
   // due to this `release` operation
   node_set_permutation((node *)in, permutation);
 
-  // node_print((node *)in);
-  // node_print((node *)in1);
-  // printf("\ninterior node split over !!!\n");
   return fence;
 }
 
