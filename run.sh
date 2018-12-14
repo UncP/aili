@@ -17,8 +17,8 @@ then
 make "DFLAGS+=-DTest -DAllocator" blink_tree_test && ./blink_tree_test  1      4096    $2     $3
 elif [ "$1" = "mass" ]
 then
-                                            # f_name thread key
-make mass_tree_test "DFLAGS+=-DAllocator" && ./mass_tree_test 2 $2 $3
+                                                            # f_name  t_num  k_num
+make mass_tree_test "DFLAGS+=-DAllocator" && ./mass_tree_test  2       $2     $3
 else
   echo "1: palm || blink || mass\n2: thread_num\n3: total_key_num\n:("
 fi
