@@ -281,23 +281,12 @@ void node_unlock_unsafe(node *n)
   node_set_version_unsafe(n, unset_lock(version));
 }
 
-// TODO: optimize
 void node_lock(node *n)
 {
-  uint32_t version;
-  uint32_t min, max = 128;
   while (1) {
-    min = 4;
-    while (1) {
-      // TODO: can this be `relaxed` operation?
-      version = node_get_version(n);
-      if (!is_locked(version))
-        break;
-      for (uint32_t i = 0; i != min; ++i)
-        __asm__ __volatile__("pause" ::: "memory");
-      if (min < max)
-        min += min;
-    }
+    uint32_t version = node_get_version(n);
+    if (is_locked(version))
+      continue;
     if (__atomic_compare_exchange_n(&n->version, &version, set_lock(version),
       1 /* weak */, __ATOMIC_RELEASE, __ATOMIC_RELAXED))
       break;
