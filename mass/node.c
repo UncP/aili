@@ -466,11 +466,6 @@ void node_swap_child(node *n, node *c, node *c1)
     if (bn->lv[i] == (void *)c)
       break;
 
-  if (i == count) {
-    node_print(n);
-    node_print(c);
-    node_print(c1);
-  }
   // must have this child
   assert(i != count);
 
