@@ -1,7 +1,7 @@
 # aili
 
 [![Author](https://img.shields.io/badge/Author-UncP-brightgreen.svg)](https://github.com/UncP)
-[![Version](https://img.shields.io/badge/Version-3.1.0-blue.svg)](https://github.com/UncP/aili)
+[![Version](https://img.shields.io/badge/Version-3.2.0-blue.svg)](https://github.com/UncP/aili)
 
 
 #### Algorithms
@@ -12,7 +12,7 @@
 
 #### Version
 
-see `Version.md` for **brief** info
+see `Version.md` for **brief** info  
 see `ChangeLog.md` for **detail**
 
 
@@ -35,11 +35,12 @@ see `ChangeLog.md` for **detail**
 ```
 
 
+
 #### Other
 
-+ checkout `example/` for examples
-+ follow my [知乎专栏](https://zhuanlan.zhihu.com/b-tree) for blogs about this repository
-+ open an issue if you have any problem
++ Checkout `example/` for examples
++ Follow my [知乎专栏](https://zhuanlan.zhihu.com/b-tree) for blogs about this repository
++ Open an issue if you have any problem
 
 
 

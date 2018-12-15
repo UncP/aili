@@ -82,8 +82,6 @@ uint32_t node_get_version_unsafe(node *n);
 uint32_t node_get_stable_version(node *n);
 void node_set_version(node *n, uint32_t version);
 node* node_get_next(node *n);
-void node_set_parent_unsafe(node *n, node *p);
-void node_set_parent(node *n, node *p);
 node* node_get_parent(node *n);
 node* node_get_locked_parent(node *n);
 void node_set_first_child(node *n, node *c);
@@ -95,10 +93,11 @@ void node_swap_child(node *n, node *c, node *c1);
 node* node_descend(node *n, uint64_t cur);
 void* node_insert(node *n, const void *key, uint32_t len, uint32_t off, const void *val, int is_link);
 node* node_split(node *n, uint64_t *fence);
-node* node_search(node *n, const void *key, uint32_t len, uint32_t off, void **value);
+void* node_search(node *n, uint64_t cur, void **value);
 
 int compare_key(uint64_t k1, uint64_t k2);
 uint64_t get_next_keyslice(const void *key, uint32_t len, uint32_t off);
+uint64_t get_next_keyslice_and_advance(const void *key, uint32_t len, uint32_t *off);
 
 #ifdef Test
 

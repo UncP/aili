@@ -1,9 +1,22 @@
+### 3.2.0
+
+**Mass Tree 读优化**
+
+1. 解决潜在的 `mass_tree_get` bug，当确认获取的 key 信息安全（节点没有发生插入或分裂）后才进行处理
+2. 解决生成测试数据的 bug
+3. 重构节点的 `permutation`
+4. 以更安全的方式设置节点的父节点，简化代码
+5. （BUG）border node 分裂时没有修改其 subtree 的父节点
+
+
+
 ### 3.1.0
 
 **Mass Tree 移除多余的 lower key**
 
 1. 优化 keyslice 获取，移除重试时 keyslice 的获取
 2. 去掉 border node 的 lower key，因为 lower key 始终位于 index 0 处，不需要多余的 lower key
+3. 完善测试数据的生成，添加测试脚本
 
 
 

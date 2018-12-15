@@ -16,19 +16,20 @@
 #endif // Allocator
 
 #define max_key_count  15
-#define magic_link     ((uint8_t)13) // a magic value
-#define magic_unstable ((uint8_t)14) // a magic value
+
+#define magic_unstable ((uint8_t)0x10)
+#define magic_link     ((uint8_t)0x20)
 
 // `permutation` is uint64_t
-#define get_count(permutation) ((int)((permutation) >> 60))
-#define get_index(permutation, index) ((int)(((permutation) >> (4 * (14 - (index)))) & 0xf))
-#define update_permutation(permutation, index, value) {                           \
-  uint64_t right = (permutation << (((index) + 1) * 4)) >> (((index) + 2) * 4);   \
-  uint64_t left = (permutation >> ((15 - (index)) * 4)) << ((15 - (index)) * 4);  \
-  uint64_t middle = ((uint64_t)(value) & 0xf) << ((14 - (index)) * 4);            \
-  permutation = left | middle | right;                                        \
-  permutation = permutation + ((uint64_t)1 << 60);                            \
+#define get_count(permutation) ((int)(permutation & 0xf))
+#define get_index(permutation, index) ((int)((permutation >> (((index) + 1) * 4)) & 0xf))
+#define update_permutation(permutation, index, value) { \
+  uint64_t mask = (((uint64_t)1) << (((index) + 1) * 4)) - 1; \
+  permutation = ((permutation & (~mask)) << 4) | (((uint64_t)(value)) << (((index) + 1) * 4)) | ((permutation & mask) + 1); \
 }
+
+#define set_sequential_permutation(permutation, count) \
+  (permutation = ((uint64_t)0xedcba98765432100) | (count))
 
 // see Mass Tree paper figure 2 for detail, node structure is reordered for easy coding
 typedef struct interior_node
@@ -223,14 +224,9 @@ inline node* node_get_parent(node *n)
   return parent;
 }
 
-inline void node_set_parent(node *n, node *p)
+static inline void node_set_parent(node *n, node *p)
 {
   __atomic_store(&n->parent, &p, __ATOMIC_RELEASE);
-}
-
-inline void node_set_parent_unsafe(node *n, node *p)
-{
-  n->parent = p;
 }
 
 inline node* node_get_next(node *n)
@@ -331,10 +327,6 @@ node* node_get_locked_parent(node *n)
 // require: `n` is locked
 inline int node_is_full(node *n)
 {
-  // TODO: remove this
-  uint32_t version = node_get_version_unsafe(n);
-  assert(is_locked(version));
-
   return node_get_count_unsafe(n) == max_key_count;
 }
 
@@ -355,7 +347,7 @@ inline uint64_t get_next_keyslice(const void *key, uint32_t len, uint32_t off)
   return cur;
 }
 
-static inline uint64_t get_next_keyslice_and_advance(const void *key, uint32_t len, uint32_t *off)
+inline uint64_t get_next_keyslice_and_advance(const void *key, uint32_t len, uint32_t *off)
 {
   uint64_t cur = 0;
   assert(*off <= len);
@@ -404,6 +396,7 @@ inline void node_set_first_child(node *n, node *c)
   uint32_t version = node_get_version_unsafe(n);
   assert(is_locked(version) && is_interior(version));
 
+  c->parent = n;
   interior_node *in = (interior_node *)n;
   in->child[0] = c;
 }
@@ -440,16 +433,18 @@ void node_replace_at_index(node *n, int index, node *n1)
   uint32_t version = node_get_version_unsafe(n);
   assert(is_locked(version) && is_border(version));
 
+  // set parent pointer
+  n1->parent = n;
+
   border_node *bn = (border_node *)n;
 
-  // for safety
   assert(bn->keylen[index] != magic_unstable);
 
   uint8_t unstable = magic_unstable;
   __atomic_store(&bn->keylen[index], &unstable, __ATOMIC_RELEASE);
 
-  // don't set `bn->suffix[index] = 0`
   bn->lv[index] = n1;
+  bn->suffix[index] = 0;
 
   uint8_t link = magic_link;
   __atomic_store(&bn->keylen[index], &link, __ATOMIC_RELEASE);
@@ -471,6 +466,11 @@ void node_swap_child(node *n, node *c, node *c1)
     if (bn->lv[i] == (void *)c)
       break;
 
+  if (i == count) {
+    node_print(n);
+    node_print(c);
+    node_print(c1);
+  }
   // must have this child
   assert(i != count);
 
@@ -513,6 +513,7 @@ node* node_descend(node *n, uint64_t cur)
 // if need to create a new layer, return -1
 void* node_insert(node *n, const void *key, uint32_t len, uint32_t off, const void *val, int is_link)
 {
+  // TODO: remove this
   uint32_t version = node_get_version_unsafe(n);
   assert(is_locked(version));
 
@@ -574,14 +575,18 @@ void* node_insert(node *n, const void *key, uint32_t len, uint32_t off, const vo
       *len_ptr = len;
       *off_ptr = off;
     } else {
+      node *child = (node *)val;
+      child->parent = n;
       bn->keylen[count] = magic_link;
       bn->suffix[count] = 0;
-      bn->lv[count] = (void *)val;
+      bn->lv[count] = (void *)child;
     }
   } else {
     assert(is_link == 1);
+    node *child = (node *)val;
+    child->parent = n;
     interior_node *in = (interior_node *)n;
-    in->child[count + 1] = (node *)val;
+    in->child[count + 1] = child;
   }
 
   update_permutation(permutation, low, count);
@@ -591,18 +596,14 @@ void* node_insert(node *n, const void *key, uint32_t len, uint32_t off, const vo
 }
 
 // require: `n` is border node
-node* node_search(node *n, const void *key, uint32_t len, uint32_t off, void **value)
+void* node_search(node *n, uint64_t cur, void **value)
 {
-  // it's ok to use `unsafe` operation here because we only use it to verify node type,
-  // and node type stays the same the entire time
   uint32_t version = node_get_version_unsafe(n);
   assert(is_border(version));
 
   *value = 0;
 
   uint64_t permutation = node_get_permutation(n);
-
-  uint64_t cur = get_next_keyslice_and_advance(key, len, &off);
 
   int low = 0, high = get_count(permutation) - 1;
   while (low <= high) {
@@ -619,22 +620,14 @@ node* node_search(node *n, const void *key, uint32_t len, uint32_t off, void **v
     } else {
       border_node *bn = (border_node *)n;
       uint8_t status;
-      // TODO: this is a potential bug
       __atomic_load(&bn->keylen[index], &status, __ATOMIC_ACQUIRE);
-      // NOTE: if we put key info within suffix, things will be easier
-      uint64_t lv = (uint64_t)bn->lv[index];
-      void *suffix = bn->suffix[index];
-      if (status == magic_unstable)
+      if (unlikely(status == magic_unstable))
         // has intermediate state, need to retry
         return (void *)1;
-      if (status == magic_link)
-        return (void *)lv; // need to go to a deeper layer
-      uint32_t clen = (uint32_t)lv;
-      uint32_t coff = (uint32_t)(lv >> 32);
-      assert(coff == off && suffix);
-      if (clen == len && !memcmp((char *)key + off, (char *)suffix + off, len - off))
-        *value = suffix; // value found
-      return (void *)0;
+      if (status != magic_link)
+        // NOTE: if we put key info within suffix, things will be easier
+        *value = bn->suffix[index];
+      return bn->lv[index];
     }
   }
   return 0;
@@ -673,15 +666,16 @@ static uint64_t border_node_split(border_node *bn, border_node *bn1)
     bn1->keylen[i]   = bn1->keylen[i + 8];
     bn1->suffix[i]   = bn1->suffix[i + 8];
     bn1->lv[i]       = bn1->lv[i + 8];
+    if (unlikely(bn1->keylen[i] == magic_link))
+      node_set_parent((node *)bn1->lv[i], (node *)bn1);
   }
 
   // then we set each node's `permutation` field
-  permutation = 0;
-  for (int i = 0; i < 7; ++i) update_permutation(permutation, i, i);
+  set_sequential_permutation(permutation, 7);
   // it's ok to use `unsafe` operation,
   node_set_permutation_unsafe((node *)bn1, permutation);
 
-  update_permutation(permutation, 7, 7);
+  set_sequential_permutation(permutation, 8);
   // due to this `release` operation
   node_set_permutation((node *)bn, permutation);
 
@@ -731,8 +725,8 @@ static uint64_t interior_node_split(interior_node *in, interior_node *in1)
   node_set_parent(in1->child[7], (node *)in1);
 
   // finally we set each node's `permutation` field
-  permutation = 0;
-  for (int i = 0; i < 7; ++i) update_permutation(permutation, i, i);
+
+  set_sequential_permutation(permutation, 7);
   // it's ok to use `unsafe` opeartion,
   node_set_permutation_unsafe((node *)in1, permutation);
   // due to this `release` operation
@@ -804,6 +798,7 @@ void node_print(node *n)
   uint64_t permutation = node_get_permutation(n);
   int count = get_count(permutation);
 
+  printf("%p\n", n);
   printf("is_root:      %u\n", !!is_root(version));
   printf("is_border:    %u\n", !!is_border(version));
   printf("is_locked:    %u\n", !!is_locked(version));

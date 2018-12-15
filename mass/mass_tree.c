@@ -62,9 +62,6 @@ static node* mass_tree_grow(node *n, uint64_t fence, node *n1)
 
   node_set_first_child(r, n);
 
-  node_set_parent_unsafe(n1, r);
-  node_set_parent_unsafe(n, r);
-
   assert((int)node_insert(r, &fence, sizeof(uint64_t), 0 /* off */, n1, 1 /* is_link */) == 1);
 
   node_unset_root_unsafe(n1);
@@ -122,7 +119,7 @@ static node* find_border_node(node *r, uint64_t cur, uint32_t *version)
 }
 
 // require: `n` is locked
-// create a subtree and then insert kv into it, at last replace kv with subtree
+// create a subtree lazily and then insert kv into it, at last replace kv with this subtree
 static void create_new_layer(node *n, const void *key, uint32_t len, uint32_t off, const void *val)
 {
   void *ckey;
@@ -150,7 +147,6 @@ static void create_new_layer(node *n, const void *key, uint32_t len, uint32_t of
       node_lock_unsafe(parent);
       assert((int)node_insert(parent, &lks, sizeof(uint64_t), 0 /* off */, bn, 1 /* is_link */) == 1);
       node_unlock_unsafe(parent);
-      node_set_parent_unsafe(bn, parent);
     }
     lks = ks1;
     parent = bn;
@@ -170,18 +166,13 @@ static void create_new_layer(node *n, const void *key, uint32_t len, uint32_t of
     node_lock_unsafe(parent);
     assert((int)node_insert(parent, &lks, sizeof(uint64_t), 0 /* off */, bn, 1 /* is_link */) == 1);
     node_unlock_unsafe(parent);
-    node_set_parent_unsafe(bn, parent);
   }
 
   // now replace previous key with new subtree link,
-  // all the unsafe operation will be seen by other threads
-  if (head == 0) {
-    node_set_parent_unsafe(bn, n);
+  if (head == 0)
     node_replace_at_index(n, idx, bn);
-  } else {
-    node_set_parent_unsafe(head, n);
+  else
     node_replace_at_index(n, idx, head);
-  }
 }
 
 // require: `n` and `n1` is locked
@@ -202,13 +193,11 @@ static void mass_tree_promote_split_node(mass_tree *mt, node *n, uint64_t fence,
   v = node_get_version(p);
   if (unlikely(is_border(v))) { // `n` is a sub tree
     node *sub_root = mass_tree_grow(n, fence, n1);
-    node_set_parent_unsafe(sub_root, p);
     node_swap_child(p, n, sub_root);
     node_unlock(n);
     node_unlock(n1);
     node_unlock(p);
   } else if (likely(node_is_full(p) == 0)) {
-    node_set_parent_unsafe(n1, p);
     assert((int)node_insert(p, &fence, sizeof(uint64_t), 0 /* off */, n1, 1 /* is_link */) == 1);
     node_unlock(n);
     node_unlock(n1);
@@ -220,13 +209,10 @@ static void mass_tree_promote_split_node(mass_tree *mt, node *n, uint64_t fence,
     uint64_t fence1 = 0;
     node *p1 = node_split(p, &fence1);
     assert(fence1);
-    if (compare_key(fence, fence1) < 0) {
-      node_set_parent_unsafe(n1, p);
+    if (compare_key(fence, fence1) < 0)
       assert((int)node_insert(p, &fence, sizeof(uint64_t), 0 /* off */, n1, 1 /* is_link */) == 1);
-    } else {
-      node_set_parent_unsafe(n1, p1);
+    else
       assert((int)node_insert(p1, &fence, sizeof(uint64_t), 0 /* off */, n1, 1 /* is_link */) == 1);
-    }
     node_unlock(n1);
     n = p;
     fence = fence1;
@@ -311,7 +297,7 @@ void* mass_tree_get(mass_tree *mt, const void *key, uint32_t len)
   __atomic_load(&mt->root, &r, __ATOMIC_ACQUIRE);
 
   again:
-  cur = get_next_keyslice(key, len, off);
+  cur = get_next_keyslice_and_advance(key, len, &off);
   n = find_border_node(r, cur, &v);
 
   forward:
@@ -322,7 +308,7 @@ void* mass_tree_get(mass_tree *mt, const void *key, uint32_t len)
   }
 
   void *suffix;
-  node *next_layer = node_search(n, key, len, off, &suffix);
+  void *lv = node_search(n, cur, &suffix);
 
   uint32_t diff = node_get_version(n) ^ v;
   if (diff != LOCK_BIT && diff != 0) {
@@ -337,12 +323,23 @@ void* mass_tree_get(mass_tree *mt, const void *key, uint32_t len)
     goto forward;
   }
 
-  if (suffix) return suffix; // key found
-  if (!next_layer) return 0; // key not exists
-  if ((uint64_t)next_layer == 1) goto forward; // unstable
+  // case 1: unstable state, need to retry
+  if (unlikely((uint64_t)lv == 1)) goto forward;
 
-  r = next_layer;
-  // if we need to advance to next layer, then key offset will not exceed key length
-  off += sizeof(uint64_t);
-  goto again;
+  if (suffix) {
+    uint32_t clen = (uint32_t)((uint64_t)lv);
+    uint32_t coff = (uint32_t)((uint64_t)lv >> 32);
+    assert(coff == off);
+    // case 2: key exists
+    if (clen == len && !memcmp((char *)key + off, (char *)suffix + off, len - off))
+      return suffix;
+  } else if (lv) {
+    // case 3: goto a deeper layer
+    r = (node *)lv;
+    // offset is already set in `get_next_keyslice_and_advance`
+    goto again;
+  }
+
+  // case 4: key does not exist
+  return 0;
 }
