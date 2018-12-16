@@ -7,7 +7,7 @@
 #### Algorithms
 
 * Palm Tree (`palm/`)
-* Blink Tree (`blink/`)
+* B<sup>link</sup> Tree (`blink/`)
 * Mass Tree (`mass/`)
 
 #### Version
@@ -25,13 +25,13 @@ see `ChangeLog.md` for **detail**
 2. make generate_data && ./generate_data  4        10000000    10    # data will be in ./data, 4 random data files, 4 sequential data files
 
 # test palm tree  thread_num  total_key_num
-3.1 ./run.sh palm  2           100
+3.1 ./run.sh palm   2           100
 
 # test blink tree  thread_num  total_key_num
-3.2 ./run.sh blink  2           100
+3.2 ./run.sh blink   2           100
 
 # test mass tree  thread_num  total_key_num
-3.3 ./run.sh mass  2           100
+3.3 ./run.sh mass   2           100
 ```
 
 
