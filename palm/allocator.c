@@ -177,6 +177,9 @@ void* allocator_alloc_small(size_t size)
 {
   allocator *a = get_thread_allocator();
 
+  // 8 bytes alignment
+  size = (size + 8) & (~((size_t)8));
+
   int success;
   void *ptr = block_alloc(a->small_curr, size, &success);
   if (unlikely(success == 0)) {

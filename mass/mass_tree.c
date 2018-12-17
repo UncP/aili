@@ -168,7 +168,7 @@ static void create_new_layer(node *n, const void *key, uint32_t len, uint32_t of
     node_unlock_unsafe(parent);
   }
 
-  // now replace previous key with new subtree link,
+  // now replace previous key with new subtree link
   if (head == 0)
     node_replace_at_index(n, idx, bn);
   else
@@ -234,7 +234,7 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
   // before we write this node, a lock must be obtained
   node_lock(n);
 
-  // it's ok to use `relaxed` operation since node is locked
+  // it's ok to use `unsafe` operation since node is locked
   uint32_t diff = node_get_version_unsafe(n) ^ v;
   if (diff != LOCK_BIT) { // node has changed between we acquire this node and lock this node
     while (1) {
