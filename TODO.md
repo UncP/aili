@@ -26,4 +26,4 @@
 - [ ] mass tree linearizability 测试
 - [ ] mass tree 优化 `node_lock` 以及 `node_get_stable_version`
 - [ ] mass tree node prefetch
-
+- [ ] mass tree delete

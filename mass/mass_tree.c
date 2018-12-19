@@ -231,28 +231,32 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
   again:
   cur = get_next_keyslice(key, len, off);
   n = find_border_node(r, cur, &v);
+
+  forward:
+  if (is_deleted(v)) {
+    // NOTE: remove this if we ever implement `mass_tree_delete`
+    assert(0);
+    goto again;
+  }
+
   // before we write this node, a lock must be obtained
   node_lock(n);
 
   // it's ok to use `unsafe` operation since node is locked
   uint32_t diff = node_get_version_unsafe(n) ^ v;
   if (diff != LOCK_BIT) { // node has changed between we acquire this node and lock this node
-    while (1) {
-      node *next = node_get_next(n);
-      if (next == 0)
-        break;
-      node_lock(next);
-      // there might be splits happened, traverse through the link
-      // we don't have to worry about the offset, it's valid
-      if (likely(!node_include_key(next, cur))) {
-        node_unlock(next);
-        break;
-      } else {
-        // move to next node
-        node_unlock(n);
-        n = next;
-      }
+    // unlock first
+    node_unlock(n);
+
+    v = node_get_stable_version(n);
+    node *next = node_get_next(n);
+    // there might be splits happened, traverse through the link
+    while (!is_deleted(v) && next && node_include_key(next, cur)) {
+      n = next;
+      v = node_get_stable_version(n);
+      next = node_get_next(n);
     }
+    goto forward;
   }
 
   void *ret = node_insert(n, key, len, off, val, 0 /* is_link */);
