@@ -244,7 +244,7 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
       node_lock(next);
       // there might be splits happened, traverse through the link
       // we don't have to worry about the offset, it's valid
-      if (!node_include_key(next, cur)) {
+      if (likely(!node_include_key(next, cur))) {
         node_unlock(next);
         break;
       } else {

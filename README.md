@@ -13,7 +13,7 @@
 #### Version
 
 see `Version.md` for **brief** info  
-see `ChangeLog.md` for **detail**
+see `ChangeLog.md` for **detail** info
 
 
 

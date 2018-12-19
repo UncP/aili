@@ -31,6 +31,18 @@
 #define set_sequential_permutation(permutation, count) \
   (permutation = ((uint64_t)0xedcba98765432100) | (count))
 
+// this is a little bit tricky, since both `interior_node` and `border_node`
+// start with `version` field, we can convert them to `node` so that coding is easier
+struct node
+{
+  uint32_t version;
+  uint16_t removed; // TODO: get this done
+  uint64_t permutation;
+  uint64_t keyslice[15];
+
+  struct node *parent; // interior node
+};
+
 // see Mass Tree paper figure 2 for detail, node structure is reordered for easy coding
 typedef struct interior_node
 {
@@ -57,7 +69,7 @@ typedef struct border_node
 
   /* private fields */
 
-  uint8_t  nremoved; // should be `uint16_t`, but for alignment reason use `uint8_t` instead
+  uint8_t  padding; // for alignment
   uint8_t  keylen[15];
 
   // TODO: memory usage optimization
@@ -126,8 +138,8 @@ static border_node* new_border_node()
 
   bn->parent = 0;
 
-  // set `bn->nremoved` and `bn->keylen[15]` to 0
-  memset(&bn->nremoved, 0, 16);
+  // set `bn->padding` and `bn->keylen[15]` to 0
+  memset(&bn->padding, 0, 16);
 
   // `bn->suffix` and `bn->lv` does not need initialization
 
@@ -555,9 +567,6 @@ void* node_insert(node *n, const void *key, uint32_t len, uint32_t off, const vo
   if (count == max_key_count)
     return (void *)-2;
 
-  // set `insert` before actually write this node
-  node_set_version(n, set_insert(version));
-
   n->keyslice[count] = cur;
 
   if (likely(is_border(version))) {
@@ -578,6 +587,8 @@ void* node_insert(node *n, const void *key, uint32_t len, uint32_t off, const vo
     }
   } else {
     assert(is_link == 1);
+    // set `insert` before actually write this node
+    node_set_version(n, set_insert(version));
     node *child = (node *)val;
     child->parent = n;
     interior_node *in = (interior_node *)n;
