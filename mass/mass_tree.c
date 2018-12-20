@@ -36,9 +36,7 @@ mass_tree* new_mass_tree(int thread_num)
 
 void free_mass_tree(mass_tree *mt)
 {
-  (void)mt;
-  // TODO: uncomment this
-  // free_node(mt->root);
+  free_node(mt->root);
 }
 
 #ifdef Test
@@ -93,6 +91,8 @@ static node* find_border_node(node *r, uint64_t cur, uint32_t *version)
       *version = v;
       return n;
     }
+
+    node_prefetch(n);
 
     node *n1 = node_descend(n, cur);
     assert(n1);
@@ -225,8 +225,8 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
 {
   uint32_t off = 0, v;
   uint64_t cur;
-  node *r, *n;
-  __atomic_load(&mt->root, &r, __ATOMIC_ACQUIRE);
+  // it's ok to use stale root
+  node *r = mt->root, *n;
 
   again:
   cur = get_next_keyslice(key, len, off);
@@ -258,6 +258,8 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
     }
     goto forward;
   }
+
+  border_node_prefetch_write(n);
 
   void *ret = node_insert(n, key, len, off, val, 0 /* is_link */);
   switch ((uint64_t)ret) {
@@ -297,8 +299,8 @@ void* mass_tree_get(mass_tree *mt, const void *key, uint32_t len)
 {
   uint32_t off = 0, v;
   uint64_t cur;
-  node *r, *n;
-  __atomic_load(&mt->root, &r, __ATOMIC_ACQUIRE);
+  // it's ok to use stale root
+  node *r = mt->root, *n;
 
   again:
   cur = get_next_keyslice_and_advance(key, len, &off);
@@ -310,6 +312,8 @@ void* mass_tree_get(mass_tree *mt, const void *key, uint32_t len)
     assert(0);
     goto again;
   }
+
+  border_node_prefetch_read(n);
 
   void *suffix;
   void *lv = node_search(n, cur, &suffix);

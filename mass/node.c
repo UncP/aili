@@ -112,6 +112,9 @@ static interior_node* new_interior_node()
 
 static void free_border_node(border_node *bn)
 {
+#ifdef Allocator
+  (void)bn;
+#else
   int count = node_get_count((node *)bn);
 
   for (int i = 0; i < count; ++i) {
@@ -123,6 +126,7 @@ static void free_border_node(border_node *bn)
   }
 
   free((void *)bn);
+#endif // Allocator
 }
 
 static border_node* new_border_node()
@@ -157,12 +161,16 @@ static border_node* new_border_node()
 
 static void free_interior_node(interior_node *in)
 {
+#ifdef Allocator
+  (void)in;
+#else
   int count = node_get_count((node *)in);
 
   for (int i = 0; i < count; ++i)
     free_node(in->child[i]);
 
   free((void *)in);
+#endif // Allocator
 }
 
 node* new_node(int type)
@@ -177,6 +185,36 @@ void free_node(node *n)
     free_border_node((border_node *)n);
   else
     free_interior_node((interior_node *)n);
+}
+
+// fetch key and child pointer
+// TODO: optimize this?
+inline void node_prefetch(node *n)
+{
+  // 0 means for read,
+  // 0 means node has a low degree of temporal locality to stay in all levels of cache if possible
+  __builtin_prefetch((char *)n +   0, 0 /* rw */, 0 /* locality */);
+  __builtin_prefetch((char *)n +  64, 0 /* rw */, 0 /* locality */);
+  __builtin_prefetch((char *)n + 128, 0 /* rw */, 0 /* locality */);
+  __builtin_prefetch((char *)n + 192, 0 /* rw */, 0 /* locality */);
+}
+
+// fetch border node `suffix` and `lv` for write
+inline void border_node_prefetch_write(node *n)
+{
+  // 0 means for read, 1 means for write
+  // 0 means node has a low degree of temporal locality to stay in all levels of cache if possible
+  __builtin_prefetch((char *)n + 256, 1 /* rw */, 0 /* locality */);
+  __builtin_prefetch((char *)n + 320, 1 /* rw */, 0 /* locality */);
+}
+
+// fetch border node `suffix` and `lv` for read
+inline void border_node_prefetch_read(node *n)
+{
+  // 0 means for read, 1 means for write
+  // 0 means node has a low degree of temporal locality to stay in all levels of cache if possible
+  __builtin_prefetch((char *)n + 256, 0 /* rw */, 0 /* locality */);
+  __builtin_prefetch((char *)n + 320, 0 /* rw */, 0 /* locality */);
 }
 
 inline uint32_t node_get_version(node *n)
@@ -298,7 +336,7 @@ void node_unlock_unsafe(node *n)
 void node_lock(node *n)
 {
   while (1) {
-    uint32_t version = node_get_version(n);
+    uint32_t version = n->version;
     if (is_locked(version)) {
       // __asm__ __volatile__ ("pause");
       continue;

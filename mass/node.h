@@ -62,6 +62,9 @@ typedef struct node node;
 
 node* new_node(int type);
 void free_node(node *n);
+void node_prefetch(node *n);
+void border_node_prefetch_write(node *n);
+void border_node_prefetch_read(node *n);
 void node_lock_unsafe(node *n);
 void node_unlock_unsafe(node *n);
 void node_lock(node *n);
