@@ -93,6 +93,17 @@ int compare_key(uint64_t k1, uint64_t k2);
 uint64_t get_next_keyslice(const void *key, uint32_t len, uint32_t off);
 uint64_t get_next_keyslice_and_advance(const void *key, uint32_t len, uint32_t *off);
 
+#ifndef htobe64
+#ifdef __APPLE__
+#include <libkern/OSByteOrder.h>
+#define htobe64(x)  OSSwapHostToBigInt64(x)
+#endif
+#ifdef __linux__
+#define _BSD_SOURCE
+#include <endian.h>
+#endif
+#endif
+
 #ifdef Test
 
 void free_node_raw(node *n);

@@ -388,7 +388,7 @@ inline int node_is_full(node *n)
 
 inline int compare_key(uint64_t k1, uint64_t k2)
 {
-  return memcmp(&k1, &k2, sizeof(uint64_t));
+  return (k1 > k2) - (k2 > k1);
 }
 
 inline uint64_t get_next_keyslice(const void *key, uint32_t len, uint32_t off)
@@ -400,7 +400,7 @@ inline uint64_t get_next_keyslice(const void *key, uint32_t len, uint32_t off)
   else
     cur = *((uint64_t *)((char *)key + off));
 
-  return cur;
+  return htobe64(cur);
 }
 
 inline uint64_t get_next_keyslice_and_advance(const void *key, uint32_t len, uint32_t *off)
@@ -415,7 +415,7 @@ inline uint64_t get_next_keyslice_and_advance(const void *key, uint32_t len, uin
     *off += sizeof(uint64_t);
   }
 
-  return cur;
+  return htobe64(cur);
 }
 
 static inline uint64_t get_next_keyslice_and_advance_and_record(const void *key, uint32_t len, uint32_t *off,
@@ -433,7 +433,7 @@ static inline uint64_t get_next_keyslice_and_advance_and_record(const void *key,
     *off += sizeof(uint64_t);
   }
 
-  return cur;
+  return htobe64(cur);
 }
 
 // require: `n` is border node
@@ -580,8 +580,15 @@ void* node_insert(node *n, const void *key, uint32_t len, uint32_t off, const vo
 
   uint64_t permutation = node_get_permutation_unsafe(n);
 
-  uint8_t  keylen;
-  uint64_t cur = get_next_keyslice_and_advance_and_record(key, len, &off, &keylen);
+  uint8_t keylen;
+  uint64_t cur;
+  if (likely(is_link == 0)) {
+    cur = get_next_keyslice_and_advance_and_record(key, len, &off, &keylen);
+  } else {
+    cur = *(uint64_t *)key;
+    off = sizeof(uint64_t);
+    keylen = sizeof(uint64_t);
+  }
 
   int low = 0, count = get_count(permutation), high = count - 1;
 
@@ -825,6 +832,7 @@ static void border_node_print_at_index(border_node *bn, int index)
     buf[len] = 0;
     printf("slicelen: %u offset: %u  %s\n", bn->keylen[index], off, buf);
   } else {
+    // node_print((node *)bn->lv[index]);
     printf("subtree\n");
   }
 }
@@ -863,7 +871,8 @@ void node_print(node *n)
   for (int i = 0; i < count; ++i) {
     int index = get_index(permutation, i);
     char buf[9];
-    memcpy(buf, &n->keyslice[index], sizeof(uint64_t));
+    uint64_t key = htobe64(n->keyslice[index]);
+    memcpy(buf, &key, sizeof(uint64_t));
     buf[8] = 0;
     printf("%-2d %-2d slice: %s  ", i, index, buf);
     if (is_border(version))

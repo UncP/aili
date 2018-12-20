@@ -29,7 +29,7 @@ mass_tree* new_mass_tree(int thread_num)
   node *r = new_node(Border);
   node_set_root_unsafe(r);
 
-  __atomic_store(&mt->root, &r, __ATOMIC_RELEASE);
+  mt->root = r;
 
   return mt;
 }
