@@ -55,6 +55,7 @@ void set_node_offset(uint32_t offset)
 #define get_key(n, off) (get_ptr(n, off) + key_byte)
 #define get_val(n, off) ((void *)(*(val_t *)(get_key(n, off) + get_len(n, off))))
 #define node_index(n)   ((index_t *)((char *)n + (node_size - node_offset - (n->keys * index_byte))))
+#define batch_index(n)   ((index_t *)((char *)n + (batch_size - (n->keys * index_byte))))
 #define get_key_info(n, off, key, len) \
   const void *key = get_key(n, off);   \
   uint32_t len = get_len(n, off);
@@ -722,7 +723,7 @@ inline void batch_clear(batch *b)
 static int batch_write(batch *b, uint32_t op, const void *key1, uint32_t len1, const void *val)
 {
   int low = 0, high = (int)b->keys - 1;
-  index_t *index = node_index(b);
+  index_t *index = batch_index(b);
 
   while (low <= high) {
     int mid = (low + high) / 2;
@@ -756,13 +757,11 @@ static int batch_write(batch *b, uint32_t op, const void *key1, uint32_t len1, c
 
 int batch_add_write(batch *b, const void *key, uint32_t len, const void *val)
 {
-  if (key == 0 || len == 0) return 1;
   return batch_write(b, Write, key, len, val);
 }
 
 int batch_add_read(batch *b, const void *key, uint32_t len)
 {
-  if (key == 0 || len == 0) return 1;
   return batch_write(b, Read, key, len, 0);
 }
 
@@ -771,7 +770,7 @@ inline void batch_read_at(batch *b, uint32_t idx, uint32_t *op, void **key, uint
 {
   // TODO: remove this
   assert(idx < b->keys);
-  index_t *index = node_index(b);
+  index_t *index = batch_index(b);
   get_kv_ptr(b, index[idx], k, l, v);
   *op = get_op(b, index[idx]);
   *key = (void *)k;
@@ -782,7 +781,7 @@ inline void batch_read_at(batch *b, uint32_t idx, uint32_t *op, void **key, uint
 inline void* batch_get_value_at(batch *b, uint32_t idx)
 {
   if (idx >= b->keys || b->keys == 0) return 0;
-  index_t *index = node_index(b);
+  index_t *index = batch_index(b);
   return get_val(b, index[idx]);
 }
 
@@ -908,7 +907,7 @@ void batch_print(batch *b, int detail)
   ptr += snprintf(ptr, end - ptr, "keys: %u  ", b->keys);
   ptr += snprintf(ptr, end - ptr, "  offset: %u\n", b->off);
 
-  index_t *index = node_index(b);
+  index_t *index = batch_index(b);
   if (detail) {
     for (uint32_t i = 0; i < b->keys; ++i) {
       ptr += snprintf(ptr, end - ptr, "%s ", get_op(b, index[i]) == Write ? "w" : "r");

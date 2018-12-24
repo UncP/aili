@@ -123,9 +123,8 @@ void test_palm_tree()
         palm_tree_execute(pt, cb);
         idx = idx == queue_size ? 0 : idx + 1;
         cb = batches[idx];
-        for (uint32_t j = 0; j < cb->keys; ++j) {
+        for (uint32_t j = 0; j < cb->keys; ++j)
           assert((uint64_t)batch_get_value_at(cb, j) == value);
-        }
         batch_clear(cb);
         assert(batch_add_read(cb, key, len) == 1);
       }
