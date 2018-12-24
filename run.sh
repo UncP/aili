@@ -9,7 +9,7 @@
 if [ "$1" = "palm" ]
 then
                                                                             # f_name  n_size  b_size  t_num  q_num  k_num
-make "DFLAGS+=-DTest -DAllocator -DPrefix" palm_tree_test && ./palm_tree_test  1       4096    4096    $2      8     $3
+make "DFLAGS+=-DTest -DAllocator -DPrefix" palm_tree_test && ./palm_tree_test  1       65536   65536   $2     8      $3
 # make "DFLAGS+=-DTest -DAllocator -DPrefix -DBStar" palm_tree_test && ./palm_tree_test  1      4096    4096     2      8     1000000
 elif [ "$1" = "blink" ]
 then

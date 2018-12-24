@@ -46,7 +46,7 @@ void test_palm_tree()
 
   int fd = open(file_name, O_RDONLY);
   assert(fd > 0);
-  int block = 4 * 4096, curr = 0, ptr = 0, count = 0;
+  int block = 65536, curr = 0, ptr = 0, count = 0;
   char buf[block];
   int flag = 1;
   long long before = mstime();
