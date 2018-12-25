@@ -60,7 +60,7 @@ static node* mass_tree_grow(node *n, uint64_t fence, node *n1)
 
   node_set_first_child(r, n);
 
-  assert((int)node_insert(r, &fence, sizeof(uint64_t), 0 /* off */, n1, 1 /* is_link */) == 1);
+  interior_node_insert(r, fence, n1);
 
   node_unset_root_unsafe(n1);
   node_unset_root_unsafe(n);
@@ -145,7 +145,7 @@ static void create_new_layer(node *n, const void *key, uint32_t len, uint32_t of
     if (head == 0) head = bn;
     if (parent) {
       node_lock_unsafe(parent);
-      assert((int)node_insert(parent, &lks, sizeof(uint64_t), 0 /* off */, bn, 1 /* is_link */) == 1);
+      assert((int)border_node_insert(parent, &lks, sizeof(uint64_t), 0 /* off */, bn, 1 /* is_link */) == 1);
       node_unlock_unsafe(parent);
     }
     lks = ks1;
@@ -158,13 +158,13 @@ static void create_new_layer(node *n, const void *key, uint32_t len, uint32_t of
   node *bn = new_node(Border);
   node_set_root_unsafe(bn);
   node_lock_unsafe(bn);
-  assert((int)node_insert(bn, ckey, clen, off, 0, 0 /* is_link */) == 1);
-  assert((int)node_insert(bn, key, len, off, val, 0 /* is_link */) == 1);
+  assert((int)border_node_insert(bn, ckey, clen, off, 0, 0 /* is_link */) == 1);
+  assert((int)border_node_insert(bn, key, len, off, val, 0 /* is_link */) == 1);
   node_unlock_unsafe(bn);
 
   if (parent) {
     node_lock_unsafe(parent);
-    assert((int)node_insert(parent, &lks, sizeof(uint64_t), 0 /* off */, bn, 1 /* is_link */) == 1);
+    assert((int)border_node_insert(parent, &lks, sizeof(uint64_t), 0 /* off */, bn, 1 /* is_link */) == 1);
     node_unlock_unsafe(parent);
   }
 
@@ -198,7 +198,7 @@ static void mass_tree_promote_split_node(mass_tree *mt, node *n, uint64_t fence,
     node_unlock(n1);
     node_unlock(p);
   } else if (likely(node_is_full(p) == 0)) {
-    assert((int)node_insert(p, &fence, sizeof(uint64_t), 0 /* off */, n1, 1 /* is_link */) == 1);
+    interior_node_insert(p, fence, n1);
     node_unlock(n);
     node_unlock(n1);
     node_unlock(p);
@@ -210,9 +210,9 @@ static void mass_tree_promote_split_node(mass_tree *mt, node *n, uint64_t fence,
     node *p1 = node_split(p, &fence1);
     assert(fence1);
     if (compare_key(fence, fence1) < 0)
-      assert((int)node_insert(p, &fence, sizeof(uint64_t), 0 /* off */, n1, 1 /* is_link */) == 1);
+      interior_node_insert(p, fence, n1);
     else
-      assert((int)node_insert(p1, &fence, sizeof(uint64_t), 0 /* off */, n1, 1 /* is_link */) == 1);
+      interior_node_insert(p1, fence, n1);
     node_unlock(n1);
     n = p;
     fence = fence1;
@@ -261,7 +261,7 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
 
   border_node_prefetch_write(n);
 
-  void *ret = node_insert(n, key, len, off, val, 0 /* is_link */);
+  void *ret = border_node_insert(n, key, len, off, val, 0 /* is_link */);
   switch ((uint64_t)ret) {
     case 0: // key existed
     case 1: // key inserted
@@ -279,9 +279,9 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
       uint64_t cur = get_next_keyslice(key, len, off);
       // equal is not possible
       if (compare_key(cur, fence) < 0)
-        assert((int)node_insert(n, key, len, off, val, 0 /* is_link */) == 1);
+        assert((int)border_node_insert(n, key, len, off, val, 0 /* is_link */) == 1);
       else
-        assert((int)node_insert(n1, key, len, off, val, 0 /* is_link */) == 1);
+        assert((int)border_node_insert(n1, key, len, off, val, 0 /* is_link */) == 1);
 
       mass_tree_promote_split_node(mt, n, fence, n1);
       return 1;

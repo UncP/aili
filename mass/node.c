@@ -567,29 +567,65 @@ node* node_descend(node *n, uint64_t cur)
   return ((interior_node *)n)->child[index];
 }
 
-// require: `n` is locked
+// require: `n` is locked and is interior node
+void interior_node_insert(node *n, uint64_t key, node *child)
+{
+  uint32_t version = node_get_version_unsafe(n);
+  assert(is_locked(version) && is_interior(version));
+
+  uint64_t permutation = node_get_permutation_unsafe(n);
+  int low = 0, count = get_count(permutation), high = count - 1;
+  assert(count < max_key_count);
+
+  while (low <= high) {
+    int mid = (low + high) / 2;
+
+    int index = get_index(permutation, mid);
+
+    int r = compare_key(n->keyslice[index], key);
+    assert(r);
+    if (r < 0)
+      low  = mid + 1;
+    else // r > 0
+      high = mid - 1;
+  }
+
+  int index;
+  // now get physical slot
+  if (n->removed) {
+    index = ffs(n->removed) - 1;
+    n->removed &= ~((uint32_t)(1 << index));
+  } else {
+    index = count;
+  }
+
+  node_set_version(n, set_insert(version));
+
+  interior_node *in = (interior_node *)n;
+  in->keyslice[index] = key;
+  in->child[index + 1] = child;
+  child->parent = n;
+
+  update_permutation(permutation, low, index);
+  node_set_permutation(n, permutation);
+}
+
+// require: `n` is locked and is border node
 // if succeed, return 1;
 // if existed, return 0;
 // if need to go to a deeper layer, return that layer's pointer;
 // if need to create a new layer, return -1
-void* node_insert(node *n, const void *key, uint32_t len, uint32_t off, const void *val, int is_link)
+void* border_node_insert(node *n, const void *key, uint32_t len, uint32_t off, const void *val, int is_link)
 {
-  // TODO: remove this
   uint32_t version = node_get_version_unsafe(n);
-  assert(is_locked(version));
+  assert(is_locked(version) && is_border(version));
 
-  uint64_t permutation = node_get_permutation_unsafe(n);
+  border_node *bn = (border_node *)n;
 
   uint8_t keylen;
-  uint64_t cur;
-  if (likely(is_link == 0)) {
-    cur = get_next_keyslice_and_advance_and_record(key, len, &off, &keylen);
-  } else {
-    cur = *(uint64_t *)key;
-    off = sizeof(uint64_t);
-    keylen = sizeof(uint64_t);
-  }
+  uint64_t cur = get_next_keyslice_and_advance_and_record(key, len, &off, &keylen);
 
+  uint64_t permutation = node_get_permutation_unsafe(n);
   int low = 0, count = get_count(permutation), high = count - 1;
 
   while (low <= high) {
@@ -604,8 +640,6 @@ void* node_insert(node *n, const void *key, uint32_t len, uint32_t off, const vo
     } else if (r > 0) {
       high = mid - 1;
     } else {
-      assert(is_border(version));
-      border_node *bn = (border_node *)n;
       uint8_t status = bn->keylen[index];
       assert(status != magic_unstable);
       if (status == magic_link) {
@@ -628,42 +662,31 @@ void* node_insert(node *n, const void *key, uint32_t len, uint32_t off, const vo
   if (count == max_key_count)
     return (void *)-2;
 
-  int index;
   // now get physical slot
+  int index;
   if (n->removed) {
     index = ffs(n->removed) - 1;
     n->removed &= ~((uint32_t)(1 << index));
     node_set_version(n, set_insert(version));
   } else {
     index = count;
-    if (unlikely(is_interior(version)))
-      node_set_version(n, set_insert(version));
   }
 
-  n->keyslice[index] = cur;
+  bn->keyslice[index] = cur;
 
-  if (likely(is_border(version))) {
-    border_node *bn = (border_node *)n;
-    if (likely(!is_link)) {
-      bn->keylen[index] = keylen;
-      bn->suffix[index] = (void *)key;
-      uint32_t *len_ptr = (uint32_t *)&(bn->lv[index]);
-      uint32_t *off_ptr = len_ptr + 1;
-      *len_ptr = len;
-      *off_ptr = off;
-    } else {
-      node *child = (node *)val;
-      child->parent = n;
-      bn->keylen[index] = magic_link;
-      bn->suffix[index] = 0;
-      bn->lv[index] = (void *)child;
-    }
+  if (likely(is_link == 0)) {
+    bn->keylen[index] = keylen;
+    bn->suffix[index] = (void *)key;
+    uint32_t *len_ptr = (uint32_t *)&(bn->lv[index]);
+    uint32_t *off_ptr = len_ptr + 1;
+    *len_ptr = len;
+    *off_ptr = off;
   } else {
-    assert(is_link == 1);
     node *child = (node *)val;
     child->parent = n;
-    interior_node *in = (interior_node *)n;
-    in->child[index + 1] = child;
+    bn->keylen[index] = magic_link;
+    bn->suffix[index] = 0;
+    bn->lv[index] = (void *)child;
   }
 
   update_permutation(permutation, low, index);
