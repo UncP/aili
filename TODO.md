@@ -14,16 +14,14 @@
 - [x] palm tree 懒惰下降策略
 - [x] Mass Tree
 - [x] palm tree 折线下降策略
-- [ ] 双向 early termination
 - [ ] 重构 B+ 树节点
 - [x] 手动管理 B+ 树节点内存
-- [ ] 重构 palm tree 工作队列（multi-way）
 - [x] b<sup>link</sup> Tree
 - [x] 重构 bounded mapping queue -> mapping array
 - [x] b<sup>*</sup> node
 - [ ] MRBTree
 - [x] palm tree 信息统计
 - [ ] mass tree linearizability 测试
-- [ ] mass tree 优化 `node_lock` 以及 `node_get_stable_version`
-- [ ] mass tree node prefetch
+- [x] mass tree 优化 `node_lock` 以及 `node_get_stable_version`
+- [x] mass tree node prefetch
 - [ ] mass tree delete

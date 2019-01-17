@@ -183,7 +183,7 @@ static void mass_tree_promote_split_node(mass_tree *mt, node *n, uint64_t fence,
   p = node_get_locked_parent(n);
   if (unlikely(p == 0)) {
     node *new_root = mass_tree_grow(n, fence, n1);
-    __atomic_store(&mt->root, &new_root, __ATOMIC_RELEASE); // replace the root
+    mt->root = new_root;
     node_unlock(n);
     node_unlock(n1);
     return ;
