@@ -4,9 +4,12 @@
  *    license:    BSD-3
 **/
 
+#define _BSD_SOURCE
+
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <endian.h>
 #include <stdio.h>
 
 #include "node.h"

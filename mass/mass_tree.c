@@ -145,7 +145,7 @@ static void create_new_layer(node *n, const void *key, uint32_t len, uint32_t of
     if (head == 0) head = bn;
     if (parent) {
       node_lock_unsafe(parent);
-      assert((int)border_node_insert(parent, &lks, sizeof(uint64_t), 0 /* off */, bn, 1 /* is_link */) == 1);
+      assert((uint64_t)border_node_insert(parent, &lks, sizeof(uint64_t), 0 /* off */, bn, 1 /* is_link */) == 1);
       node_unlock_unsafe(parent);
     }
     lks = ks1;
@@ -158,13 +158,13 @@ static void create_new_layer(node *n, const void *key, uint32_t len, uint32_t of
   node *bn = new_node(Border);
   node_set_root_unsafe(bn);
   node_lock_unsafe(bn);
-  assert((int)border_node_insert(bn, ckey, clen, off, 0, 0 /* is_link */) == 1);
-  assert((int)border_node_insert(bn, key, len, off, val, 0 /* is_link */) == 1);
+  assert((uint64_t)border_node_insert(bn, ckey, clen, off, 0, 0 /* is_link */) == 1);
+  assert((uint64_t)border_node_insert(bn, key, len, off, val, 0 /* is_link */) == 1);
   node_unlock_unsafe(bn);
 
   if (parent) {
     node_lock_unsafe(parent);
-    assert((int)border_node_insert(parent, &lks, sizeof(uint64_t), 0 /* off */, bn, 1 /* is_link */) == 1);
+    assert((uint64_t)border_node_insert(parent, &lks, sizeof(uint64_t), 0 /* off */, bn, 1 /* is_link */) == 1);
     node_unlock_unsafe(parent);
   }
 
@@ -264,9 +264,11 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
   void *ret = border_node_insert(n, key, len, off, val, 0 /* is_link */);
   switch ((uint64_t)ret) {
     case 0: // key existed
+      node_unlock(n);
+      return 0;
     case 1: // key inserted
       node_unlock(n);
-      return (int)ret;
+      return 1;
     case -1: { // need to create a deeper layer
       create_new_layer(n, key, len, off, val);
       node_unlock(n);
@@ -279,9 +281,9 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
       uint64_t cur = get_next_keyslice(key, len, off);
       // equal is not possible
       if (compare_key(cur, fence) < 0)
-        assert((int)border_node_insert(n, key, len, off, val, 0 /* is_link */) == 1);
+        assert((uint64_t)border_node_insert(n, key, len, off, val, 0 /* is_link */) == 1);
       else
-        assert((int)border_node_insert(n1, key, len, off, val, 0 /* is_link */) == 1);
+        assert((uint64_t)border_node_insert(n1, key, len, off, val, 0 /* is_link */) == 1);
 
       mass_tree_promote_split_node(mt, n, fence, n1);
       return 1;

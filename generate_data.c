@@ -4,6 +4,8 @@
  *    license:    BSD-3
 **/
 
+#define _XOPEN_SOURCE 500
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,6 +14,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <time.h>
+#include <stdint.h>
 
 static const char *dir = "./data";
 

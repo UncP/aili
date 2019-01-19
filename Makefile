@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-std=c99 -Wall -Werror -Wextra -O3
+CFLAGS=-std=c99 -Wall -Werror -Wextra -O3 -fno-strict-aliasing
 IFLAGS=-I./third_party
 LFLAGS=./third_party/c_hashmap/libhashmap.a -lpthread
 PFLAGS=-DLazy
@@ -36,8 +36,8 @@ palm_tree_test: test/palm_tree_test.c palm/node.o palm/worker.o palm/bounded_que
 	palm/metric.o palm/allocator.o
 	$(PALMFLAGS) -o $@ $^ $(LFLAGS)
 
-generate_data: ./generate_data.c
-	$(CC) $(CFLAGS) -o $@ $^
+generate_data: generate_data.c
+	$(CC) $(CFLAGS) -o $@ $^ -lpthread
 
 blink/%.o: blink/%.c
 	$(BLINKFLAGS) -c $^ -o $@

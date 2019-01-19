@@ -4,6 +4,9 @@
  *    license:    BSD-3
 **/
 
+#define _BSD_SOURCE
+#define _POSIX_C_SOURCE 200112L
+
 #include <stdlib.h>
 #include <assert.h>
 #include <sys/mman.h>
@@ -37,7 +40,7 @@ static inline block* new_block(block *meta)
   int success;
   block *b = block_alloc(meta, s, &success);
   if (likely(success)) {
-    b->buffer = mmap(0, block_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+    b->buffer = mmap(0, block_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     assert(b->buffer != MAP_FAILED);
     b->now = 0;
     b->tot = block_size;
@@ -49,7 +52,7 @@ static inline block* new_block(block *meta)
 
 static inline block* new_meta_block()
 {
-  char *buf = (char *)mmap(0, meta_block_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+  char *buf = (char *)mmap(0, meta_block_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   assert(buf != MAP_FAILED);
   block *m = (block *)buf;
   m->buffer = (void *)buf;
@@ -129,11 +132,10 @@ static inline allocator* get_thread_allocator()
   allocator *a;
 
   #ifdef __linux__
-    pthread_getspecific(key, &a);
-    assert(a);
+    a = (allocator *)pthread_getspecific(key);
     if (unlikely(a == 0)) {
       init_thread_allocator();
-      pthread_getspecific(key, &a);
+      a = (allocator *)pthread_getspecific(key);
       assert(a);
     }
   #else
