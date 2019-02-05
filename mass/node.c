@@ -9,7 +9,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#ifdef __linux__
 #include <endian.h>
+#endif
 #include <stdio.h>
 
 #include "node.h"
@@ -339,7 +341,8 @@ void node_unlock_unsafe(node *n)
 void node_lock(node *n)
 {
   while (1) {
-    uint32_t version = n->version;
+    // must use `acquire` operation to avoid deadlock
+    uint32_t version = node_get_version(n);
     if (is_locked(version)) {
       // __asm__ __volatile__ ("pause");
       continue;

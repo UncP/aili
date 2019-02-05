@@ -1,7 +1,7 @@
 CC=gcc
 CFLAGS=-std=c99 -Wall -Werror -Wextra -O3 -fno-strict-aliasing
 IFLAGS=-I./third_party
-LFLAGS=./third_party/c_hashmap/libhashmap.a -lpthread
+LFLAGS=./third_party/c_hashmap/libhashmap.a -lpthread -lm
 PFLAGS=-DLazy
 DFLAGS=
 BFLAGS=

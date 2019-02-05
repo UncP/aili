@@ -842,7 +842,7 @@ static char* format_kv(char *ptr, char *end, node* n, uint32_t off)
   ptr += snprintf(ptr, end - ptr, "%u  ", len);
   snprintf(ptr, len + 1, "%s", get_key(n, off));
   ptr += len;
-  ptr += snprintf(ptr, end - ptr, "  %llu\n", (val_t)get_val(n, off));
+  ptr += snprintf(ptr, end - ptr, "  %lu\n", (val_t)get_val(n, off));
   return ptr;
 }
 

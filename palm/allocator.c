@@ -40,7 +40,11 @@ static inline block* new_block(block *meta)
   int success;
   block *b = block_alloc(meta, s, &success);
   if (likely(success)) {
+    #ifdef __linux__
     b->buffer = mmap(0, block_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    #else
+    b->buffer = mmap(0, block_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+    #endif
     assert(b->buffer != MAP_FAILED);
     b->now = 0;
     b->tot = block_size;

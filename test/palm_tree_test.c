@@ -4,6 +4,8 @@
  *    license:    BSD-3
 **/
 
+#define _XOPEN_SOURCE 500
+
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -15,7 +17,7 @@
 #include "../palm/palm_tree.h"
 #include "../palm/metric.h"
 
-const static uint64_t value = 3190;
+static const uint64_t value = 3190;
 static char *file_str;
 static int queue_size;
 static int thread_number;
@@ -169,7 +171,7 @@ int main(int argc, char **argv)
   total_keys = atoi(argv[6]);
   if (total_keys <= 0) total_keys = 1;
   if (queue_size <= 0) queue_size = 1;
-  if (thread_number <= 0) queue_size = 1;
+  if (thread_number <= 0) thread_number = 1;
   set_node_size(node_size);
   set_batch_size(batch_size);
 
