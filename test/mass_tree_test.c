@@ -88,7 +88,7 @@ static void* run(void *arg)
           slice = malloc(len);
         #endif // Allocator
         memcpy(slice, key, len);
-        assert(mass_tree_put(mt, slice, len, (const void *)3190) == 1);
+        mass_tree_put(mt, slice, len, (const void *)3190);
       } else {
         void *value = mass_tree_get(mt, key, len);
         if (value == 0) {

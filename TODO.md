@@ -25,3 +25,4 @@
 - [x] mass tree 优化 `node_lock` 以及 `node_get_stable_version`
 - [x] mass tree node prefetch
 - [ ] mass tree delete
+- [ ] adaptive radix tree
