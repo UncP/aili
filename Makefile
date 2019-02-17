@@ -61,7 +61,7 @@ mass_tree_test: test/mass_tree_test.c mass/node.o mass/mass_tree.o palm/allocato
 art/%.o: art/%.c
 	$(ARTFLAGS) -c $^ -o $@
 
-art_node_test: test/art_node_test.c art/art_node.o
+art_test: test/art_test.c art/art_node.o art/art.o
 	$(ARTFLAGS) -o $@ $^
 
 third_party: third_party/c_hashmap

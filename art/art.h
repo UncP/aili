@@ -7,6 +7,8 @@
 #ifndef _adapitve_radix_tree_h_
 #define _adaptive_radix_tree_h_
 
+#include <stddef.h>
+
 typedef struct adaptive_radix_tree adaptive_radix_tree;
 
 adaptive_radix_tree* new_adaptive_radix_tree();
