@@ -29,22 +29,28 @@ static art_node* adaptive_radix_tree_create_subtree(const void *key, size_t len,
   debug_assert(off < len);
 
   art_node *root = 0, *parent = 0;
-  while (off < len) {
+  do {
     art_node *an = new_art_node();
-    int prefix_len = len - off - 1;
-    if (prefix_len)
-      art_node_set_prefix(an, key, off, prefix_len);
-    off += prefix_len + 1;
     if (root == 0)
       root = an;
     if (parent)
-      art_node_add_child(parent, ((unsigned char *)key)[off - 1], an);
+      art_node_add_child(parent, ((unsigned char *)key)[off++], an);
+
+    int prefix_len = len - off;
+    if (prefix_len > 8)
+      prefix_len = 8;
+    else
+      --prefix_len;
+    art_node_set_prefix(an, key, off, prefix_len);
+    off += prefix_len;
     parent = an;
-  }
+  } while (off < len - 1);
+
+  debug_assert(off == len - 1);
 
   // wrap the length at key pointer's low 8 bits, assume key length is less than 256
   uintptr_t ptr = (uintptr_t)key | (len & 0xff);
-  art_node_add_child(parent, ((unsigned char *)key)[off - 1], (art_node *)ptr);
+  art_node_add_child(parent, ((unsigned char *)key)[len - 1], (art_node *)ptr);
   return root;
 }
 

@@ -1,4 +1,5 @@
 # aili
+Various concurrent algorithms for main-memory index
 
 [![Author](https://img.shields.io/badge/Author-UncP-brightgreen.svg)](https://github.com/UncP)
 [![Version](https://img.shields.io/badge/Version-3.2.0-blue.svg)](https://github.com/UncP/aili)
