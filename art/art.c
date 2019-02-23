@@ -26,6 +26,7 @@ adaptive_radix_tree* new_adaptive_radix_tree()
 // create a subtree and insert key into
 static art_node* adaptive_radix_tree_create_subtree(const void *key, size_t len, size_t off, const void *val)
 {
+  (void)val; // fow now just ignore val
   debug_assert(off < len);
 
   art_node *root = 0, *parent = 0;
@@ -35,6 +36,7 @@ static art_node* adaptive_radix_tree_create_subtree(const void *key, size_t len,
       root = an;
     if (parent)
       art_node_add_child(parent, ((unsigned char *)key)[off++], an);
+    parent = an;
 
     int prefix_len = len - off;
     if (prefix_len > 8)
@@ -43,13 +45,11 @@ static art_node* adaptive_radix_tree_create_subtree(const void *key, size_t len,
       --prefix_len;
     art_node_set_prefix(an, key, off, prefix_len);
     off += prefix_len;
-    parent = an;
   } while (off < len - 1);
 
   debug_assert(off == len - 1);
 
-  // wrap the length at key pointer's low 8 bits, assume key length is less than 256
-  uintptr_t ptr = (uintptr_t)key | (len & 0xff);
+  uintptr_t ptr = make_leaf(key, len);
   art_node_add_child(parent, ((unsigned char *)key)[len - 1], (art_node *)ptr);
   return root;
 }
@@ -67,9 +67,44 @@ static int _adaptive_radix_tree_put(art_node **an, const void *key, size_t len, 
   }
 
   if (is_leaf(cur)) {
+    const char *k1 = get_key(cur), *k2 = (const char *)key;
+    size_t l1 = get_len(cur), l2 = len, i;
+    for (i = off; i < l1 && i < l2 && k1[i] == k2[i]; ++i)
+      ;
+    if (i == l1 && i == l2)
+      return 1; // key exists
     art_node *new = new_art_node();
-    uintptr_t key2 = art_node_find_conflict()
+    art_node_set_prefix(new, k1, off, i - off);
+    off = i;
+    unsigned char byte;
+    byte = off == l1 ? 0 : k1[off];
+    art_node_add_child(new, byte, cur);
+    byte = off == l2 ? 0 : k2[off];
+    art_node_add_child(new, byte, (art_node *)make_leaf(k2, l2));
+    return 0;
   }
+
+  size_t p = art_node_prefix_compare(cur, key, len, off);
+  if (p != prefix_len(cur)) {
+    art_node *new = new_art_node();
+    art_node_set_prefix(new, key, off, p);
+    unsigned char byte;
+    byte = (off + p < len) ? ((unsigned char *)key)[off + p] : 0;
+    art_node_add_child(new, byte, (art_node *)make_leaf(key, len));
+    byte = art_node_truncate_prefix(cur, p);
+    art_node_add_child(new, byte, cur);
+    *an = new;
+    return 0;
+  }
+
+  off += prefix_len(cur);
+  art_node *next = art_node_find_child(cur, ((unsigned char *)key)[off]);
+  if (next)
+    return _adaptive_radix_tree_put(&next, key, len, off + 1, val);
+  if (art_node_is_full(cur))
+    art_node_grow(an);
+  art_node_add_child(cur, ((unsigned char *)key)[off], (art_node *)make_leaf(key, len));
+  return 0;
 }
 
 // return 0 on success

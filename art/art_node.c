@@ -12,10 +12,10 @@
 
 #include "art_node.h"
 
-#define node4    (0 << 1)
-#define node16   (1 << 1)
-#define node48   (2 << 1)
-#define node256  (3 << 1)
+#define node4    0
+#define node16   1
+#define node48   2
+#define node256  3
 
 #define node_type(an) ((an)->version & node256)
 
@@ -174,6 +174,16 @@ void art_node_add_child(art_node *an, unsigned char byte, art_node *child)
   ++an4->count;
 }
 
+inline int art_node_is_full(art_node *an)
+{
+  switch(node_type(an)) {
+  case node4 : return an->count == 4;
+  case node16: return an->count == 16;
+  case node48: return an->count == 48;
+  default: return 0;
+  }
+}
+
 void art_node_grow(art_node **ptr)
 {
   art_node *new;
@@ -269,5 +279,16 @@ int art_node_prefix_compare(art_node *an, const void *key, size_t len, size_t of
   }
 
   return i;
+}
+
+unsigned char art_node_truncate_prefix(art_node *an, size_t off)
+{
+  debug_assert(off < an->prefix_len);
+  char *prefix = art_node_get_prefix(an);
+  unsigned char ret = art_node_get_prefix(an)[off];
+  for (int i = 0, j = off + 1; j < 8; ++i, ++j)
+    prefix[i] = prefix[j];
+  an->prefix_len = 8 - off - 1;
+  return ret;
 }
 
