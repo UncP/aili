@@ -115,7 +115,7 @@ void free_art_node(art_node *an)
   free((void *)an);
 }
 
-art_node* art_node_find_child(art_node *an, unsigned char byte)
+art_node** art_node_find_child(art_node *an, unsigned char byte)
 {
   debug_assert(is_leaf(an) == 0);
 
@@ -125,7 +125,7 @@ art_node* art_node_find_child(art_node *an, unsigned char byte)
     debug_assert(an4->count < 5);
     for (int i = 0; i < an4->count; ++i)
       if (an4->key[i] == byte)
-        return an4->child[i];
+        return &an4->child[i];
   }
   break;
   case node16: {
@@ -136,18 +136,19 @@ art_node* art_node_find_child(art_node *an, unsigned char byte)
     int mask = (1 << an16->count) - 1;
     int bitfield = _mm_movemask_epi8(cmp) & mask;
     if (bitfield)
-      return an16->child[__builtin_ctz(bitfield)];
+      return &an16->child[__builtin_ctz(bitfield)];
   }
   break;
   case node48: {
     art_node48 *an48 = (art_node48 *)an;
+    debug_assert(an48->count < 49);
     int index = an48->index[byte];
     if (index)
-      return an48->child[index - 1];
+      return &an48->child[index - 1];
   }
   break;
   case node256:
-    return ((art_node256 *)an)->child[byte];
+    return &((art_node256 *)an)->child[byte];
   default:
     assert(0);
   }
@@ -157,21 +158,53 @@ art_node* art_node_find_child(art_node *an, unsigned char byte)
 // add a child to art_node4, `byte` must not exist in this node before
 void art_node_add_child(art_node *an, unsigned char byte, art_node *child)
 {
-  debug_assert(node_type(an) == node4);
+  debug_assert(is_leaf(an) == 0);
 
-  art_node4 *an4 = (art_node4 *)an;
-
-  debug_assert(an4->count < 4);
-
-  #ifdef Debug
-  for (int i = 0; i < an4->count; ++i)
-    assert(an4->key[i] != byte);
-  #endif // Debug
-
-  // no need to be ordered
-  an4->key[an4->count] = byte;
-  an4->child[an4->count] = child;
-  ++an4->count;
+  switch (node_type(an)) {
+  case node4: {
+    art_node4 *an4 = (art_node4 *)an;
+    debug_assert(an4->count < 4);
+    for (int i = 0; i < an4->count; ++i)
+      debug_assert(an4->key[i] != byte);
+    // no need to be ordered
+    an4->key[an4->count] = byte;
+    an4->child[an4->count] = child;
+    ++an4->count;
+  }
+  break;
+  case node16: {
+    art_node16 *an16 = (art_node16 *)an;
+    debug_assert(an16->count < 16);
+    #ifdef Debug
+      __m128i key = _mm_set1_epi8(byte);
+      __m128i cmp = _mm_cmpeq_epi8(key, *(__m128i *)an16->key);
+      int mask = (1 << an16->count) - 1;
+      int bitfield = _mm_movemask_epi8(cmp) & mask;
+      assert(bitfield == 0);
+    #endif // Debug
+    // no need to be ordered
+    an16->key[an16->count] = byte;
+    an16->child[an16->count] = child;
+    ++an16->count;
+  }
+  break;
+  case node48: {
+    art_node48 *an48 = (art_node48 *)an;
+    debug_assert(an48->count < 48);
+    debug_assert(an48->index[byte] == 0);
+    an48->index[byte] = ++an48->count;
+    an48->child[an48->index[byte] - 1] = child;
+  }
+  break;
+  case node256: {
+    art_node256 *an256 = (art_node256 *)an;
+    debug_assert(an256->child[byte] == 0);
+    an256->child[byte] = child;
+  }
+  break;
+  default:
+    assert(0);
+  }
 }
 
 inline int art_node_is_full(art_node *an)
@@ -193,6 +226,8 @@ void art_node_grow(art_node **ptr)
     art_node16 *an16 = (art_node16 *)(new = new_art_node16());
     art_node4 *an4 = (art_node4 *)*ptr;
     debug_assert(an4->count == 4);
+    memcpy(an16->prefix, an4->prefix, 8);
+    an16->prefix_len = an4->prefix_len;
     for (int i = 0; i < an4->count; ++i) {
       an16->key[i] = an4->key[i];
       an16->child[i] = an4->child[i];
@@ -204,6 +239,8 @@ void art_node_grow(art_node **ptr)
     art_node48 *an48 = (art_node48 *)(new = new_art_node48());
     art_node16 *an16 = (art_node16 *)*ptr;
     debug_assert(an16->count == 16);
+    memcpy(an48->prefix, an16->prefix, 8);
+    an48->prefix_len = an16->prefix_len;
     for (int i = 0; i < an16->count; ++i) {
       an48->child[an48->count] = an16->child[i];
       an48->index[an16->key[i]] = ++an48->count;
@@ -214,6 +251,8 @@ void art_node_grow(art_node **ptr)
     art_node256 *an256 = (art_node256 *)(new = new_art_node256());
     art_node48 *an48 = (art_node48 *)*ptr;
     debug_assert(an48->count == 48);
+    memcpy(an256->prefix, an48->prefix, 8);
+    an256->prefix_len = an48->prefix_len;
     for (int i = 0; i < 256; ++i) {
       int index = an48->index[i];
       if (index)
@@ -226,19 +265,6 @@ void art_node_grow(art_node **ptr)
     assert(0);
   }
   *ptr = new;
-}
-
-void* art_node_find_value(art_node *an, const void *key, size_t len, size_t off)
-{
-  debug_assert(is_leaf(an));
-
-  if (len == off) return 0;
-
-  debug_assert(len == off - 1);
-
-  unsigned char byte = ((unsigned char *)key)[off];
-
-  return art_node_find_child(an, byte);
 }
 
 static inline char* art_node_get_prefix(art_node *an)
@@ -285,10 +311,10 @@ unsigned char art_node_truncate_prefix(art_node *an, size_t off)
 {
   debug_assert(off < an->prefix_len);
   char *prefix = art_node_get_prefix(an);
-  unsigned char ret = art_node_get_prefix(an)[off];
-  for (int i = 0, j = off + 1; j < 8; ++i, ++j)
+  unsigned char ret = prefix[off];
+  for (int i = 0, j = off + 1; j < an->prefix_len; ++i, ++j)
     prefix[i] = prefix[j];
-  an->prefix_len = 8 - off - 1;
+  an->prefix_len = an->prefix_len - off - 1;
   return ret;
 }
 

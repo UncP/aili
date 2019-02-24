@@ -62,7 +62,7 @@ art/%.o: art/%.c
 	$(ARTFLAGS) -c $^ -o $@
 
 art_test: test/art_test.c art/art_node.o art/art.o
-	$(ARTFLAGS) -o $@ $^
+	$(ARTFLAGS) -o $@ $^ -lpthread
 
 third_party: third_party/c_hashmap
 	cd third_party/c_hashmap && $(CC) $(CFLAGS) -c hashmap.c -o hashmap.o && ar rcs libhashmap.a hashmap.o

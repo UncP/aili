@@ -12,6 +12,7 @@
 typedef struct adaptive_radix_tree adaptive_radix_tree;
 
 adaptive_radix_tree* new_adaptive_radix_tree();
+void free_adaptive_radix_tree(adaptive_radix_tree *art);
 int adaptive_radix_tree_put(adaptive_radix_tree *art, const void *key, size_t len, const void *val);
 void* adaptive_radix_tree_get(adaptive_radix_tree *art, const void *key, size_t len);
 

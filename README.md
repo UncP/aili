@@ -1,6 +1,6 @@
 # aili
 [![Author](https://img.shields.io/badge/Author-UncP-brightgreen.svg)](https://github.com/UncP)
-[![Version](https://img.shields.io/badge/Version-3.2.0-blue.svg)](https://github.com/UncP/aili)
+[![Version](https://img.shields.io/badge/Version-4.0.0-blue.svg)](https://github.com/UncP/aili)
 
 Various concurrent algorithms for main-memory index
 
@@ -33,6 +33,10 @@ see `ChangeLog.md` for **detail** info
 
 # test mass tree  thread_num  total_key_num
 3.3 ./run.sh mass   2           100
+
+# test adaptive radix tree, art does not support multi-thread for now
+#                         thread_num  total_key_num
+3.4 ./run.sh art            1           100
 ```
 
 
