@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-std=c99 -Wall -Werror -Wextra -O3 -fno-strict-aliasing
+CFLAGS=-Wall -Werror -Wextra -O3 -fno-strict-aliasing
 IFLAGS=-I./third_party
 LFLAGS=./third_party/c_hashmap/libhashmap.a -lpthread -lm
 PFLAGS=-DLazy
@@ -8,10 +8,10 @@ BFLAGS=
 MFLAGS=-DTest
 AFLAGS=-DTest
 
-PALMFLAGS=$(CC) $(CFLAGS) $(PFLAGS) $(IFLAGS) $(DFLAGS)
-BLINKFLAGS=$(CC) $(CFLAGS) $(BFLAGS) $(DFLAGS)
-MASSFLAGS=$(CC) $(CFLAGS) $(MFLAGS) $(DFLAGS)
-ARTFLAGS=$(CC) $(CFLAGS) $(AFLAGS) $(DFLAGS)
+PALMFLAGS=$(CC) -std=c99 $(CFLAGS) $(PFLAGS) $(IFLAGS) $(DFLAGS)
+BLINKFLAGS=$(CC) -std=gnu99 $(CFLAGS) $(BFLAGS) $(DFLAGS)
+MASSFLAGS=$(CC) -std=c99 $(CFLAGS) $(MFLAGS) $(DFLAGS)
+ARTFLAGS=$(CC) -std=c99 $(CFLAGS) $(AFLAGS) $(DFLAGS)
 
 PALM_OBJ=palm/node.o palm/bounded_queue.o palm/worker.o palm/palm_tree.o palm/metric.o palm/allocator.o
 BLINK_OBJ=palm/node.o palm/allocator.o blink/node.o blink/blink_tree.o blink/mapping_array.o

@@ -12,7 +12,7 @@
 #include "mapping_array.h"
 
 // find first set bit, ported from linux kernal, `word` must not be 0UL
-static inline unsigned long ffs(unsigned long word)
+static inline unsigned long ffs_(unsigned long word)
 {
   __asm__ ("rep; bsf %1,%0"
     : "=r" (word)
@@ -90,7 +90,7 @@ void* mapping_array_get_free(mapping_array *q, int *idx)
   while (q->free == 0)
   	pthread_cond_wait(q->free_cond, q->mutex);
 
-  *idx = ffs(q->free);
+  *idx = ffs_(q->free);
 
   return q->elements[*idx];
 }
@@ -119,7 +119,7 @@ void* mapping_array_get_busy(mapping_array *q, int *idx)
     return (void *)0;
   }
 
-  *idx = ffs(q->busy);
+  *idx = ffs_(q->busy);
 
   q->busy &= ~(((uint64_t)1) << *idx);
 

@@ -95,7 +95,7 @@ void test_palm_tree()
   for (int i = 0; i < queue_size + 1; ++i)
     batch_clear(batches[i]);
 
-  palm_tree_validate(pt);
+  // palm_tree_validate(pt);
 
   curr = 0;
   flag = 1;

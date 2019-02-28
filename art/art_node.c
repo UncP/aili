@@ -19,50 +19,62 @@
 
 #define node_type(an) ((an)->version & node256)
 
+/**
+ *   node version layout
+ *     lock            insert     adoption  old    type
+ *   |  1  |   4   |     16     |    8    |  1  |   2   |
+ *
+ *
+**/
+
 typedef struct art_node4
 {
-  unsigned char  version;
+  uint32_t       version;
   unsigned char  count;
   unsigned char  prefix_len;
-  unsigned char  unused[1];
+  unsigned char  unused[2];
   unsigned char  key[4];
   char  prefix[8];
   art_node *child[4];
+  art_node *parent; // we put `parent` at last since it is not updated very often
   char  meta[0];
 }art_node4;
 
 typedef struct art_node16
 {
-  unsigned char  version;
+  uint32_t       version;
   unsigned char  count;
   unsigned char  prefix_len;
-  unsigned char  unused[5];
+  unsigned char  unused[2];
   char  prefix[8];
   unsigned char  key[16];
   art_node *child[16];
+  art_node *parent;
   char  meta[0];
 }art_node16;
 
 typedef struct art_node48
 {
-  unsigned char version;
+  uint32_t      version;
   unsigned char count;
   unsigned char prefix_len;
-  unsigned char unused[5];
+  unsigned char unused[2];
   char prefix[8];
   unsigned char index[256];
   art_node *child[48];
+  art_node *parent;
   char  meta[0];
 }art_node48;
 
 typedef struct art_node256
 {
-  unsigned char version;
-  unsigned char count; // unused
+  uint32_t      version;
+  unsigned char count; // unused, will be used when deletion is implemented
   unsigned char prefix_len;
-  unsigned char unused[5];
+  unsigned char unused[2];
   char  prefix[8];
   art_node *child[256];
+  art_node *parent;
   char  meta[0];
 }art_node256;
 

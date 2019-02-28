@@ -7,6 +7,7 @@
 #ifndef _mapping_array_h_
 #define _mapping_array_h_
 
+#include <stdint.h>
 #include <pthread.h>
 
 // do not change it

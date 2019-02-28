@@ -20,7 +20,7 @@ typedef struct art_node art_node;
 
 struct art_node
 {
-  unsigned char version;
+  uint32_t      version;
   unsigned char count;
   unsigned char prefix_len;
 };

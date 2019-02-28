@@ -1,6 +1,6 @@
 ### 4.0.0
 
-Adaptive Radix Tree
+**Adaptive Radix Tree**
 
 1. 单线程 adaptive radix tree
 2. （BUG）初始化根节点不为空
