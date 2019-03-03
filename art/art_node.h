@@ -18,19 +18,10 @@
 
 typedef struct art_node art_node;
 
-struct art_node
-{
-  uint32_t      version;
-  unsigned char count;
-  unsigned char prefix_len;
-};
-
 #define is_leaf(ptr) ((uintptr_t)ptr & 0xf)
 #define make_leaf(ptr, len) ((uintptr_t)ptr | (len & 0xf)) // fow now assume key is less than 16 bytes
-#define get_key(ptr) ((const char *)((uintptr_t)ptr & ((uintptr_t)~0xf)))
-#define get_len(ptr) ((size_t)((uintptr_t)ptr & 0xf))
-
-#define prefix_len(an) ((int)an->prefix_len)
+#define get_leaf_key(ptr) ((const char *)((uintptr_t)ptr & ((uintptr_t)~0xf)))
+#define get_leaf_len(ptr) ((size_t)((uintptr_t)ptr & 0xf))
 
 art_node* new_art_node();
 void free_art_node(art_node *an);
@@ -40,6 +31,7 @@ int art_node_is_full(art_node *an);
 void art_node_grow(art_node **ptr);
 void art_node_set_prefix(art_node *an, const void *key, size_t off, int prefix_len);
 int art_node_prefix_compare(art_node *an, const void *key, size_t len, size_t off);
-unsigned char art_node_truncate_prefix(art_node *an, size_t off);
+unsigned char art_node_truncate_prefix(art_node *an, int off);
+int art_node_get_prefix_len(art_node *an);
 
 #endif /* _art_node_h_ */

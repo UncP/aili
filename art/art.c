@@ -44,8 +44,8 @@ static int _adaptive_radix_tree_put(art_node **an, const void *key, size_t len, 
   }
 
   if (is_leaf(cur)) {
-    const char *k1 = get_key(cur), *k2 = (const char *)key;
-    size_t l1 = get_len(cur), l2 = len, i;
+    const char *k1 = get_leaf_key(cur), *k2 = (const char *)key;
+    size_t l1 = get_leaf_len(cur), l2 = len, i;
     for (i = off; i < l1 && i < l2 && k1[i] == k2[i]; ++i)
       ;
     if (i == l1 && i == l2)
@@ -62,8 +62,8 @@ static int _adaptive_radix_tree_put(art_node **an, const void *key, size_t len, 
     return 0;
   }
 
-  size_t p = art_node_prefix_compare(cur, key, len, off);
-  if (p != prefix_len(cur)) {
+  int p = art_node_prefix_compare(cur, key, len, off);
+  if (p != art_node_get_prefix_len(cur)) {
     art_node *new = new_art_node();
     art_node_set_prefix(new, key, off, p);
     unsigned char byte;
@@ -75,7 +75,7 @@ static int _adaptive_radix_tree_put(art_node **an, const void *key, size_t len, 
     return 0;
   }
 
-  off += prefix_len(cur);
+  off += art_node_get_prefix_len(cur);
 
   art_node **next = art_node_find_child(cur, ((unsigned char *)key)[off]);
   if (next)
@@ -90,6 +90,9 @@ static int _adaptive_radix_tree_put(art_node **an, const void *key, size_t len, 
 // return 0 on success
 int adaptive_radix_tree_put(adaptive_radix_tree *art, const void *key, size_t len, const void *val)
 {
+  //char buf[256] = {0};
+  //memcpy(buf, key, len);
+  //printf("%s\n", buf);
   return _adaptive_radix_tree_put(&art->root, key, len, 0, val);
 }
 
@@ -99,8 +102,8 @@ static void* _adaptive_radix_tree_get(art_node *an, const void *key, size_t len,
     return 0;
 
   if (is_leaf(an)) {
-    const char *k1 = get_key(an), *k2 = (const char *)key;
-    size_t l1 = get_len(an), l2 = len, i;
+    const char *k1 = get_leaf_key(an), *k2 = (const char *)key;
+    size_t l1 = get_leaf_len(an), l2 = len, i;
     for (i = off; i < l1 && i < l2 && k1[i] == k2[i]; ++i)
       ;
     if (i == l1 && i == l2)
@@ -108,10 +111,10 @@ static void* _adaptive_radix_tree_get(art_node *an, const void *key, size_t len,
     return 0;
   }
 
-  if (art_node_prefix_compare(an, key, len, off) != prefix_len(an))
+  if (art_node_prefix_compare(an, key, len, off) != art_node_get_prefix_len(an))
     return 0;
 
-  off += prefix_len(an);
+  off += art_node_get_prefix_len(an);
 
   debug_assert(off <= len);
   if (off == len)

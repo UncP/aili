@@ -2,7 +2,7 @@
 [![Author](https://img.shields.io/badge/Author-UncP-brightgreen.svg)](https://github.com/UncP)
 [![Version](https://img.shields.io/badge/Version-4.0.0-blue.svg)](https://github.com/UncP/aili)
 
-Various concurrent algorithms for main-memory index
+A library that provides various concurrent algorithms for main-memory index, aims to achieve extremely fast speed, but just for experiment and fun.
 
 #### Algorithms
 

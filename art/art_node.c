@@ -10,6 +10,10 @@
 #include <assert.h>
 #include <emmintrin.h>
 
+#ifdef Debug
+#include <stdio.h>
+#endif
+
 #include "art_node.h"
 
 #define node4    0
@@ -17,94 +21,106 @@
 #define node48   2
 #define node256  3
 
-#define node_type(an) ((an)->version & node256)
-
 /**
- *   node version layout
- *     lock            insert     adoption  old    type
- *   |  1  |   4   |     16     |    8    |  1  |   2   |
+ *   node version layout(64 bits)
+ *                     count    prefix_len              lock  old   insert   adoption   type
+ *   |      16      |    8     |    8    |     12     |  1  |  1  |    8    |    8    |   2   |
  *
  *
 **/
 
+#define get_prefix_len(version)      (int)(((version) >> 32) & 0xff)
+#define set_prefix_len(version, len) (version = (version & (~(((uint64_t)0xff) << 32))) | (((uint64_t)(len)) << 32))
+#define get_count(version)           (int)(((version) >> 40) & 0xff)
+#define set_count(version, count)    (version = (version & (~(((uint64_t)0xff) << 40))) | (((uint64_t)(count)) << 40))
+#define incr_count(version)          (version = version + ((uint64_t)1 << 40))
+#define get_type(version)            (int)(version & node256)
+#define set_type(version, type)      (version |= type)
+
+struct art_node
+{
+  uint64_t  version;
+};
+
 typedef struct art_node4
 {
-  uint32_t       version;
-  unsigned char  count;
-  unsigned char  prefix_len;
-  unsigned char  unused[2];
-  unsigned char  key[4];
-  char  prefix[8];
+  uint64_t version;
+  unsigned char key[4];
+  unsigned char unused[4];
+  char prefix[8];
   art_node *child[4];
   art_node *parent; // we put `parent` at last since it is not updated very often
-  char  meta[0];
+  char meta[0];
 }art_node4;
 
 typedef struct art_node16
 {
-  uint32_t       version;
-  unsigned char  count;
-  unsigned char  prefix_len;
-  unsigned char  unused[2];
-  char  prefix[8];
-  unsigned char  key[16];
+  uint64_t version;
+  char prefix[8];
+  unsigned char key[16];
   art_node *child[16];
   art_node *parent;
-  char  meta[0];
+  char meta[0];
 }art_node16;
 
 typedef struct art_node48
 {
-  uint32_t      version;
-  unsigned char count;
-  unsigned char prefix_len;
-  unsigned char unused[2];
+  uint64_t version;
   char prefix[8];
   unsigned char index[256];
   art_node *child[48];
   art_node *parent;
-  char  meta[0];
+  char meta[0];
 }art_node48;
 
 typedef struct art_node256
 {
-  uint32_t      version;
-  unsigned char count; // unused, will be used when deletion is implemented
-  unsigned char prefix_len;
-  unsigned char unused[2];
-  char  prefix[8];
+  uint64_t version;
+  char prefix[8];
   art_node *child[256];
   art_node *parent;
-  char  meta[0];
+  char meta[0];
 }art_node256;
+
+inline uint64_t art_node_get_version(art_node *an)
+{
+  uint64_t version;
+  __atomic_load(&an->version, &version, __ATOMIC_ACQUIRE);
+  return version;
+}
+
+inline uint64_t art_node_get_version_unsafe(art_node *an)
+{
+  uint64_t version;
+  __atomic_load(&an->version, &version, __ATOMIC_RELAXED);
+  return version;
+}
 
 static inline art_node* _new_art_node(size_t size)
 {
   art_node *an = (art_node *)malloc(size);
   an->version = 0;
-  an->count = 0;
-  an->prefix_len = 0;
   return an;
 }
 
 static inline art_node* new_art_node4()
 {
   art_node *an = _new_art_node(sizeof(art_node4));
-  an->version |= node4;
+  set_type(an->version, node4);
   return an;
 }
 
 static inline art_node* new_art_node16()
 {
   art_node *an = _new_art_node(sizeof(art_node16));
-  an->version |= node16;
+  set_type(an->version, node16);
   return an;
 }
 
 static inline art_node* new_art_node48()
 {
   art_node *an = _new_art_node(sizeof(art_node48));
-  an->version |= node48;
+  set_type(an->version, node48);
   memset(((art_node48 *)an)->index, 0, 256);
   return an;
 }
@@ -112,7 +128,7 @@ static inline art_node* new_art_node48()
 static inline art_node* new_art_node256()
 {
   art_node *an = _new_art_node(sizeof(art_node256));
-  an->version |= node256;
+  set_type(an->version, node256);
   memset(an, 0, sizeof(art_node256));
   return an;
 }
@@ -131,21 +147,21 @@ art_node** art_node_find_child(art_node *an, unsigned char byte)
 {
   debug_assert(is_leaf(an) == 0);
 
-  switch (node_type(an)) {
+  switch (get_type(an->version)) {
   case node4: {
     art_node4 *an4 = (art_node4*)an;
-    debug_assert(an4->count < 5);
-    for (int i = 0; i < an4->count; ++i)
+    debug_assert(get_count(an4->version) < 5);
+    for (int i = 0, count = get_count(an4->version); i < count; ++i)
       if (an4->key[i] == byte)
         return &an4->child[i];
   }
   break;
   case node16: {
     art_node16 *an16 = (art_node16 *)an;
-    debug_assert(an16->count < 17);
+    debug_assert(get_count(an16->version) < 17);
     __m128i key = _mm_set1_epi8(byte);
     __m128i cmp = _mm_cmpeq_epi8(key, *(__m128i *)an16->key);
-    int mask = (1 << an16->count) - 1;
+    int mask = (1 << get_count(an16->version)) - 1;
     int bitfield = _mm_movemask_epi8(cmp) & mask;
     if (bitfield)
       return &an16->child[__builtin_ctz(bitfield)];
@@ -153,7 +169,7 @@ art_node** art_node_find_child(art_node *an, unsigned char byte)
   break;
   case node48: {
     art_node48 *an48 = (art_node48 *)an;
-    debug_assert(an48->count < 49);
+    debug_assert(get_count(an48->version) < 49);
     int index = an48->index[byte];
     if (index)
       return &an48->child[index - 1];
@@ -172,39 +188,42 @@ void art_node_add_child(art_node *an, unsigned char byte, art_node *child)
 {
   debug_assert(is_leaf(an) == 0);
 
-  switch (node_type(an)) {
+  switch (get_type(an->version)) {
   case node4: {
     art_node4 *an4 = (art_node4 *)an;
-    debug_assert(an4->count < 4);
-    for (int i = 0; i < an4->count; ++i)
+    debug_assert(get_count(an4->version) < 4);
+    for (int i = 0, count = get_count(an4->version); i < count; ++i)
       debug_assert(an4->key[i] != byte);
     // no need to be ordered
-    an4->key[an4->count] = byte;
-    an4->child[an4->count] = child;
-    ++an4->count;
+    int count = get_count(an4->version);
+    an4->key[count] = byte;
+    an4->child[count] = child;
+    incr_count(an4->version);
   }
   break;
   case node16: {
     art_node16 *an16 = (art_node16 *)an;
-    debug_assert(an16->count < 16);
+    debug_assert(get_count(an16->version) < 16);
     #ifdef Debug
       __m128i key = _mm_set1_epi8(byte);
       __m128i cmp = _mm_cmpeq_epi8(key, *(__m128i *)an16->key);
-      int mask = (1 << an16->count) - 1;
+      int mask = (1 << get_count(an16->version)) - 1;
       int bitfield = _mm_movemask_epi8(cmp) & mask;
       assert(bitfield == 0);
     #endif // Debug
     // no need to be ordered
-    an16->key[an16->count] = byte;
-    an16->child[an16->count] = child;
-    ++an16->count;
+    int count = get_count(an16->version);
+    an16->key[count] = byte;
+    an16->child[count] = child;
+    incr_count(an16->version);
   }
   break;
   case node48: {
     art_node48 *an48 = (art_node48 *)an;
-    debug_assert(an48->count < 48);
+    debug_assert(get_count(an48->version) < 48);
     debug_assert(an48->index[byte] == 0);
-    an48->index[byte] = ++an48->count;
+    incr_count(an48->version);
+    an48->index[byte] = get_count(an48->version);
     an48->child[an48->index[byte] - 1] = child;
   }
   break;
@@ -221,10 +240,10 @@ void art_node_add_child(art_node *an, unsigned char byte, art_node *child)
 
 inline int art_node_is_full(art_node *an)
 {
-  switch(node_type(an)) {
-  case node4 : return an->count == 4;
-  case node16: return an->count == 16;
-  case node48: return an->count == 48;
+  switch (get_type(an->version)) {
+  case node4 : return get_count(an->version) == 4;
+  case node16: return get_count(an->version) == 16;
+  case node48: return get_count(an->version) == 48;
   default: return 0;
   }
 }
@@ -233,38 +252,39 @@ void art_node_grow(art_node **ptr)
 {
   art_node *new;
 
-  switch(node_type(*ptr)) {
+  switch (get_type((*ptr)->version)) {
   case node4: {
     art_node16 *an16 = (art_node16 *)(new = new_art_node16());
     art_node4 *an4 = (art_node4 *)*ptr;
-    debug_assert(an4->count == 4);
+    debug_assert(get_count(an4->version) == 4);
     memcpy(an16->prefix, an4->prefix, 8);
-    an16->prefix_len = an4->prefix_len;
-    for (int i = 0; i < an4->count; ++i) {
+    set_prefix_len(an16->version, get_prefix_len(an4->version));
+    for (int i = 0; i < 4; ++i) {
       an16->key[i] = an4->key[i];
       an16->child[i] = an4->child[i];
     }
-    an16->count = an4->count;
+    set_count(an16->version, 4);
   }
   break;
   case node16: {
     art_node48 *an48 = (art_node48 *)(new = new_art_node48());
     art_node16 *an16 = (art_node16 *)*ptr;
-    debug_assert(an16->count == 16);
+    debug_assert(get_count(an16->version) == 16);
     memcpy(an48->prefix, an16->prefix, 8);
-    an48->prefix_len = an16->prefix_len;
-    for (int i = 0; i < an16->count; ++i) {
-      an48->child[an48->count] = an16->child[i];
-      an48->index[an16->key[i]] = ++an48->count;
+    set_prefix_len(an48->version, get_prefix_len(an16->version));
+    for (int i = 0; i < 16; ++i) {
+      an48->child[i] = an16->child[i];
+      an48->index[an16->key[i]] = i + 1;
     }
+    set_count(an48->version, 16);
   }
   break;
   case node48: {
     art_node256 *an256 = (art_node256 *)(new = new_art_node256());
     art_node48 *an48 = (art_node48 *)*ptr;
-    debug_assert(an48->count == 48);
+    debug_assert(get_count(an48->version) == 48);
     memcpy(an256->prefix, an48->prefix, 8);
-    an256->prefix_len = an48->prefix_len;
+    set_prefix_len(an256->version, get_prefix_len(an48->version));
     for (int i = 0; i < 256; ++i) {
       int index = an48->index[i];
       if (index)
@@ -281,7 +301,7 @@ void art_node_grow(art_node **ptr)
 
 static inline char* art_node_get_prefix(art_node *an)
 {
-  switch (node_type(an)) {
+  switch (get_type(an->version)) {
   case node4:
     return ((art_node4 *)an)->prefix;
   case node16:
@@ -299,7 +319,7 @@ void art_node_set_prefix(art_node *an, const void *key, size_t off, int prefix_l
 {
   char *prefix = art_node_get_prefix(an);
   memcpy(prefix, (char *)key + off, prefix_len);
-  an->prefix_len = prefix_len;
+  set_prefix_len(an->version, prefix_len);
 }
 
 // return the first offset that differs
@@ -307,7 +327,7 @@ int art_node_prefix_compare(art_node *an, const void *key, size_t len, size_t of
 {
   debug_assert(off < len);
 
-  int prefix_len = an->prefix_len;
+  int prefix_len = get_prefix_len(an->version);
   const char *prefix = art_node_get_prefix(an), *cur = (const char *)key;
 
   int i = 0;
@@ -319,14 +339,20 @@ int art_node_prefix_compare(art_node *an, const void *key, size_t len, size_t of
   return i;
 }
 
-unsigned char art_node_truncate_prefix(art_node *an, size_t off)
+unsigned char art_node_truncate_prefix(art_node *an, int off)
 {
-  debug_assert(off < an->prefix_len);
+  debug_assert(off < get_prefix_len(an->version));
+  int prefix_len = get_prefix_len(an->version);
   char *prefix = art_node_get_prefix(an);
   unsigned char ret = prefix[off];
-  for (int i = 0, j = off + 1; j < an->prefix_len; ++i, ++j)
+  for (int i = 0, j = off + 1; j < prefix_len; ++i, ++j)
     prefix[i] = prefix[j];
-  an->prefix_len = an->prefix_len - off - 1;
+  set_prefix_len(an->version, prefix_len - off - 1);
   return ret;
+}
+
+int art_node_get_prefix_len(art_node *an)
+{
+  return get_prefix_len(an->version);
 }
 
