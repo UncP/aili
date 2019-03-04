@@ -23,19 +23,43 @@
 
 /**
  *   node version layout(64 bits)
- *                     count    prefix_len              lock  old   insert   adoption   type
- *   |      16      |    8     |    8    |     12     |  1  |  1  |    8    |    8    |   2   |
- *
+ *     type                 count    prefix_len              old  lock insert expand vinsert   vexpand
+ *   |  2  |      14      |    8     |    8    |     12     |  1  |  1  |  1  |  1  |    8    |    8    |
  *
 **/
 
+#define OLD_BIT    ((uint64_t)1 << 19)
+#define LOCK_BIT   ((uint64_t)1 << 18)
+#define INSERT_BIT ((uint64_t)1 << 17)
+#define EXPAND_BIT ((uint64_t)1 << 16)
+
 #define get_prefix_len(version)      (int)(((version) >> 32) & 0xff)
-#define set_prefix_len(version, len) (version = (version & (~(((uint64_t)0xff) << 32))) | (((uint64_t)(len)) << 32))
+#define set_prefix_len(version, len) ((version) = ((version) & (~(((uint64_t)0xff) << 32))) | (((uint64_t)(len)) << 32))
 #define get_count(version)           (int)(((version) >> 40) & 0xff)
-#define set_count(version, count)    (version = (version & (~(((uint64_t)0xff) << 40))) | (((uint64_t)(count)) << 40))
-#define incr_count(version)          (version = version + ((uint64_t)1 << 40))
-#define get_type(version)            (int)(version & node256)
-#define set_type(version, type)      (version |= type)
+#define set_count(version, count)    ((version) = ((version) & (~(((uint64_t)0xff) << 40))) | (((uint64_t)(count)) << 40))
+#define incr_count(version)          ((version) = (version) + ((uint64_t)1 << 40))
+#define get_type(version)            (int)((version) & node256)
+#define set_type(version, type)      ((version) |= type)
+
+#define is_old(version)       ((version) & OLD_BIT)
+#define is_locked(version)    ((version) & LOCK_BIT)
+#define is_inserting(version) ((version) & INSERT_BIT)
+#define is_expanding(version) ((version) & EXPAND_BIT)
+
+#define set_old(version)    ((version) |= OLD_BIT)
+#define set_lock(version)   ((version) |= LOCK_BIT)
+#define set_insert(version) ((version) |= INSERT_BIT)
+#define set_expand(version) ((version) |= EXPAND_BIT)
+
+#define unset_lock(version)   ((version) &= (~LOCK_BIT))
+#define unset_insert(version) ((version) &= (~INSERT_BIT))
+#define unset_expand(version) ((version) &= (~EXPAND_BIT))
+
+#define get_vinsert(version)  ((int)(((version) >> 8) & 0xff))
+#define incr_vinsert(version) ((version) = ((version) & (~((uint64_t)0xff << 8))) | (((version) + (1 << 8)) & (0xff << 8))) // overflow is handled
+
+#define get_vexpand(version)  ((int)((version) & 0xff))
+#define incr_vexpand(version) ((version) = ((version) & ~((uint64_t)0xff)) | (((version) + 1) & 0xff)) // overflow is handled
 
 struct art_node
 {
@@ -299,7 +323,7 @@ void art_node_grow(art_node **ptr)
   *ptr = new;
 }
 
-static inline char* art_node_get_prefix(art_node *an)
+inline const char* art_node_get_prefix(art_node *an)
 {
   switch (get_type(an->version)) {
   case node4:
@@ -317,22 +341,22 @@ static inline char* art_node_get_prefix(art_node *an)
 
 void art_node_set_prefix(art_node *an, const void *key, size_t off, int prefix_len)
 {
-  char *prefix = art_node_get_prefix(an);
+  char *prefix = (char *)art_node_get_prefix(an);
   memcpy(prefix, (char *)key + off, prefix_len);
   set_prefix_len(an->version, prefix_len);
 }
 
 // return the first offset that differs
-int art_node_prefix_compare(art_node *an, const void *key, size_t len, size_t off)
+int art_node_prefix_compare(art_node *an, uint64_t version, const void *key, size_t len, size_t off)
 {
   debug_assert(off < len);
 
-  int prefix_len = get_prefix_len(an->version);
+  int prefix_len = get_prefix_len(version);
   const char *prefix = art_node_get_prefix(an), *cur = (const char *)key;
 
   int i = 0;
-  for (; i < prefix_len && off < len; ++i) {
-    if (prefix[i] != cur[off + i])
+  for (; i < prefix_len && off < len; ++i, ++off) {
+    if (prefix[i] != cur[off])
       return i;
   }
 
@@ -343,7 +367,7 @@ unsigned char art_node_truncate_prefix(art_node *an, int off)
 {
   debug_assert(off < get_prefix_len(an->version));
   int prefix_len = get_prefix_len(an->version);
-  char *prefix = art_node_get_prefix(an);
+  char *prefix = (char *)art_node_get_prefix(an);
   unsigned char ret = prefix[off];
   for (int i = 0, j = off + 1; j < prefix_len; ++i, ++j)
     prefix[i] = prefix[j];
@@ -351,8 +375,41 @@ unsigned char art_node_truncate_prefix(art_node *an, int off)
   return ret;
 }
 
-int art_node_get_prefix_len(art_node *an)
+inline int art_node_version_get_prefix_len(uint64_t version)
 {
-  return get_prefix_len(an->version);
+  return get_prefix_len(version);
+}
+
+uint64_t art_node_get_stable_version(art_node *an)
+{
+  uint64_t version;
+  do {
+    version = art_node_get_version(an);
+  } while (is_inserting(version) || is_expanding(version));
+  return version;
+}
+
+inline int art_node_version_compare_expand(uint64_t version1, uint64_t version2)
+{
+  return get_vexpand(version1) != get_vexpand(version2);
+}
+
+// return 0 on success, 1 on failure
+int art_node_lock(art_node *an)
+{
+  while (1) {
+    // must use `acquire` operation to avoid deadlock
+    uint64_t version = art_node_get_version(an);
+    if (is_locked(version)) {
+      // __asm__ __volatile__ ("pause");
+      continue;
+    }
+    if (unlikely(is_old(version)))
+      return 1;
+    if (__atomic_compare_exchange_n(&an->version, &version, set_lock(version),
+      1 /* weak */, __ATOMIC_RELEASE, __ATOMIC_RELAXED))
+      break;
+  }
+  return 0;
 }
 
