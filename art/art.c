@@ -47,7 +47,6 @@ static int _adaptive_radix_tree_put(art_node **an, const void *key, size_t len, 
 
   debug_assert(off < len);
 
-  // NOTE: this should be a rare case
   if (unlikely(cur == 0)) {
     art_node *leaf = (art_node *)make_leaf(key, len);
     if (likely(__atomic_compare_exchange_n(an, &cur, leaf, 0 /* weak */, __ATOMIC_RELEASE, __ATOMIC_RELAXED)))
@@ -79,20 +78,21 @@ static int _adaptive_radix_tree_put(art_node **an, const void *key, size_t len, 
     }
   }
 
-  // now we are talking!
-  descend:
-  v = art_node_get_stable_version(cur);
+  v = art_node_get_stable_expand_version(cur);
 
   p = art_node_prefix_compare(cur, v, key, len, off);
 
   v1 = art_node_get_version(cur);
 
-  if (art_node_version_compare_expand(v, v1)) // prefix changed
-    goto begin;
+  if (unlikely(art_node_version_compare_expand(v, v1)))
+    goto begin; // prefix is changing or changed by another thread
+  v = v1;
 
   if (p != art_node_version_get_prefix_len(v)) {
-    if (art_node_lock(cur))
-      goto begin;
+    if (unlikely(art_node_lock(cur)))
+      goto begin; // node is replaced by a new node
+    if (unlikely(art_node_version_compare_expand(v, art_node_get_version_unsafe(cur))))
+      goto begin; // node prefix is changed by another thread
     art_node *new = new_art_node();
     art_node_set_prefix(new, key, off, p);
     unsigned char byte;
@@ -100,17 +100,44 @@ static int _adaptive_radix_tree_put(art_node **an, const void *key, size_t len, 
     art_node_add_child(new, byte, (art_node *)make_leaf(key, len));
     byte = art_node_truncate_prefix(cur, p);
     art_node_add_child(new, byte, cur);
-    *an = new;
+    __atomic_store(an, &new, __ATOMIC_RELEASE);
+    art_node_unlock(cur);
     return 0;
   }
 
-  art_node **next = art_node_find_child(cur, ((unsigned char *)key)[off]);
-  if (next)
-    return _adaptive_radix_tree_put(next, key, len, off + 1, val);
+  off += p;
+  debug_assert(off < len);
 
-  if (art_node_is_full(cur))
+  // now that the prefix is matched, we can descend
+
+  retry:
+  v = art_node_get_stable_insert_version(cur);
+
+  art_node **next = art_node_find_child(cur, v, ((unsigned char *)key)[off]);
+
+  v1 = art_node_get_version(cur);
+
+  if (unlikely(art_node_version_compare_insert(v, v1)))
+    goto retry;
+  v = v1;
+
+  if (next) {
+    an = next;
+    ++off;
+    goto begin;
+  }
+
+  if (unlikely(art_node_lock(cur)))
+    goto begin; // node is replaced by a new node
+
+  int new;
+  if ((new = art_node_is_full(cur)))
     art_node_grow(an);
   art_node_add_child(*an, ((unsigned char *)key)[off], (art_node *)make_leaf(key, len));
+
+  if (new)
+    art_node_unlock(*an);
+  art_node_unlock(cur);
   return 0;
 }
 

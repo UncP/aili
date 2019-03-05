@@ -113,11 +113,19 @@ inline uint64_t art_node_get_version(art_node *an)
   return version;
 }
 
+inline void art_node_set_version(art_node *an, uint64_t version)
+{
+  __atomic_store(&an->version, &version, __ATOMIC_RELEASE);
+}
+
 inline uint64_t art_node_get_version_unsafe(art_node *an)
 {
-  uint64_t version;
-  __atomic_load(&an->version, &version, __ATOMIC_RELAXED);
-  return version;
+  return an->version;
+}
+
+inline void art_node_set_version_unsafe(art_node *an, uint64_t version)
+{
+  __atomic_store(&an->version, &version, __ATOMIC_RELAXED);
 }
 
 static inline art_node* _new_art_node(size_t size)
@@ -167,25 +175,25 @@ void free_art_node(art_node *an)
   free((void *)an);
 }
 
-art_node** art_node_find_child(art_node *an, unsigned char byte)
+art_node** art_node_find_child(art_node *an, uint64_t version, unsigned char byte)
 {
   debug_assert(is_leaf(an) == 0);
 
-  switch (get_type(an->version)) {
+  switch (get_type(version)) {
   case node4: {
     art_node4 *an4 = (art_node4*)an;
-    debug_assert(get_count(an4->version) < 5);
-    for (int i = 0, count = get_count(an4->version); i < count; ++i)
+    debug_assert(get_count(version) < 5);
+    for (int i = 0, count = get_count(version); i < count; ++i)
       if (an4->key[i] == byte)
         return &an4->child[i];
   }
   break;
   case node16: {
     art_node16 *an16 = (art_node16 *)an;
-    debug_assert(get_count(an16->version) < 17);
+    debug_assert(get_count(version) < 17);
     __m128i key = _mm_set1_epi8(byte);
     __m128i cmp = _mm_cmpeq_epi8(key, *(__m128i *)an16->key);
-    int mask = (1 << get_count(an16->version)) - 1;
+    int mask = (1 << get_count(version)) - 1;
     int bitfield = _mm_movemask_epi8(cmp) & mask;
     if (bitfield)
       return &an16->child[__builtin_ctz(bitfield)];
@@ -193,7 +201,7 @@ art_node** art_node_find_child(art_node *an, unsigned char byte)
   break;
   case node48: {
     art_node48 *an48 = (art_node48 *)an;
-    debug_assert(get_count(an48->version) < 49);
+    debug_assert(get_count(version) < 49);
     int index = an48->index[byte];
     if (index)
       return &an48->child[index - 1];
@@ -208,46 +216,51 @@ art_node** art_node_find_child(art_node *an, unsigned char byte)
 }
 
 // add a child to art_node4, `byte` must not exist in this node before
+// require: node is locked
 void art_node_add_child(art_node *an, unsigned char byte, art_node *child)
 {
   debug_assert(is_leaf(an) == 0);
 
-  switch (get_type(an->version)) {
+  uint64_t version = an->version;
+
+  debug_assert(is_locked(version));
+
+  switch (get_type(version)) {
   case node4: {
     art_node4 *an4 = (art_node4 *)an;
-    debug_assert(get_count(an4->version) < 4);
-    for (int i = 0, count = get_count(an4->version); i < count; ++i)
+    debug_assert(get_count(version) < 4);
+    for (int i = 0, count = get_count(version); i < count; ++i)
       debug_assert(an4->key[i] != byte);
     // no need to be ordered
-    int count = get_count(an4->version);
+    int count = get_count(version);
     an4->key[count] = byte;
     an4->child[count] = child;
-    incr_count(an4->version);
+    an4->version = incr_count(version);
   }
   break;
   case node16: {
     art_node16 *an16 = (art_node16 *)an;
-    debug_assert(get_count(an16->version) < 16);
+    debug_assert(get_count(version) < 16);
     #ifdef Debug
       __m128i key = _mm_set1_epi8(byte);
       __m128i cmp = _mm_cmpeq_epi8(key, *(__m128i *)an16->key);
-      int mask = (1 << get_count(an16->version)) - 1;
+      int mask = (1 << get_count(version)) - 1;
       int bitfield = _mm_movemask_epi8(cmp) & mask;
       assert(bitfield == 0);
     #endif // Debug
     // no need to be ordered
-    int count = get_count(an16->version);
+    int count = get_count(version);
     an16->key[count] = byte;
     an16->child[count] = child;
-    incr_count(an16->version);
+    an16->version = incr_count(version);
   }
   break;
   case node48: {
     art_node48 *an48 = (art_node48 *)an;
-    debug_assert(get_count(an48->version) < 48);
+    debug_assert(get_count(version) < 48);
     debug_assert(an48->index[byte] == 0);
-    incr_count(an48->version);
-    an48->index[byte] = get_count(an48->version);
+    an48->version = incr_count(version);
+    an48->index[byte] = get_count(version);
     an48->child[an48->index[byte] - 1] = child;
   }
   break;
@@ -262,27 +275,36 @@ void art_node_add_child(art_node *an, unsigned char byte, art_node *child)
   }
 }
 
+// require: node is locked
 inline int art_node_is_full(art_node *an)
 {
-  switch (get_type(an->version)) {
-  case node4 : return get_count(an->version) == 4;
-  case node16: return get_count(an->version) == 16;
-  case node48: return get_count(an->version) == 48;
+  uint64_t version = an->version;
+
+  debug_assert(is_locked(version));
+
+  switch (get_type(version)) {
+  case node4 : return get_count(version) == 4;
+  case node16: return get_count(version) == 16;
+  case node48: return get_count(version) == 48;
   default: return 0;
   }
 }
 
+// require: node is locked
 void art_node_grow(art_node **ptr)
 {
   art_node *new;
+  uint64_t version = (*ptr)->version;
 
-  switch (get_type((*ptr)->version)) {
+  debug_assert(is_locked(version));
+
+  switch (get_type(version)) {
   case node4: {
     art_node16 *an16 = (art_node16 *)(new = new_art_node16());
     art_node4 *an4 = (art_node4 *)*ptr;
-    debug_assert(get_count(an4->version) == 4);
+    debug_assert(get_count(version) == 4);
     memcpy(an16->prefix, an4->prefix, 8);
-    set_prefix_len(an16->version, get_prefix_len(an4->version));
+    set_prefix_len(an16->version, get_prefix_len(version));
     for (int i = 0; i < 4; ++i) {
       an16->key[i] = an4->key[i];
       an16->child[i] = an4->child[i];
@@ -293,9 +315,9 @@ void art_node_grow(art_node **ptr)
   case node16: {
     art_node48 *an48 = (art_node48 *)(new = new_art_node48());
     art_node16 *an16 = (art_node16 *)*ptr;
-    debug_assert(get_count(an16->version) == 16);
+    debug_assert(get_count(version) == 16);
     memcpy(an48->prefix, an16->prefix, 8);
-    set_prefix_len(an48->version, get_prefix_len(an16->version));
+    set_prefix_len(an48->version, get_prefix_len(version));
     for (int i = 0; i < 16; ++i) {
       an48->child[i] = an16->child[i];
       an48->index[an16->key[i]] = i + 1;
@@ -306,9 +328,9 @@ void art_node_grow(art_node **ptr)
   case node48: {
     art_node256 *an256 = (art_node256 *)(new = new_art_node256());
     art_node48 *an48 = (art_node48 *)*ptr;
-    debug_assert(get_count(an48->version) == 48);
+    debug_assert(get_count(version) == 48);
     memcpy(an256->prefix, an48->prefix, 8);
-    set_prefix_len(an256->version, get_prefix_len(an48->version));
+    set_prefix_len(an256->version, get_prefix_len(version));
     for (int i = 0; i < 256; ++i) {
       int index = an48->index[i];
       if (index)
@@ -320,7 +342,12 @@ void art_node_grow(art_node **ptr)
     // node256 is not growable
     assert(0);
   }
-  *ptr = new;
+  // before we replace old node, must lock new node first
+  assert(art_node_lock(new) == 0);
+  // here we must replace old node first
+  __atomic_store(ptr, &new, __ATOMIC_RELEASE);
+  // set original node old to let other thread know
+  art_node_set_version(*ptr, set_old(version));
 }
 
 inline const char* art_node_get_prefix(art_node *an)
@@ -363,15 +390,25 @@ int art_node_prefix_compare(art_node *an, uint64_t version, const void *key, siz
   return i;
 }
 
+// require: node is locked
 unsigned char art_node_truncate_prefix(art_node *an, int off)
 {
-  debug_assert(off < get_prefix_len(an->version));
-  int prefix_len = get_prefix_len(an->version);
+  uint64_t version = an->version;
+
+  debug_assert(off < get_prefix_len(version));
+
+  // mark expand bit before truncate prefix
+  art_node_set_version(an, set_expand(version));
+
+  int prefix_len = get_prefix_len(version);
   char *prefix = (char *)art_node_get_prefix(an);
   unsigned char ret = prefix[off];
   for (int i = 0, j = off + 1; j < prefix_len; ++i, ++j)
     prefix[i] = prefix[j];
-  set_prefix_len(an->version, prefix_len - off - 1);
+
+  set_prefix_len(version, prefix_len - off - 1);
+  art_node_set_version_unsafe(an, version);
+
   return ret;
 }
 
@@ -380,18 +417,32 @@ inline int art_node_version_get_prefix_len(uint64_t version)
   return get_prefix_len(version);
 }
 
-uint64_t art_node_get_stable_version(art_node *an)
+uint64_t art_node_get_stable_expand_version(art_node *an)
 {
   uint64_t version;
   do {
     version = art_node_get_version(an);
-  } while (is_inserting(version) || is_expanding(version));
+  } while (is_expanding(version));
+  return version;
+}
+
+uint64_t art_node_get_stable_insert_version(art_node *an)
+{
+  uint64_t version;
+  do {
+    version = art_node_get_version(an);
+  } while (is_inserting(version));
   return version;
 }
 
 inline int art_node_version_compare_expand(uint64_t version1, uint64_t version2)
 {
-  return get_vexpand(version1) != get_vexpand(version2);
+  return is_expanding(version1) != is_expanding(version2) || get_vexpand(version1) != get_vexpand(version2);
+}
+
+inline int art_node_version_compare_insert(uint64_t version1, uint64_t version2)
+{
+  return is_inserting(version1) != is_inserting(version2) || get_vinsert(version1) != get_vinsert(version2);
 }
 
 // return 0 on success, 1 on failure
@@ -411,5 +462,24 @@ int art_node_lock(art_node *an)
       break;
   }
   return 0;
+}
+
+// require: node is locked
+void art_node_unlock(art_node *an)
+{
+  uint64_t version = an->version;
+
+  debug_assert(is_locked(version));
+
+  if (is_inserting(version)) {
+    incr_vinsert(version);
+    unset_insert(version);
+  }
+  if (is_expanding(version)) {
+    incr_vexpand(version);
+    unset_expand(version);
+  }
+
+  art_node_set_version(an, unset_lock(version));
 }
 

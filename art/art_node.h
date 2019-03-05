@@ -29,7 +29,7 @@ typedef struct art_node art_node;
 art_node* new_art_node();
 void free_art_node(art_node *an);
 void art_node_add_child(art_node *an, unsigned char byte, art_node *child);
-art_node** art_node_find_child(art_node *an, unsigned char byte);
+art_node** art_node_find_child(art_node *an, uint64_t version, unsigned char byte);
 int art_node_is_full(art_node *an);
 void art_node_grow(art_node **ptr);
 void art_node_set_prefix(art_node *an, const void *key, size_t off, int prefix_len);
@@ -37,9 +37,13 @@ const char* art_node_get_prefix(art_node *an);
 int art_node_prefix_compare(art_node *an, uint64_t version, const void *key, size_t len, size_t off);
 unsigned char art_node_truncate_prefix(art_node *an, int off);
 uint64_t art_node_get_version(art_node *an);
-uint64_t art_node_get_stable_version(art_node *an);
+uint64_t art_node_get_version_unsafe(art_node *an);
+uint64_t art_node_get_stable_expand_version(art_node *an);
+uint64_t art_node_get_stable_insert_version(art_node *an);
 int art_node_version_get_prefix_len(uint64_t version);
 int art_node_version_compare_expand(uint64_t version1, uint64_t version2);
+int art_node_version_compare_insert(uint64_t version1, uint64_t version2);
 int art_node_lock(art_node *an);
+void art_node_unlock(art_node *an);
 
 #endif /* _art_node_h_ */
