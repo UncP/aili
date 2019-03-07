@@ -45,5 +45,6 @@ int art_node_version_compare_expand(uint64_t version1, uint64_t version2);
 int art_node_version_compare_insert(uint64_t version1, uint64_t version2);
 int art_node_lock(art_node *an);
 void art_node_unlock(art_node *an);
+int art_node_version_is_old(uint64_t version);
 
 #endif /* _art_node_h_ */

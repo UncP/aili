@@ -38,6 +38,7 @@ void free_adaptive_radix_tree(adaptive_radix_tree *art)
 // return -1 for retry
 static int _adaptive_radix_tree_put(art_node **an, const void *key, size_t len, size_t off, const void *val)
 {
+  (void)val;
   art_node *cur;
   uint64_t v, v1;
   int p;
@@ -113,6 +114,8 @@ static int _adaptive_radix_tree_put(art_node **an, const void *key, size_t len, 
 
   retry:
   v = art_node_get_stable_insert_version(cur);
+  if (art_node_version_is_old(v))
+    goto begin;
 
   art_node **next = art_node_find_child(cur, v, ((unsigned char *)key)[off]);
 
@@ -158,13 +161,19 @@ int adaptive_radix_tree_put(adaptive_radix_tree *art, const void *key, size_t le
   return ret;
 }
 
-static void* _adaptive_radix_tree_get(art_node *an, const void *key, size_t len, size_t off)
+static void* _adaptive_radix_tree_get(art_node **an, const void *key, size_t len, size_t off)
 {
-  if (an == 0)
+  art_node *cur;
+  uint64_t v, v1;
+
+  begin:
+  __atomic_load(an, &cur, __ATOMIC_ACQUIRE);
+
+  if (unlikely(cur == 0))
     return 0;
 
-  if (is_leaf(an)) {
-    const char *k1 = get_leaf_key(an), *k2 = (const char *)key;
+  if (unlikely(is_leaf(cur))) {
+    const char *k1 = get_leaf_key(cur), *k2 = (const char *)key;
     size_t l1 = get_leaf_len(an), l2 = len, i;
     for (i = off; i < l1 && i < l2 && k1[i] == k2[i]; ++i)
       ;
@@ -173,21 +182,38 @@ static void* _adaptive_radix_tree_get(art_node *an, const void *key, size_t len,
     return 0;
   }
 
-  if (art_node_prefix_compare(an, key, len, off) != art_node_get_prefix_len(an))
+  v = art_node_get_stable_expand_version(cur);
+
+  int p = art_node_prefix_compare(cur, v, key, len, off);
+
+  v1 = art_node_get_version(cur);
+  if (art_node_version_compare_expand(v, v1))
+    goto begin;
+  v = v1;
+
+  if (p != art_node_version_get_prefix_len(v))
     return 0;
 
-  off += art_node_get_prefix_len(an);
-
+  off += art_node_version_get_prefix_len(v);
   debug_assert(off <= len);
-  if (off == len)
-    return 0;
 
-  art_node **next = art_node_find_child(an, ((unsigned char *)key)[off]);
-  return next ? _adaptive_radix_tree_get(*next, key, len, off + 1) : 0;
+  retry:
+  v = art_node_get_stable_insert_version(cur);
+  if (art_node_version_is_old(v))
+    goto begin;
+
+  art_node **next = art_node_find_child(cur, v, ((unsigned char *)key)[off]);
+
+  v1 = art_node_get_version(cur);
+
+  if (art_node_version_compare_insert(v, v1))
+    goto retry;
+
+  return next ? _adaptive_radix_tree_get(next, key, len, off + 1) : 0;
 }
 
 void* adaptive_radix_tree_get(adaptive_radix_tree *art, const void *key, size_t len)
 {
-  return _adaptive_radix_tree_get(art->root, key, len, 0);
+  return _adaptive_radix_tree_get(&art->root, key, len, 0);
 }
 

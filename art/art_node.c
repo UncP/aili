@@ -495,3 +495,8 @@ void art_node_unlock(art_node *an)
   art_node_set_version(an, unset_lock(version));
 }
 
+int art_node_version_is_old(uint64_t version)
+{
+  return is_old(version);
+}
+
