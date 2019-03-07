@@ -215,19 +215,28 @@ art_node** art_node_find_child(art_node *an, uint64_t version, unsigned char byt
   return 0;
 }
 
-// add a child to art_node4, `byte` must not exist in this node before
+// add a child to art_node4, return 0 on success, otherwise return next layer
 // require: node is locked
-void art_node_add_child(art_node *an, unsigned char byte, art_node *child)
+art_node** art_node_add_child(art_node **ptr, unsigned char byte, art_node *child)
 {
   debug_assert(is_leaf(an) == 0);
 
-  uint64_t version = an->version;
+  int full = 0;
+  uint64_t version = (*ptr)->version;
 
   debug_assert(is_locked(version));
 
+  art_node **next;
+  if ((next = art_node_find_child(*ptr, version, byte)))
+    return next;
+
+  // grow if necessary
+  if ((full = art_node_is_full(*ptr)))
+    art_node_grow(ptr);
+
   switch (get_type(version)) {
   case node4: {
-    art_node4 *an4 = (art_node4 *)an;
+    art_node4 *an4 = (art_node4 *)*ptr;
     debug_assert(get_count(version) < 4);
     for (int i = 0, count = get_count(version); i < count; ++i)
       debug_assert(an4->key[i] != byte);
@@ -239,15 +248,14 @@ void art_node_add_child(art_node *an, unsigned char byte, art_node *child)
   }
   break;
   case node16: {
-    art_node16 *an16 = (art_node16 *)an;
-    debug_assert(get_count(version) < 16);
+    art_node16 *an16 = (art_node16 *)*ptr;
     #ifdef Debug
-      __m128i key = _mm_set1_epi8(byte);
-      __m128i cmp = _mm_cmpeq_epi8(key, *(__m128i *)an16->key);
-      int mask = (1 << get_count(version)) - 1;
-      int bitfield = _mm_movemask_epi8(cmp) & mask;
-      assert(bitfield == 0);
-    #endif // Debug
+    __m128i key = _mm_set1_epi8(byte);
+    __m128i cmp = _mm_cmpeq_epi8(key, *(__m128i *)an16->key);
+    int mask = (1 << get_count(version)) - 1;
+    int bitfield = _mm_movemask_epi8(cmp) & mask;
+    debug_assert(bitfield == 0);
+    #endif
     // no need to be ordered
     int count = get_count(version);
     an16->key[count] = byte;
@@ -256,8 +264,7 @@ void art_node_add_child(art_node *an, unsigned char byte, art_node *child)
   }
   break;
   case node48: {
-    art_node48 *an48 = (art_node48 *)an;
-    debug_assert(get_count(version) < 48);
+    art_node48 *an48 = (art_node48 *)*ptr;
     debug_assert(an48->index[byte] == 0);
     an48->version = incr_count(version);
     an48->index[byte] = get_count(version);
@@ -265,7 +272,7 @@ void art_node_add_child(art_node *an, unsigned char byte, art_node *child)
   }
   break;
   case node256: {
-    art_node256 *an256 = (art_node256 *)an;
+    art_node256 *an256 = (art_node256 *)*ptr;
     debug_assert(an256->child[byte] == 0);
     an256->child[byte] = child;
   }
@@ -273,6 +280,10 @@ void art_node_add_child(art_node *an, unsigned char byte, art_node *child)
   default:
     assert(0);
   }
+
+  if (full)
+    art_node_unlock(*ptr);
+  return 0;
 }
 
 // require: node is locked
@@ -342,12 +353,13 @@ void art_node_grow(art_node **ptr)
     // node256 is not growable
     assert(0);
   }
-  // before we replace old node, must lock new node first
+  // we must lock new node first
   assert(art_node_lock(new) == 0);
-  // here we must replace old node first
+  art_node *old = *ptr;
+  // replace old node first
   __atomic_store(ptr, &new, __ATOMIC_RELEASE);
-  // set original node old to let other thread know
-  art_node_set_version(*ptr, set_old(version));
+  // then set original node old to let other thread know
+  art_node_set_version(old, set_old(version));
 }
 
 inline const char* art_node_get_prefix(art_node *an)

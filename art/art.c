@@ -6,6 +6,7 @@
 
 #include <stdlib.h>
 #include <stdint.h>
+#include <assert.h>
 #ifdef Debug
 #include <string.h>
 #include <stdio.h>
@@ -45,7 +46,7 @@ static int _adaptive_radix_tree_put(art_node **an, const void *key, size_t len, 
   // NOTE: __ATOMIC_RELAXED is not ok
   __atomic_load(an, &cur, __ATOMIC_ACQUIRE);
 
-  debug_assert(off < len);
+  // debug_assert(off < len);
 
   if (unlikely(cur == 0)) {
     art_node *leaf = (art_node *)make_leaf(key, len);
@@ -67,9 +68,9 @@ static int _adaptive_radix_tree_put(art_node **an, const void *key, size_t len, 
     off = i;
     unsigned char byte;
     byte = off == l1 ? 0 : k1[off];
-    art_node_add_child(new, byte, cur);
+    assert(art_node_add_child(&new, byte, cur) == 0);
     byte = off == l2 ? 0 : k2[off];
-    art_node_add_child(new, byte, (art_node *)make_leaf(k2, l2));
+    assert(art_node_add_child(&new, byte, (art_node *)make_leaf(k2, l2)) == 0);
     if (likely(__atomic_compare_exchange_n(an, &cur, new, 0 /* weak */, __ATOMIC_RELEASE, __ATOMIC_RELAXED))) {
       return 0;
     } else {
@@ -97,9 +98,9 @@ static int _adaptive_radix_tree_put(art_node **an, const void *key, size_t len, 
     art_node_set_prefix(new, key, off, p);
     unsigned char byte;
     byte = (off + p < len) ? ((unsigned char *)key)[off + p] : 0;
-    art_node_add_child(new, byte, (art_node *)make_leaf(key, len));
+    assert(art_node_add_child(&new, byte, (art_node *)make_leaf(key, len)) == 0);
     byte = art_node_truncate_prefix(cur, p);
-    art_node_add_child(new, byte, cur);
+    assert(art_node_add_child(&new, byte, cur) == 0);
     __atomic_store(an, &new, __ATOMIC_RELEASE);
     art_node_unlock(cur);
     return 0;
@@ -130,24 +131,31 @@ static int _adaptive_radix_tree_put(art_node **an, const void *key, size_t len, 
   if (unlikely(art_node_lock(cur)))
     goto begin; // node is replaced by a new node
 
-  int new;
-  if ((new = art_node_is_full(cur)))
-    art_node_grow(an);
-  art_node_add_child(*an, ((unsigned char *)key)[off], (art_node *)make_leaf(key, len));
-
-  if (new)
-    art_node_unlock(*an);
+  next = art_node_add_child(an, ((unsigned char *)key)[off], (art_node *)make_leaf(key, len));
   art_node_unlock(cur);
+
+  // another thread might inserted same byte before we acquire lock
+  if (next) {
+    an = next;
+    ++off;
+    goto begin;
+  }
+
   return 0;
 }
 
 // return 0 on success
+// return 1 on duplication
 int adaptive_radix_tree_put(adaptive_radix_tree *art, const void *key, size_t len, const void *val)
 {
   //char buf[256] = {0};
   //memcpy(buf, key, len);
   //printf("%s\n", buf);
-  return _adaptive_radix_tree_put(&art->root, key, len, 0, val);
+  int ret;
+  // retry should be rare
+  while (unlikely((ret = _adaptive_radix_tree_put(&art->root, key, len, 0, val)) == -1))
+    ;
+  return ret;
 }
 
 static void* _adaptive_radix_tree_get(art_node *an, const void *key, size_t len, size_t off)

@@ -28,7 +28,7 @@ typedef struct art_node art_node;
 
 art_node* new_art_node();
 void free_art_node(art_node *an);
-void art_node_add_child(art_node *an, unsigned char byte, art_node *child);
+art_node** art_node_add_child(art_node **ptr, unsigned char byte, art_node *child);
 art_node** art_node_find_child(art_node *an, uint64_t version, unsigned char byte);
 int art_node_is_full(art_node *an);
 void art_node_grow(art_node **ptr);
