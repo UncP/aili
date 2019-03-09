@@ -81,12 +81,14 @@ static int _adaptive_radix_tree_put(art_node **an, const void *key, size_t len, 
   }
 
   v = art_node_get_stable_expand_version(cur);
+  if (art_node_version_is_old(v))
+    goto begin;
 
   p = art_node_prefix_compare(cur, v, key, len, off);
 
   v1 = art_node_get_version(cur);
 
-  if (unlikely(art_node_version_compare_expand(v, v1)))
+  if (unlikely(art_node_version_is_old(v1) || art_node_version_compare_expand(v, v1)))
     goto begin; // prefix is changing or changed by another thread
   v = v1;
 
@@ -121,7 +123,7 @@ static int _adaptive_radix_tree_put(art_node **an, const void *key, size_t len, 
 
   v1 = art_node_get_version(cur);
 
-  if (unlikely(art_node_version_compare_insert(v, v1)))
+  if (unlikely(art_node_version_is_old(v1) || art_node_version_compare_insert(v, v1)))
     goto retry;
   v = v1;
 
@@ -183,11 +185,13 @@ static void* _adaptive_radix_tree_get(art_node **an, const void *key, size_t len
   }
 
   v = art_node_get_stable_expand_version(cur);
+  if (art_node_version_is_old(v))
+    goto begin;
 
   int p = art_node_prefix_compare(cur, v, key, len, off);
 
   v1 = art_node_get_version(cur);
-  if (art_node_version_compare_expand(v, v1))
+  if (art_node_version_is_old(v1) || art_node_version_compare_expand(v, v1))
     goto begin;
   v = v1;
 
@@ -206,7 +210,7 @@ static void* _adaptive_radix_tree_get(art_node **an, const void *key, size_t len
 
   v1 = art_node_get_version(cur);
 
-  if (art_node_version_compare_insert(v, v1))
+  if (art_node_version_is_old(v1) || art_node_version_compare_insert(v, v1))
     goto retry;
 
   return next ? _adaptive_radix_tree_get(next, key, len, off + 1) : 0;
