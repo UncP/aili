@@ -65,6 +65,8 @@ static int _adaptive_radix_tree_put(art_node **an, const void *key, size_t len, 
     if (unlikely(i == l1 && i == l2))
       return 1; // key exists
     art_node *new = new_art_node();
+    assert(art_node_lock(new) == 0);
+    // TODO: i - off might be bigger than 8
     art_node_set_prefix(new, k1, off, i - off);
     off = i;
     unsigned char byte;
@@ -72,6 +74,7 @@ static int _adaptive_radix_tree_put(art_node **an, const void *key, size_t len, 
     assert(art_node_add_child(&new, byte, cur) == 0);
     byte = off == l2 ? 0 : k2[off];
     assert(art_node_add_child(&new, byte, (art_node *)make_leaf(k2, l2)) == 0);
+    art_node_unlock(new);
     if (likely(__atomic_compare_exchange_n(an, &cur, new, 0 /* weak */, __ATOMIC_RELEASE, __ATOMIC_RELAXED))) {
       return 0;
     } else {
@@ -98,12 +101,14 @@ static int _adaptive_radix_tree_put(art_node **an, const void *key, size_t len, 
     if (unlikely(art_node_version_compare_expand(v, art_node_get_version_unsafe(cur))))
       goto begin; // node prefix is changed by another thread
     art_node *new = new_art_node();
+    assert(art_node_lock(new) == 0);
     art_node_set_prefix(new, key, off, p);
     unsigned char byte;
     byte = (off + p < len) ? ((unsigned char *)key)[off + p] : 0;
     assert(art_node_add_child(&new, byte, (art_node *)make_leaf(key, len)) == 0);
     byte = art_node_truncate_prefix(cur, p);
     assert(art_node_add_child(&new, byte, cur) == 0);
+    art_node_unlock(new);
     __atomic_store(an, &new, __ATOMIC_RELEASE);
     art_node_unlock(cur);
     return 0;
@@ -116,8 +121,10 @@ static int _adaptive_radix_tree_put(art_node **an, const void *key, size_t len, 
 
   retry:
   v = art_node_get_stable_insert_version(cur);
-  if (art_node_version_is_old(v))
+  if (art_node_version_is_old(v)) {
+    off -= p;
     goto begin;
+  }
 
   art_node **next = art_node_find_child(cur, v, ((unsigned char *)key)[off]);
 
@@ -140,7 +147,7 @@ static int _adaptive_radix_tree_put(art_node **an, const void *key, size_t len, 
   art_node_unlock(cur);
 
   // another thread might inserted same byte before we acquire lock
-  if (next) {
+  if (unlikely(next)) {
     an = next;
     ++off;
     goto begin;
@@ -168,6 +175,8 @@ static void* _adaptive_radix_tree_get(art_node **an, const void *key, size_t len
   art_node *cur;
   uint64_t v, v1;
 
+  debug_assert(off <= len);
+
   begin:
   __atomic_load(an, &cur, __ATOMIC_ACQUIRE);
 
@@ -176,7 +185,7 @@ static void* _adaptive_radix_tree_get(art_node **an, const void *key, size_t len
 
   if (unlikely(is_leaf(cur))) {
     const char *k1 = get_leaf_key(cur), *k2 = (const char *)key;
-    size_t l1 = get_leaf_len(an), l2 = len, i;
+    size_t l1 = get_leaf_len(cur), l2 = len, i;
     for (i = off; i < l1 && i < l2 && k1[i] == k2[i]; ++i)
       ;
     if (i == l1 && i == l2)
@@ -206,14 +215,18 @@ static void* _adaptive_radix_tree_get(art_node **an, const void *key, size_t len
   if (art_node_version_is_old(v))
     goto begin;
 
-  art_node **next = art_node_find_child(cur, v, ((unsigned char *)key)[off]);
+  int advance = off != len;
+  unsigned char byte = advance ? ((unsigned char *)key)[off] : 0;
+
+  art_node **next = art_node_find_child(cur, v, byte);
 
   v1 = art_node_get_version(cur);
 
   if (art_node_version_is_old(v1) || art_node_version_compare_insert(v, v1))
     goto retry;
 
-  return next ? _adaptive_radix_tree_get(next, key, len, off + 1) : 0;
+  off += advance;
+  return next ? _adaptive_radix_tree_get(next, key, len, off) : 0;
 }
 
 void* adaptive_radix_tree_get(adaptive_radix_tree *art, const void *key, size_t len)

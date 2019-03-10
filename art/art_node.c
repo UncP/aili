@@ -46,14 +46,14 @@
 #define is_inserting(version) ((version) & INSERT_BIT)
 #define is_expanding(version) ((version) & EXPAND_BIT)
 
-#define set_old(version)    ((version) |= OLD_BIT)
-#define set_lock(version)   ((version) |= LOCK_BIT)
-#define set_insert(version) ((version) |= INSERT_BIT)
-#define set_expand(version) ((version) |= EXPAND_BIT)
+#define set_old(version)    ((version) | OLD_BIT)
+#define set_lock(version)   ((version) | LOCK_BIT)
+#define set_insert(version) ((version) | INSERT_BIT)
+#define set_expand(version) ((version) | EXPAND_BIT)
 
-#define unset_lock(version)   ((version) &= (~LOCK_BIT))
-#define unset_insert(version) ((version) &= (~INSERT_BIT))
-#define unset_expand(version) ((version) &= (~EXPAND_BIT))
+#define unset_lock(version)   ((version) & (~LOCK_BIT))
+#define unset_insert(version) ((version) & (~INSERT_BIT))
+#define unset_expand(version) ((version) & (~EXPAND_BIT))
 
 #define get_vinsert(version)  ((int)(((version) >> 8) & 0xff))
 #define incr_vinsert(version) ((version) = ((version) & (~((uint64_t)0xff << 8))) | (((version) + (1 << 8)) & (0xff << 8))) // overflow is handled
@@ -219,7 +219,7 @@ art_node** art_node_find_child(art_node *an, uint64_t version, unsigned char byt
 // require: node is locked
 art_node** art_node_add_child(art_node **ptr, unsigned char byte, art_node *child)
 {
-  debug_assert(is_leaf(an) == 0);
+  debug_assert(is_leaf(*ptr) == 0);
 
   int full = 0;
   uint64_t version = (*ptr)->version;
@@ -388,7 +388,7 @@ void art_node_set_prefix(art_node *an, const void *key, size_t off, int prefix_l
 // return the first offset that differs
 int art_node_prefix_compare(art_node *an, uint64_t version, const void *key, size_t len, size_t off)
 {
-  debug_assert(off < len);
+  debug_assert(off <= len);
 
   int prefix_len = get_prefix_len(version);
   const char *prefix = art_node_get_prefix(an), *cur = (const char *)key;
@@ -485,11 +485,11 @@ void art_node_unlock(art_node *an)
 
   if (is_inserting(version)) {
     incr_vinsert(version);
-    unset_insert(version);
+    version = unset_insert(version);
   }
   if (is_expanding(version)) {
     incr_vexpand(version);
-    unset_expand(version);
+    version = unset_expand(version);
   }
 
   art_node_set_version(an, unset_lock(version));

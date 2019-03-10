@@ -82,7 +82,7 @@ int main(int argc, char **argv)
   if (file_number <= 0) file_number = 1;
   if (key_num <= 0) key_num = 1000000;
   if (key_num > 100000000) key_num = 100000000;
-  if (key_len <= 0) key_len = 16;
+  if (key_len <= 0) key_len = 8;
   if (key_len > 255) key_len = 255;
 
   if (access(dir, F_OK))

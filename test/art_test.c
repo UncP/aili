@@ -150,6 +150,50 @@ void test_adaptive_radix_tree(int file, int thread_number, int total_keys)
   free_adaptive_radix_tree(art);
 }
 
+void test_adaptive_radix_tree_structure()
+{
+  {
+  adaptive_radix_tree *art = new_adaptive_radix_tree();
+
+  const char *key1 = malloc(16);
+  memcpy((void *)key1, "hello\0", 6);
+  const char *key2 = malloc(16);
+  memcpy((void *)key2, "hello0\0", 7);
+  const char *key3 = malloc(16);
+  memcpy((void *)key3, "hello00\0", 8);
+
+  adaptive_radix_tree_put(art, key1, strlen(key1), 0);
+  adaptive_radix_tree_put(art, key2, strlen(key2), 0);
+  adaptive_radix_tree_put(art, key3, strlen(key3), 0);
+
+  assert(adaptive_radix_tree_get(art, key1, strlen(key1)) == key1);
+  assert(adaptive_radix_tree_get(art, key2, strlen(key2)) == key2);
+  assert(adaptive_radix_tree_get(art, key3, strlen(key3)) == key3);
+
+  free_adaptive_radix_tree(art);
+  }
+  {
+  adaptive_radix_tree *art = new_adaptive_radix_tree();
+
+  const char *key1 = malloc(16);
+  memcpy((void *)key1, "hello00\0", 8);
+  const char *key2 = malloc(16);
+  memcpy((void *)key2, "hello0\0", 7);
+  const char *key3 = malloc(16);
+  memcpy((void *)key3, "hello\0", 6);
+
+  adaptive_radix_tree_put(art, key1, strlen(key1), 0);
+  adaptive_radix_tree_put(art, key2, strlen(key2), 0);
+  adaptive_radix_tree_put(art, key3, strlen(key3), 0);
+
+  assert(adaptive_radix_tree_get(art, key1, strlen(key1)) == key1);
+  assert(adaptive_radix_tree_get(art, key2, strlen(key2)) == key2);
+  assert(adaptive_radix_tree_get(art, key3, strlen(key3)) == key3);
+
+  free_adaptive_radix_tree(art);
+  }
+}
+
 int main(int argc, char **argv)
 {
   if (argc < 4) {
@@ -158,12 +202,14 @@ int main(int argc, char **argv)
   }
 
   int file = atoi(argv[1]);
+  (void)file;
   int thread_number = atoi(argv[2]);
   int total_keys = atoi(argv[3]);
   if (total_keys <= 0) total_keys = 1;
   if (thread_number <= 0) thread_number = 1;
 
-  test_adaptive_radix_tree(file, thread_number, total_keys);
+  //test_adaptive_radix_tree(file, thread_number, total_keys);
+  test_adaptive_radix_tree_structure();
 
   return 0;
 }

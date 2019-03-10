@@ -21,10 +21,10 @@
 
 typedef struct art_node art_node;
 
-#define is_leaf(ptr) ((uintptr_t)ptr & 0xf)
-#define make_leaf(ptr, len) ((uintptr_t)ptr | (len & 0xf)) // fow now assume key is less than 16 bytes
-#define get_leaf_key(ptr) ((const char *)((uintptr_t)ptr & ((uintptr_t)~0xf)))
-#define get_leaf_len(ptr) ((size_t)((uintptr_t)ptr & 0xf))
+#define is_leaf(ptr) ((uintptr_t)(ptr) & 0x7)
+#define make_leaf(ptr, len) ((uintptr_t)(ptr) | (len & 0x7)) // fow now assume key is less than 8 bytes
+#define get_leaf_key(ptr) ((const char *)((uintptr_t)(ptr) & (~(uintptr_t)0x7)))
+#define get_leaf_len(ptr) ((size_t)((uintptr_t)(ptr) & 0x7))
 
 art_node* new_art_node();
 void free_art_node(art_node *an);
