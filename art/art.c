@@ -42,6 +42,7 @@ static int _adaptive_radix_tree_put(art_node **an, const void *key, size_t len, 
   art_node *cur;
   uint64_t v, v1;
   int p;
+  art_node **next;
 
   begin:
   // NOTE: __ATOMIC_RELAXED is not ok
@@ -120,19 +121,12 @@ static int _adaptive_radix_tree_put(art_node **an, const void *key, size_t len, 
   // now that the prefix is matched, we can descend
 
   retry:
-  v = art_node_get_stable_insert_version(cur);
-  if (art_node_version_is_old(v)) {
-    off -= p;
-    goto begin;
-  }
+  next = art_node_find_child(cur, v, ((unsigned char *)key)[off]);
 
-  art_node **next = art_node_find_child(cur, v, ((unsigned char *)key)[off]);
+  v = art_node_get_version(cur);
 
-  v1 = art_node_get_version(cur);
-
-  if (unlikely(art_node_version_is_old(v1) || art_node_version_compare_insert(v, v1)))
+  if (unlikely(art_node_version_is_old(v)))
     goto retry;
-  v = v1;
 
   if (next) {
     an = next;
@@ -210,11 +204,6 @@ static void* _adaptive_radix_tree_get(art_node **an, const void *key, size_t len
   off += art_node_version_get_prefix_len(v);
   debug_assert(off <= len);
 
-  retry:
-  v = art_node_get_stable_insert_version(cur);
-  if (art_node_version_is_old(v))
-    goto begin;
-
   int advance = off != len;
   unsigned char byte = advance ? ((unsigned char *)key)[off] : 0;
 
@@ -222,11 +211,15 @@ static void* _adaptive_radix_tree_get(art_node **an, const void *key, size_t len
 
   v1 = art_node_get_version(cur);
 
-  if (art_node_version_is_old(v1) || art_node_version_compare_insert(v, v1))
-    goto retry;
+  if (art_node_version_is_old(v1))
+    goto begin;
 
-  off += advance;
-  return next ? _adaptive_radix_tree_get(next, key, len, off) : 0;
+  if (next) {
+    off += advance;
+    an = next;
+    goto begin;
+  }
+  return 0;
 }
 
 void* adaptive_radix_tree_get(adaptive_radix_tree *art, const void *key, size_t len)

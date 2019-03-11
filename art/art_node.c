@@ -438,24 +438,24 @@ uint64_t art_node_get_stable_expand_version(art_node *an)
   return version;
 }
 
-uint64_t art_node_get_stable_insert_version(art_node *an)
-{
-  uint64_t version;
-  do {
-    version = art_node_get_version(an);
-  } while (is_inserting(version));
-  return version;
-}
+// uint64_t art_node_get_stable_insert_version(art_node *an)
+// {
+//   uint64_t version;
+//   do {
+//     version = art_node_get_version(an);
+//   } while (is_inserting(version));
+//   return version;
+// }
 
 inline int art_node_version_compare_expand(uint64_t version1, uint64_t version2)
 {
   return is_expanding(version1) != is_expanding(version2) || get_vexpand(version1) != get_vexpand(version2);
 }
 
-inline int art_node_version_compare_insert(uint64_t version1, uint64_t version2)
-{
-  return is_inserting(version1) != is_inserting(version2) || get_vinsert(version1) != get_vinsert(version2);
-}
+// inline int art_node_version_compare_insert(uint64_t version1, uint64_t version2)
+// {
+//   return is_inserting(version1) != is_inserting(version2) || get_vinsert(version1) != get_vinsert(version2);
+// }
 
 // return 0 on success, 1 on failure
 int art_node_lock(art_node *an)
