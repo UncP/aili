@@ -17,13 +17,12 @@
 #include "../palm/allocator.h"
 #endif // Allocator
 
-mass_tree* new_mass_tree(int thread_num)
+mass_tree* new_mass_tree()
 {
 #ifdef Allocator
   init_allocator();
 #endif // Allocator
 
-  (void)thread_num;
   mass_tree *mt = (mass_tree *)malloc(sizeof(mass_tree));
 
   node *r = new_node(Border);

@@ -47,8 +47,6 @@ static int _adaptive_radix_tree_put(art_node **an, const void *key, size_t len, 
   // NOTE: __ATOMIC_RELAXED is not ok
   __atomic_load(an, &cur, __ATOMIC_ACQUIRE);
 
-  // debug_assert(off < len);
-
   if (unlikely(cur == 0)) {
     art_node *leaf = (art_node *)make_leaf(key, len);
     if (likely(__atomic_compare_exchange_n(an, &cur, leaf, 0 /* weak */, __ATOMIC_RELEASE, __ATOMIC_RELAXED)))

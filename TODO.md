@@ -27,3 +27,4 @@
 - [ ] mass tree delete
 - [x] Adaptive Radix Tree
 - [ ] Multi-Thread Adaptive Radix Tree
+- [ ] Height Optimized Tree (HOT)
