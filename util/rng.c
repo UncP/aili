@@ -12,13 +12,13 @@ inline uint64_t rotl(uint64_t x, int k)
   return (x << k) | (x >> (64 - k));
 }
 
-void init(rng *r, uint64_t seed1, uint64_t seed2)
+void rng_init(rng *r, uint64_t seed1, uint64_t seed2)
 {
   r->state[0] = seed1;
   r->state[1] = seed2;
 }
 
-inline uint64_t next(rng *r)
+inline uint64_t rng_next(rng *r)
 {
   const uint64_t s0 = r->state[0];
   uint64_t s1 = r->state[1];
@@ -31,18 +31,18 @@ inline uint64_t next(rng *r)
   return value;
 }
 
-void jump(rng *r)
+void rng_jump(rng *r)
 {
   static const uint64_t j[] = {0xbeac0467eba5facb, 0xd86b048b86aa9922};
 
   uint64_t s0 = 0, s1 = 0;
-  for (int i = 0; i < sizeof j / sizeof j[0]; i++) {
+  for (int i = 0; i < 2; i++) {
     for (int b = 0; b < 64; b++) {
       if (j[i] & (uint64_t)1 << b) {
         s0 ^= r->state[0];
         s1 ^= r->state[1];
       }
-      next(r);
+      rng_next(r);
     }
   }
 

@@ -28,32 +28,101 @@ static long long mstime()
   return ust / 1000;
 }
 
-struct thread_arg
-{
-  void *tree;
-  int  keys;
-  int  is_put;
-};
-
 typedef enum tree_type
 {
-  PALM  = 0,
-  BLINK = 1,
-  MASS  = 2,
-  ART   = 3,
+  NONE  = 0,
+  PALM  = 1,
+  BLINK = 2,
+  MASS  = 3,
+  ART   = 4,
 }tree_type;
+
+struct thread_arg
+{
+  tree_type tp;
+  int id;
+  int total;
+  union {
+    mass_tree *mt;
+    adaptive_radix_tree *art;
+  }tree;
+  int  keys;
+  int  is_put;
+  union {
+    int (*mass_put)(mass_tree *tree, const void *key, uint32_t len, const void *val);
+    int (*art_put)(adaptive_radix_tree *tree, const void *key, size_t len, const void *val);
+  }put_func;
+  union {
+    void* (*mass_get)(mass_tree *tree, const void *key, uint32_t len);
+    void* (*art_get)(adaptive_radix_tree *tree, const void *key, size_t len);
+  }get_func;
+};
 
 static void* run(void *arg)
 {
+  void* (*alloc)(size_t);
+  #ifdef Allocator
+    alloc = &allocator_alloc_small;
+  #else
+    alloc = &malloc;
+  #endif // Allocator
   struct thread_arg *ta = (struct thread_arg *)arg;
-  void *tree = ta->tree;
   int keys = ta->keys;
-  int is_put = ta->is_put;
 
   rng r;
-  rng_init(&r, rand(), rand());
+  rng_init(&r, ta->id, ta->id + ta->total);
 
   long long before = mstime();
+
+  if (ta->is_put) {
+    switch (ta->tp) {
+    case PALM:
+    break;
+    case BLINK:
+    break;
+    case MASS: {
+      for (int i = 0; i < keys; ++i) {
+        uint64_t *key = (*alloc)(8);
+        *key = rng_next(&r);
+        (*(ta->put_func.mass_put))(ta->tree.mt, key, 8, 0);
+      }
+    }
+    break;
+    case ART: {
+      for (int i = 0; i < keys; ++i) {
+        uint64_t *key = (*alloc)(8);
+        *key = rng_next(&r);
+        (*(ta->put_func.art_put))(ta->tree.art, key, 8, 0);
+      }
+    }
+    break;
+    default:
+      assert(0);
+    }
+  } else {
+    switch (ta->tp) {
+    case PALM:
+    break;
+    case BLINK:
+    break;
+    case MASS: {
+      for (int i = 0; i < keys; ++i) {
+        uint64_t key = rng_next(&r);
+        assert((*(ta->get_func.mass_get))(ta->tree.mt, &key, 8));
+      }
+    }
+    break;
+    case ART: {
+      for (int i = 0; i < keys; ++i) {
+        uint64_t key = rng_next(&r);
+        assert((*(ta->get_func.art_get))(ta->tree.art, &key, 8));
+      }
+    }
+    break;
+    default:
+      assert(0);
+    }
+  }
 
   long long after = mstime();
   printf("\033[31mtotal: %d\033[0m\n\033[32mtime: %.4f  s\033[0m\n", keys, (float)(after - before) / 1000);
@@ -63,45 +132,56 @@ static void* run(void *arg)
 
 void benchfuck(tree_type tp, int thread_number, int thread_key_num)
 {
-  void *tree;
-  if (tp == PALM)
-    ;
-  if (tp == BLINK)
-    ;
-  if (tp == MASS)
-    tree = (void *)new_mass_tree();
-  if (tp == ART)
-    tree = (void *)new_adaptive_radix_tree();
+  struct thread_arg ta;
+  ta.tp = tp;
+  ta.total = thread_number;
+  ta.keys = thread_key_num;
+  if (tp == PALM) {
+  }
+  if (tp == BLINK) {
+  }
+  if (tp == MASS) {
+    ta.tree.mt = new_mass_tree();
+    ta.put_func.mass_put = &mass_tree_put;
+    ta.get_func.mass_get = &mass_tree_get;
+  }
+  if (tp == ART) {
+    ta.tree.art = new_adaptive_radix_tree();
+    ta.put_func.art_put = &adaptive_radix_tree_put;
+    ta.get_func.art_get = &adaptive_radix_tree_get;
+  }
 
-  srand(time(0));
+  //unsigned int seed = time(0);
+  //printf("seed:%u\n", seed);
+  //srand(seed);
 
   pthread_t ids[thread_number];
   for (int i = 0; i < thread_number; ++i) {
-    struct thread_arg *ta = malloc(sizeof(struct thread_arg));
-    ta->tree = tree;
-    ta->keys = thread_key_num;
-    ta->is_put = 1;
-    assert(pthread_create(&ids[i], 0, run, (void *)ta) == 0);
+    struct thread_arg *t = malloc(sizeof(struct thread_arg));
+    *t = ta;
+    t->is_put = 1;
+    t->id = i + 1;
+    assert(pthread_create(&ids[i], 0, run, (void *)t) == 0);
   }
 
   for (int i = 0; i < thread_number; ++i) {
-    struct thread_arg *ta;
-    assert(pthread_join(ids[i], (void **)&ta) == 0);
-    free(ta);
+    struct thread_arg *t;
+    assert(pthread_join(ids[i], (void **)&t) == 0);
+    free(t);
   }
 
   for (int i = 0; i < thread_number; ++i) {
-    struct thread_arg *ta = malloc(sizeof(struct thread_arg));
-    ta->tree = tree;
-    ta->keys = thread_key_num;
-    ta->is_put = 0;
-    assert(pthread_create(&ids[i], 0, run, (void *)ta) == 0);
+    struct thread_arg *t = malloc(sizeof(struct thread_arg));
+    *t = ta;
+    t->is_put = 0;
+    t->id = i + 1;
+    assert(pthread_create(&ids[i], 0, run, (void *)t) == 0);
   }
 
   for (int i = 0; i < thread_number; ++i) {
-    struct thread_arg *ta;
-    assert(pthread_join(ids[i], (void **)&ta) == 0);
-    free(ta);
+    struct thread_arg *t;
+    assert(pthread_join(ids[i], (void **)&t) == 0);
+    free(t);
   }
 }
 
@@ -112,7 +192,7 @@ int main(int argc, char **argv)
     return 0;
   }
 
-  tree_type tp;
+  tree_type tp = NONE;
   if (strcasecmp(argv[1], "palm") == 0)
     tp = PALM;
   if (strcasecmp(argv[1], "blink") == 0)
@@ -121,6 +201,11 @@ int main(int argc, char **argv)
     tp = MASS;
   if (strcasecmp(argv[1], "art") == 0)
     tp = ART;
+
+  if (tp == NONE) {
+    printf("tree_type thread_num thread_key_num\n");
+    return 0;
+  }
 
   int thread_num = atoi(argv[2]);
   if (thread_num < 1) thread_num = 1;

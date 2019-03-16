@@ -12,11 +12,12 @@ PALMFLAGS=$(CC) -std=c99 $(CFLAGS) $(PFLAGS) $(IFLAGS) $(DFLAGS)
 BLINKFLAGS=$(CC) -std=gnu99 $(CFLAGS) $(BFLAGS) $(DFLAGS)
 MASSFLAGS=$(CC) -std=c99 $(CFLAGS) $(MFLAGS) $(DFLAGS)
 ARTFLAGS=$(CC) -std=c99 $(CFLAGS) $(AFLAGS) $(DFLAGS)
+ONEFLAGS=$(CC) -std=c99 $(CFLAGS) $(DFLAGS)
 
 PALM_OBJ=palm/node.o palm/bounded_queue.o palm/worker.o palm/palm_tree.o palm/metric.o palm/allocator.o
 BLINK_OBJ=palm/node.o palm/allocator.o blink/node.o blink/blink_tree.o blink/mapping_array.o
 MASS_OBJ=mass/node.o mass/mass_tree.o
-ART_OBJ=art/art_node.o
+ART_OBJ=art/art_node.o art/art.o
 
 default: lib
 
@@ -64,8 +65,14 @@ art/%.o: art/%.c
 art_test: test/art_test.c art/art_node.o art/art.o
 	$(ARTFLAGS) -o $@ $^ -lpthread
 
+util/%.o: util/%.c
+	$(ONEFLAGS) -c $^ -o $@
+
+one_test: test/one_test.c util/rng.o mass/node.o mass/mass_tree.o palm/allocator.o art/art_node.o art/art.o
+	$(ONEFLAGS) -o $@ $^ -lpthread
+
 third_party: third_party/c_hashmap
 	cd third_party/c_hashmap && $(CC) $(CFLAGS) -c hashmap.c -o hashmap.o && ar rcs libhashmap.a hashmap.o
 
 clean:
-	rm palm/*.o blink/*.o mass/*.o art/*.o *_test generate_data libaili.a; cd example && make clean
+	rm palm/*.o blink/*.o mass/*.o art/*.o util/*.o *_test generate_data libaili.a; cd example && make clean

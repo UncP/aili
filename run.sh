@@ -24,6 +24,10 @@ elif [ "$1" = "art" ]
 then
                                             # f_name  t_num  k_num
 make art_test "DFLAGS+=-DDebug" && ./art_test  1       $2     $3
+elif [ "$1" = "one" ]
+then
+                                                  # tree_name thread_num thread_key_num
+make one_test "DFLAGS+=-DTest -DDebug" && ./one_test  $2        $3          $4
 else
   echo "1: palm || blink || mass || art\n2: thread_num\n3: total_key_num\n:("
 fi
