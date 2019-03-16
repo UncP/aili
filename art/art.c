@@ -48,7 +48,7 @@ static int _adaptive_radix_tree_put(art_node **an, const void *key, size_t len, 
   __atomic_load(an, &cur, __ATOMIC_ACQUIRE);
 
   if (unlikely(cur == 0)) {
-    art_node *leaf = (art_node *)make_leaf(key, len);
+    art_node *leaf = (art_node *)make_leaf(key);
     if (likely(__atomic_compare_exchange_n(an, &cur, leaf, 0 /* weak */, __ATOMIC_RELEASE, __ATOMIC_RELAXED)))
       return 0;
     else
@@ -71,7 +71,7 @@ static int _adaptive_radix_tree_put(art_node **an, const void *key, size_t len, 
     byte = off == l1 ? 0 : k1[off];
     assert(art_node_add_child(&new, byte, cur) == 0);
     byte = off == l2 ? 0 : k2[off];
-    assert(art_node_add_child(&new, byte, (art_node *)make_leaf(k2, l2)) == 0);
+    assert(art_node_add_child(&new, byte, (art_node *)make_leaf(k2)) == 0);
     art_node_unlock(new);
     if (likely(__atomic_compare_exchange_n(an, &cur, new, 0 /* weak */, __ATOMIC_RELEASE, __ATOMIC_RELAXED))) {
       return 0;
@@ -103,7 +103,7 @@ static int _adaptive_radix_tree_put(art_node **an, const void *key, size_t len, 
     art_node_set_prefix(new, key, off, p);
     unsigned char byte;
     byte = (off + p < len) ? ((unsigned char *)key)[off + p] : 0;
-    assert(art_node_add_child(&new, byte, (art_node *)make_leaf(key, len)) == 0);
+    assert(art_node_add_child(&new, byte, (art_node *)make_leaf(key)) == 0);
     byte = art_node_truncate_prefix(cur, p);
     assert(art_node_add_child(&new, byte, cur) == 0);
     art_node_unlock(new);
@@ -137,7 +137,7 @@ static int _adaptive_radix_tree_put(art_node **an, const void *key, size_t len, 
     goto begin;
   }
 
-  next = art_node_add_child(an, ((unsigned char *)key)[off], (art_node *)make_leaf(key, len));
+  next = art_node_add_child(an, ((unsigned char *)key)[off], (art_node *)make_leaf(key));
   art_node_unlock(cur);
 
   // another thread might inserted same byte before we acquire lock
@@ -154,9 +154,11 @@ static int _adaptive_radix_tree_put(art_node **an, const void *key, size_t len, 
 // return 1 on duplication
 int adaptive_radix_tree_put(adaptive_radix_tree *art, const void *key, size_t len, const void *val)
 {
-  //char buf[256] = {0};
-  //memcpy(buf, key, len);
-  //printf("%s\n", buf);
+  //unsigned char *n = (unsigned char *)key;
+  //for (int i = 0; i < 8; ++i) {
+  //  printf("%d ", n[i]);
+  //}
+  //printf("\n");
   int ret;
   // retry should be rare
   while (unlikely((ret = _adaptive_radix_tree_put(&art->root, key, len, 0, val)) == -1))

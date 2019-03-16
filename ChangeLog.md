@@ -1,3 +1,12 @@
+### 4.1.0
+** Multi-ART **
+
+1.（BUG）节点扩展后没有获取新 version
+2.（BUG）Node256 初始化 version 设置错误
+3. 将 leaf 的 key 和 len 打包在一起
+
+
+
 ### 4.0.0
 
 **Adaptive Radix Tree**

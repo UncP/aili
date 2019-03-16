@@ -16,15 +16,15 @@
 
 #include "art_node.h"
 
-#define node4    0
-#define node16   1
-#define node48   2
-#define node256  3
+#define node4    ((uint64_t)0x000000)
+#define node16   ((uint64_t)0x100000)
+#define node48   ((uint64_t)0x200000)
+#define node256  ((uint64_t)0x300000)
 
 /**
  *   node version layout(64 bits)
- *     type                 count    prefix_len              old  lock insert expand vinsert   vexpand
- *   |  2  |      14      |    8     |    8    |     12     |  1  |  1  |  1  |  1  |    8    |    8    |
+ *                     count    prefix_len              type  old  lock insert expand vinsert   vexpand
+ *   |      14      |    8     |    8    |     10     |  2  |  1  |  1  |  1  |  1  |    8    |    8    |
  *
 **/
 
@@ -160,8 +160,8 @@ static inline art_node* new_art_node48()
 static inline art_node* new_art_node256()
 {
   art_node *an = _new_art_node(sizeof(art_node256));
-  set_type(an->version, node256);
   memset(an, 0, sizeof(art_node256));
+  set_type(an->version, node256);
   return an;
 }
 
@@ -231,8 +231,10 @@ art_node** art_node_add_child(art_node **ptr, unsigned char byte, art_node *chil
     return next;
 
   // grow if necessary
-  if ((full = art_node_is_full(*ptr)))
+  if ((full = art_node_is_full(*ptr))) {
     art_node_grow(ptr);
+    version = (*ptr)->version;
+  }
 
   switch (get_type(version)) {
   case node4: {
@@ -356,7 +358,7 @@ void art_node_grow(art_node **ptr)
   // we must lock new node first
   assert(art_node_lock(new) == 0);
   art_node *old = *ptr;
-  // replace old node first
+  // replace old node
   __atomic_store(ptr, &new, __ATOMIC_RELEASE);
   // then set original node old to let other thread know
   art_node_set_version(old, set_old(version));

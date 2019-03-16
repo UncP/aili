@@ -13,6 +13,9 @@
 #include <pthread.h>
 #include <sys/time.h>
 
+#ifdef Allocator
+#include "../palm/allocator.h"
+#endif
 #include "../util/rng.h"
 #include "../mass/mass_tree.h"
 #include "../art/art.h"
@@ -90,9 +93,10 @@ static void* run(void *arg)
     break;
     case ART: {
       for (int i = 0; i < keys; ++i) {
-        uint64_t *key = (*alloc)(8);
-        *key = rng_next(&r);
-        (*(ta->put_func.art_put))(ta->tree.art, key, 8, 0);
+        char *key = (*alloc)(16);
+        key[0] = 8;
+        *(uint64_t *)(key + 1)= rng_next(&r);
+        (*(ta->put_func.art_put))(ta->tree.art, (const void *)(key + 1), 8, 0);
       }
     }
     break;
@@ -108,14 +112,23 @@ static void* run(void *arg)
     case MASS: {
       for (int i = 0; i < keys; ++i) {
         uint64_t key = rng_next(&r);
-        assert((*(ta->get_func.mass_get))(ta->tree.mt, &key, 8));
+        void *val = (*(ta->get_func.mass_get))(ta->tree.mt, &key, 8);
+        assert(val);
       }
     }
     break;
     case ART: {
       for (int i = 0; i < keys; ++i) {
         uint64_t key = rng_next(&r);
-        assert((*(ta->get_func.art_get))(ta->tree.art, &key, 8));
+        void *val = (*(ta->get_func.art_get))(ta->tree.art, &key, 8);
+        if (val == 0) {
+          unsigned char *n = (unsigned char *)key;
+          for (int i = 0; i < 8; ++i) {
+            printf("%d ", n[i]);
+          }
+          printf("\n");
+        }
+        assert(val);
       }
     }
     break;
