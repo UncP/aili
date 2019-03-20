@@ -1,6 +1,9 @@
-# aili :  the fastest in-memory index in the East
+# aili
 [![Author](https://img.shields.io/badge/Author-UncP-brightgreen.svg)](https://github.com/UncP)
 [![Version](https://img.shields.io/badge/Version-4.0.0-blue.svg)](https://github.com/UncP/aili)
+
+### the fastest in-memory index in the East
+
 
 A library that provides various concurrent algorithms for in-memory index, aims to achieve extremely FAST speed, but just for experiment and fun.
 
