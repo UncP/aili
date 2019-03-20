@@ -1,4 +1,4 @@
-# aili - the fastest in-memory index in the East
+# aili :  the fastest in-memory index in the East
 [![Author](https://img.shields.io/badge/Author-UncP-brightgreen.svg)](https://github.com/UncP)
 [![Version](https://img.shields.io/badge/Version-4.0.0-blue.svg)](https://github.com/UncP/aili)
 
