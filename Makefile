@@ -12,11 +12,11 @@ PALMFLAGS=$(CC) -std=c99 $(CFLAGS) $(PFLAGS) $(IFLAGS) $(DFLAGS)
 BLINKFLAGS=$(CC) -std=gnu99 $(CFLAGS) $(BFLAGS) $(DFLAGS)
 MASSFLAGS=$(CC) -std=c99 $(CFLAGS) $(MFLAGS) $(DFLAGS)
 ARTFLAGS=$(CC) -std=c99 $(CFLAGS) $(AFLAGS) $(DFLAGS)
-ONEFLAGS=$(CC) -std=c99 $(CFLAGS) $(DFLAGS)
+ONEFLAGS=$(CC) -std=c99 $(CFLAGS) $(DFLAGS) $(LFLAGS)
 
 PALM_OBJ=palm/node.o palm/bounded_queue.o palm/worker.o palm/palm_tree.o palm/metric.o palm/allocator.o
 BLINK_OBJ=palm/node.o palm/allocator.o blink/node.o blink/blink_tree.o blink/mapping_array.o
-MASS_OBJ=mass/node.o mass/mass_tree.o
+MASS_OBJ=mass/mass_node.o mass/mass_tree.o
 ART_OBJ=art/art_node.o art/art.o
 
 default: lib
@@ -53,10 +53,10 @@ blink_tree_test: test/blink_tree_test.c blink/node.o blink/blink_tree.o blink/ma
 mass/%.o: mass/%.c
 	$(MASSFLAGS) -c $^ -o $@
 
-mass_node_test: test/mass_node_test.c mass/node.o
+mass_node_test: test/mass_node_test.c mass/mass_node.o
 	$(MASSFLAGS) -o $@ $^ -lpthread
 
-mass_tree_test: test/mass_tree_test.c mass/node.o mass/mass_tree.o palm/allocator.o
+mass_tree_test: test/mass_tree_test.c mass/mass_node.o mass/mass_tree.o palm/allocator.o
 	$(MASSFLAGS) -o $@ $^ -lpthread
 
 art/%.o: art/%.c
@@ -68,8 +68,8 @@ art_test: test/art_test.c art/art_node.o art/art.o
 util/%.o: util/%.c
 	$(ONEFLAGS) -c $^ -o $@
 
-one_test: test/one_test.c util/rng.o mass/node.o mass/mass_tree.o palm/allocator.o art/art_node.o art/art.o
-	$(ONEFLAGS) -o $@ $^ -lpthread
+one_test: test/one_test.c util/rng.o $(MASS_OBJ) $(ART_OBJ) $(PALM_OBJ)
+	$(ONEFLAGS) -o $@ $^ $(LFLAGS)
 
 third_party: third_party/c_hashmap
 	cd third_party/c_hashmap && $(CC) $(CFLAGS) -c hashmap.c -o hashmap.o && ar rcs libhashmap.a hashmap.o

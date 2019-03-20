@@ -7,11 +7,11 @@
 #ifndef _mass_tree_h_
 #define _mass_tree_h_
 
-#include "node.h"
+#include "mass_node.h"
 
 typedef struct mass_tree
 {
-  node *root;
+  mass_node *root;
 }mass_tree;
 
 mass_tree* new_mass_tree();

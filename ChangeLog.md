@@ -1,9 +1,12 @@
 ### 4.1.0
-** Multi-ART **
 
-1.（BUG）节点扩展后没有获取新 version
-2.（BUG）Node256 初始化 version 设置错误
-3. 将 leaf 的 key 和 len 打包在一起
+**Multi-ART**
+
+1. （BUG）节点扩展后没有获取新 version
+2. （BUG）Node256 初始化 version 设置错误
+3. （BUG）使用自己的内存分配器释放内存时调用了系统函数
+4. （BUG）Node256 下降时没有判断节点是否为空
+5. 将 leaf 的 key 和 len 打包在一起
 
 
 

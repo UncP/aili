@@ -4,20 +4,20 @@
  *    license:    BSD-3
 **/
 
-#ifndef _node_h_
-#define _node_h_
+#ifndef _mass_node_h_
+#define _mass_node_h_
 
 #include <stdint.h>
 
 #define likely(x)   (__builtin_expect(!!(x), 1))
 #define unlikely(x) (__builtin_expect(!!(x), 0))
 
-// node type
+// mass_node type
 #define Interior 0
 #define Border   1
 
 /**
- *   layout of a node's version (32 bit):
+ *   layout of a mass_node's version (32 bit):
  *       lock   insert  split   delete   root   border  not-used    vsplit      vinsert
  *     |   1   |  1   |   1   |   1   |   1   |   1   |    2    |     8     |     16     |
  *
@@ -58,39 +58,39 @@
 #define is_border(n)    ((n) & BORDER_BIT)
 #define is_interior(n)  (!is_border(n))
 
-typedef struct node node;
+typedef struct mass_node mass_node;
 
-node* new_node(int type);
-void free_node(node *n);
-void node_prefetch(node *n);
-void border_node_prefetch_write(node *n);
-void border_node_prefetch_read(node *n);
-void node_lock_unsafe(node *n);
-void node_unlock_unsafe(node *n);
-void node_lock(node *n);
-void node_unlock(node *n);
-void node_set_root_unsafe(node *n);
-void node_unset_root_unsafe(node *n);
-uint32_t node_get_version(node *n);
-uint32_t node_get_version_unsafe(node *n);
-uint32_t node_get_stable_version(node *n);
-void node_set_version(node *n, uint32_t version);
-node* node_get_next(node *n);
-node* node_get_parent(node *n);
-node* node_get_locked_parent(node *n);
-void node_set_first_child(node *n, node *c);
-int node_is_full(node *n);
-int node_include_key(node *n, uint64_t off);
-int node_get_conflict_key_index(node *n, const void *key, uint32_t len, uint32_t off, void **ckey, uint32_t *clen);
-void node_replace_at_index(node *n, int index, node *n1);
-void node_swap_child(node *n, node *c, node *c1);
-node* node_descend(node *n, uint64_t cur);
-void* border_node_insert(node *n, const void *key, uint32_t len, uint32_t off, const void *val, int is_link);
-void interior_node_insert(node *n, uint64_t key, node *child);
-node* node_split(node *n, uint64_t *fence);
-void* node_search(node *n, uint64_t cur, void **value);
+mass_node* new_mass_node(int type);
+void free_mass_node(mass_node *n);
+void mass_node_prefetch(mass_node *n);
+void border_mass_node_prefetch_write(mass_node *n);
+void border_mass_node_prefetch_read(mass_node *n);
+void mass_node_lock_unsafe(mass_node *n);
+void mass_node_unlock_unsafe(mass_node *n);
+void mass_node_lock(mass_node *n);
+void mass_node_unlock(mass_node *n);
+void mass_node_set_root_unsafe(mass_node *n);
+void mass_node_unset_root_unsafe(mass_node *n);
+uint32_t mass_node_get_version(mass_node *n);
+uint32_t mass_node_get_version_unsafe(mass_node *n);
+uint32_t mass_node_get_stable_version(mass_node *n);
+void mass_node_set_version(mass_node *n, uint32_t version);
+mass_node* mass_node_get_next(mass_node *n);
+mass_node* mass_node_get_parent(mass_node *n);
+mass_node* mass_node_get_locked_parent(mass_node *n);
+void mass_node_set_first_child(mass_node *n, mass_node *c);
+int mass_node_is_full(mass_node *n);
+int mass_node_include_key(mass_node *n, uint64_t off);
+int mass_node_get_conflict_key_index(mass_node *n, const void *key, uint32_t len, uint32_t off, void **ckey, uint32_t *clen);
+void mass_node_replace_at_index(mass_node *n, int index, mass_node *n1);
+void mass_node_swap_child(mass_node *n, mass_node *c, mass_node *c1);
+mass_node* mass_node_descend(mass_node *n, uint64_t cur);
+void* border_mass_node_insert(mass_node *n, const void *key, uint32_t len, uint32_t off, const void *val, int is_link);
+void interior_mass_node_insert(mass_node *n, uint64_t key, mass_node *child);
+mass_node* mass_node_split(mass_node *n, uint64_t *fence);
+void* mass_node_search(mass_node *n, uint64_t cur, void **value);
 
-int compare_key(uint64_t k1, uint64_t k2);
+int mass_compare_key(uint64_t k1, uint64_t k2);
 uint64_t get_next_keyslice(const void *key, uint32_t len, uint32_t off);
 uint64_t get_next_keyslice_and_advance(const void *key, uint32_t len, uint32_t *off);
 
@@ -107,10 +107,10 @@ uint64_t get_next_keyslice_and_advance(const void *key, uint32_t len, uint32_t *
 
 #ifdef Test
 
-void free_node_raw(node *n);
-void node_print(node *n);
-void node_validate(node *n);
+void free_mass_node_raw(mass_node *n);
+void mass_node_print(mass_node *n);
+void mass_node_validate(mass_node *n);
 
 #endif /* Test */
 
-#endif /* _node_h_ */
+#endif /* _mass_mass_node_h_ */
