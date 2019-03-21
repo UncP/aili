@@ -24,22 +24,14 @@ see `ChangeLog.md` for **detail** info
 #### Have a Try
 
 ```bash
-1. make third_party
-                                       # file_num  key_num   key_len
-2. make generate_data && ./generate_data  4        10000000    10    # data will be in ./data, 4 random data files, 4 sequential data files
+#              thread_num  thread_key_number
+./run.sh  palm   4           100   # test palm tree
 
-# test palm tree  thread_num  total_key_num
-3.1 ./run.sh palm   2           100
+./run.sh  blink  4           100   # test blink tree
 
-# test blink tree  thread_num  total_key_num
-3.2 ./run.sh blink   2           100
+./run.sh  mass   4           100   # test mass tree
 
-# test mass tree  thread_num  total_key_num
-3.3 ./run.sh mass   2           100
-
-# test adaptive radix tree, art does not support multi-thread for now
-#                         thread_num  total_key_num
-3.4 ./run.sh art            1           100
+./run.sh  art    1           100   # test art tree, does not support multi-thread for now
 ```
 
 

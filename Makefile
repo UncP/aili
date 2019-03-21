@@ -2,7 +2,7 @@ CC=gcc
 CFLAGS=-Wall -Werror -Wextra -O3 -fno-strict-aliasing
 IFLAGS=-I./third_party
 LFLAGS=./third_party/c_hashmap/libhashmap.a -lpthread -lm
-PFLAGS=-DLazy
+PFLAGS=-DLazy #-DPrefix -DBStar
 DFLAGS=
 BFLAGS=
 MFLAGS=-DTest
@@ -12,7 +12,7 @@ PALMFLAGS=$(CC) -std=c99 $(CFLAGS) $(PFLAGS) $(IFLAGS) $(DFLAGS)
 BLINKFLAGS=$(CC) -std=gnu99 $(CFLAGS) $(BFLAGS) $(DFLAGS)
 MASSFLAGS=$(CC) -std=c99 $(CFLAGS) $(MFLAGS) $(DFLAGS)
 ARTFLAGS=$(CC) -std=c99 $(CFLAGS) $(AFLAGS) $(DFLAGS)
-ONEFLAGS=$(CC) -std=c99 $(CFLAGS) $(DFLAGS) $(LFLAGS)
+ONEFLAGS=$(CC) -std=gnu99 $(CFLAGS) $(DFLAGS) $(LFLAGS)
 
 PALM_OBJ=palm/node.o palm/bounded_queue.o palm/worker.o palm/palm_tree.o palm/metric.o palm/allocator.o
 BLINK_OBJ=palm/node.o palm/allocator.o blink/node.o blink/blink_tree.o blink/mapping_array.o
@@ -68,7 +68,7 @@ art_test: test/art_test.c art/art_node.o art/art.o
 util/%.o: util/%.c
 	$(ONEFLAGS) -c $^ -o $@
 
-one_test: test/one_test.c util/rng.o $(MASS_OBJ) $(ART_OBJ) $(PALM_OBJ)
+one_test: test/one_test.c util/rng.o $(PALM_OBJ) $(BLINK_OBJ) $(MASS_OBJ) $(ART_OBJ)
 	$(ONEFLAGS) -o $@ $^ $(LFLAGS)
 
 third_party: third_party/c_hashmap

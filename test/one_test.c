@@ -14,6 +14,7 @@
 #include <sys/time.h>
 
 #include "../palm/palm_tree.h"
+#include "../blink/blink_tree.h"
 #include "../mass/mass_tree.h"
 #include "../art/art.h"
 #include "../util/rng.h"
@@ -48,6 +49,7 @@ struct thread_arg
   int total;
   union {
     palm_tree *pt;
+    blink_tree *bt;
     mass_tree *mt;
     adaptive_radix_tree *art;
   }tree;
@@ -55,11 +57,13 @@ struct thread_arg
   int  is_put;
   union {
     void (*palm_execute)(palm_tree *pt, batch *b);
+    int (*blink_put)(blink_tree *bt, const void *key, uint32_t len, const void *val);
     int (*mass_put)(mass_tree *mt, const void *key, uint32_t len, const void *val);
     int (*art_put)(adaptive_radix_tree *art, const void *key, size_t len, const void *val);
   }put_func;
   union {
     void  (*palm_execute)(palm_tree *pt, batch *b);
+    int   (*blink_get)(blink_tree *bt, const void *key, uint32_t len, void **val);
     void* (*mass_get)(mass_tree *mt, const void *key, uint32_t len);
     void* (*art_get)(adaptive_radix_tree *art, const void *key, size_t len);
   }get_func;
@@ -108,7 +112,13 @@ static void* run(void *arg)
         free_batch(batches[i]);
     }
     break;
-    case BLINK:
+    case BLINK: {
+      for (int i = 0; i < keys; ++i) {
+        uint64_t *key = (*alloc)(8);
+        *key = rng_next(&r);
+        (*(ta->put_func.blink_put))(ta->tree.bt, key, 8, (void *)3190);
+      }
+    }
     break;
     case MASS: {
       for (int i = 0; i < keys; ++i) {
@@ -163,7 +173,14 @@ static void* run(void *arg)
         free_batch(batches[i]);
     }
     break;
-    case BLINK:
+    case BLINK: {
+      for (int i = 0; i < keys; ++i) {
+        uint64_t key = rng_next(&r);
+        uint64_t val;
+        int r = (*(ta->get_func.blink_get))(ta->tree.bt, &key, 8, (void **)&val);
+        assert(r == 1);
+      }
+    }
     break;
     case MASS: {
       for (int i = 0; i < keys; ++i) {
@@ -213,6 +230,9 @@ void benchfuck(tree_type tp, int thread_number, int thread_key_num)
     thread_number = 1;
   }
   if (tp == BLINK) {
+    ta.tree.bt = new_blink_tree(thread_number);
+    ta.put_func.blink_put = &blink_tree_write;
+    ta.get_func.blink_get = &blink_tree_read;
   }
   if (tp == MASS) {
     ta.tree.mt = new_mass_tree();
