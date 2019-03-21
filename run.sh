@@ -2,7 +2,7 @@
 
 make thirty_party
                                                   # tree_name thread_num thread_key_num
-make one_test "DFLAGS+=-DTest -DDebug" && ./one_test  $1        $2          $3
+make one_test "DFLAGS+=-DTest -DDebug -DAllocator" && ./one_test  $1        $2          $3
 
                                                                             # f_name  n_size  b_size  t_num  q_num  k_num
 # make "DFLAGS+=-DTest -DAllocator -DPrefix" palm_tree_test && ./palm_tree_test  1       4096    4096    $2     8      $3

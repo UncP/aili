@@ -14,6 +14,7 @@
 #include <sys/time.h>
 
 #include "../palm/palm_tree.h"
+#include "../palm/metric.h"
 #include "../blink/blink_tree.h"
 #include "../mass/mass_tree.h"
 #include "../art/art.h"
@@ -110,6 +111,8 @@ static void* run(void *arg)
 
       for (int i = 0; i < 9; ++i)
         free_batch(batches[i]);
+
+      show_metric();
     }
     break;
     case BLINK: {
