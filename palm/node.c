@@ -511,12 +511,21 @@ static inline void node_get_whole_key(node *n, uint32_t idx, char *key, uint32_t
 
 inline int node_is_after_key(node *n, const void *key, uint32_t len)
 {
-  assert(n->level == 0 || (n->type & Blink));
+  assert(n->level == 0);
 
   char     first[max_key_size];
   uint32_t flen;
   node_get_whole_key(n, 0, first, &flen);
   return compare_key(key, len, first, flen) < 0;
+}
+
+// for b link tree node only
+inline int node_need_move_right(node *n, const void *key, uint32_t len)
+{
+  char     last[max_key_size];
+  uint32_t llen;
+  node_get_whole_key(n, n->keys - 1, last, &llen);
+  return compare_key(last, llen, key, len) < 0;
 }
 
 // delete key in range [from, to), pain in the ass, it's really expensive
@@ -840,9 +849,11 @@ static char* format_kv(char *ptr, char *end, node* n, uint32_t off)
   ptr += snprintf(ptr, end - ptr, "%4u  ", off);
   uint32_t len = get_len(n, off);
   ptr += snprintf(ptr, end - ptr, "%u  ", len);
-  snprintf(ptr, len + 1, "%s", get_key(n, off));
-  ptr += len;
-  ptr += snprintf(ptr, end - ptr, "  %lu\n", (val_t)get_val(n, off));
+  //snprintf(ptr, len + 1, "%s", get_key(n, off));
+  //ptr += len;
+  ptr += sprintf(ptr, "%lu", *(uint64_t *)get_key(n, off));
+  ptr += sprintf(ptr, "%lu", (val_t)get_val(n, off));
+  //ptr += snprintf(ptr, end - ptr, "  %lu\n", (val_t)get_val(n, off));
   return ptr;
 }
 
@@ -851,21 +862,29 @@ static char* format_child(char *ptr, char *end, node* n, uint32_t off)
   // ptr += snprintf(ptr, end - ptr, "%4u  ", off);
   uint32_t len = get_len(n, off);
   ptr += snprintf(ptr, end - ptr, "%u  ", len);
-  snprintf(ptr, len + 1, "%s", get_key(n, off));
-  ptr += len;
-  if (!(n->type & Blink)) {
-    node *child = (node *)get_val(n, off);
-    ptr += snprintf(ptr, end - ptr, "  %u\n", child->id);
-  } else {
-    ptr += snprintf(ptr, end - ptr, "\n");
+  uint64_t key = *(uint64_t *)get_key(n, off);
+  unsigned char buf[8];
+  memcpy(buf, &key, 8);
+  for (int i = 0; i < 8; ++i) {
+    ptr += sprintf(ptr, "%d ", buf[i]);
   }
+  //ptr += sprintf(ptr, "%lu", *(uint64_t *)get_key(n, off));
+  ptr += sprintf(ptr, " %lu\n", (val_t)get_val(n, off));
+  //snprintf(ptr, len + 1, "%s", get_key(n, off));
+  //ptr += len;
+  //if (!(n->type & Blink)) {
+  //  node *child = (node *)get_val(n, off);
+  //  ptr += snprintf(ptr, end - ptr, "  %u\n", child->id);
+  //} else {
+  //  ptr += snprintf(ptr, end - ptr, "\n");
+  //}
   return ptr;
 }
 
 void node_print(node *n, int detail)
 {
   assert(n);
-  int size = node_size * 2;
+  int size = node_size * 4;
   char buf[size], *ptr = buf, *end = buf + size;
   char* (*format)(char *, char *, node *, uint32_t) = n->level == 0 ? format_kv : format_child;
 

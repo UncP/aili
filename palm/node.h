@@ -99,6 +99,7 @@ void node_adjust_many(node *new, node *left, node *right, char *okey, uint32_t *
 int node_replace_key(node *n, const void *okey, uint32_t olen, const void *val, const void *key, uint32_t len);
 void node_prefetch(node *n);
 int node_is_after_key(node *n, const void *key, uint32_t len);
+int node_need_move_right(node *n, const void *key, uint32_t len);
 
 void set_node_offset(uint32_t offset);
 void node_init(node *n, uint8_t type, uint8_t level);

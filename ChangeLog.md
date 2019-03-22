@@ -6,8 +6,9 @@
 2. （BUG）Node256 初始化 version 设置错误
 3. （BUG）使用自己的内存分配器释放内存时调用了系统函数
 4. （BUG）Node256 下降时没有判断节点是否为空
-5. 将 leaf 的 key 和 len 打包在一起
-6. 带有随机数生成器的用于测试所有索引的 benchmark, one benchfuck to rule them all!
+5. （BUG）b link tree 判断右移时没有使用旧节点的 fence key
+6. 将 leaf 的 key 和 len 打包在一起
+7. 带有随机数生成器的用于测试所有索引的 benchmark, one benchfuck to rule them all!
 
 
 

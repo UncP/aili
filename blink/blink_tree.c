@@ -210,11 +210,10 @@ int blink_tree_write(blink_tree *bt, const void *key, uint32_t len, const void *
       blink_node *new = new_blink_node(blink_node_get_type(curr), blink_node_get_level(curr));
 
       blink_node_split(curr, new, fkey, &flen);
-
-      if (blink_node_is_after_key(new, k, l))
-        assert(blink_node_insert(curr, k, l, v) == 1);
-      else
+      if (blink_node_need_move_right(curr, k, l))
         assert(blink_node_insert(new, k, l, v) == 1);
+      else
+        assert(blink_node_insert(curr, k, l, v) == 1);
 
       memcpy(k, fkey, flen); l = flen; v = (void *)new;
 
