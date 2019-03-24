@@ -41,10 +41,19 @@ static int _adaptive_radix_tree_put(art_node *parent, art_node **ptr, const void
   // TODO: val should be packed with key
   (void)val;
   art_node *an;
-  uint64_t v, v1;
-  int p;
 
+  int first = 1; // is this the first time we enter `begin`
   begin:
+  if (first)  {
+    first = 0;
+  } else {
+    // this is not the first time we enter `begin`, so
+    // we need to make sure that `ptr` is still valid because `parent` might changed
+    uint64_t pv = art_node_get_version(parent);
+    if (art_node_version_is_old(pv))
+      return -1; // return -1 so that we can retry from root
+    // `ptr` is still valid, we can proceed
+  }
   // NOTE: __ATOMIC_RELAXED is not ok
   __atomic_load(ptr, &an, __ATOMIC_ACQUIRE);
 
@@ -67,13 +76,13 @@ static int _adaptive_radix_tree_put(art_node *parent, art_node **ptr, const void
   }
 
   // verify node prefix
-  v = art_node_get_stable_expand_version(an);
+  uint64_t v = art_node_get_stable_expand_version(an);
   if (art_node_version_is_old(v))
     goto begin;
 
-  p = art_node_prefix_compare(an, v, key, len, off);
+  int p = art_node_prefix_compare(an, v, key, len, off);
 
-  v1 = art_node_get_version(an);
+  uint64_t v1 = art_node_get_version(an);
   if (unlikely(art_node_version_is_old(v1) || art_node_version_compare_expand(v, v1)))
     goto begin;
   v = v1;
@@ -129,7 +138,7 @@ static int _adaptive_radix_tree_put(art_node *parent, art_node **ptr, const void
   }
   art_node_unlock(an);
 
-  // ptrother thread might inserted same byte before we acquire lock
+  // another thread might inserted same byte before we acquire lock
   if (unlikely(next))
     return _adaptive_radix_tree_put(an, next, key, len, off + 1, val);
 
@@ -148,16 +157,24 @@ int adaptive_radix_tree_put(adaptive_radix_tree *art, const void *key, size_t le
   return ret;
 }
 
-// TODO: for now we retry from root for every failure, but this can be relaxed
 static void* _adaptive_radix_tree_get(art_node *parent, art_node **ptr, const void *key, size_t len, size_t off)
 {
-  (void)parent;
   art_node *an;
-  uint64_t v, v1;
 
   debug_assert(off <= len);
 
+  int first = 1; // is this the first time we enter `begin`
   begin:
+  if (first)  {
+    first = 0;
+  } else {
+    // this is not the first time we enter `begin`, so
+    // we need to make sure that `ptr` is still valid because `parent` might changed
+    uint64_t pv = art_node_get_version(parent);
+    if (art_node_version_is_old(pv))
+      return (void *)1; // return 1 so that we can retry from root
+    // `ptr` is still valid, we can proceed
+  }
   __atomic_load(ptr, &an, __ATOMIC_ACQUIRE);
 
   if (unlikely(an == 0)) {
@@ -177,7 +194,7 @@ static void* _adaptive_radix_tree_get(art_node *parent, art_node **ptr, const vo
     return 0;
   }
 
-  v = art_node_get_stable_expand_version(an);
+  uint64_t v = art_node_get_stable_expand_version(an);
   if (art_node_version_is_old(v)) {
     assert(0);
     goto begin;
@@ -185,7 +202,7 @@ static void* _adaptive_radix_tree_get(art_node *parent, art_node **ptr, const vo
 
   int p = art_node_prefix_compare(an, v, key, len, off);
 
-  v1 = art_node_get_version(an);
+  uint64_t v1 = art_node_get_version(an);
   if (art_node_version_is_old(v1) || art_node_version_compare_expand(v, v1)) {
     assert(0);
     goto begin;
@@ -200,8 +217,8 @@ static void* _adaptive_radix_tree_get(art_node *parent, art_node **ptr, const vo
   off += art_node_version_get_prefix_len(v);
   debug_assert(off <= len);
 
-  int advptrce = off != len;
-  unsigned char byte = advptrce ? ((unsigned char *)key)[off] : 0;
+  int advance = off != len;
+  unsigned char byte = advance ? ((unsigned char *)key)[off] : 0;
 
   art_node **next = art_node_find_child(an, v, byte);
 
@@ -212,17 +229,17 @@ static void* _adaptive_radix_tree_get(art_node *parent, art_node **ptr, const vo
     goto begin;
   }
 
-  if (next) {
-    parent = *ptr;
-    ptr = next;
-    off += advptrce;
-    goto begin;
-  }
+  if (next)
+    return _adaptive_radix_tree_get(an, next, key, len, off + advance);
+
   return 0;
 }
 
 void* adaptive_radix_tree_get(adaptive_radix_tree *art, const void *key, size_t len)
 {
-  return _adaptive_radix_tree_get(art->root, &art->root, key, len, 0);
+  void *ret;
+  while (unlikely((uint64_t)(ret =  _adaptive_radix_tree_get(art->root, &art->root, key, len, 0)) == 1))
+    ;
+  return ret;
 }
 

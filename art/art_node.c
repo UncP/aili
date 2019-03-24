@@ -338,7 +338,7 @@ art_node** art_node_add_child(art_node *an, unsigned char byte, art_node *child,
   if (unlikely(art_node_is_full(an))) {
     *new = art_node_grow(an);
     an = *new;
-    version = (*new)->version;
+    version = an->version;
   }
 
   switch (get_type(version)) {
