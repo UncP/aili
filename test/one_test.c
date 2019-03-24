@@ -56,18 +56,6 @@ struct thread_arg
   }tree;
   int  keys;
   int  is_put;
-  union {
-    void (*palm_execute)(palm_tree *pt, batch *b);
-    int (*blink_put)(blink_tree *bt, const void *key, uint32_t len, const void *val);
-    int (*mass_put)(mass_tree *mt, const void *key, uint32_t len, const void *val);
-    int (*art_put)(adaptive_radix_tree *art, const void *key, size_t len, const void *val);
-  }put_func;
-  union {
-    void  (*palm_execute)(palm_tree *pt, batch *b);
-    int   (*blink_get)(blink_tree *bt, const void *key, uint32_t len, void **val);
-    void* (*mass_get)(mass_tree *mt, const void *key, uint32_t len);
-    void* (*art_get)(adaptive_radix_tree *art, const void *key, size_t len);
-  }get_func;
 };
 
 static void* run(void *arg)
@@ -97,7 +85,7 @@ static void* run(void *arg)
       for (int i = 0; i < keys; ++i) {
         uint64_t key = rng_next(&r);
         if (batch_add_write(cb, &key, 8, (void *)3190) == -1) {
-          (*(ta->put_func.palm_execute))(ta->tree.pt, cb);
+          palm_tree_execute(ta->tree.pt, cb);
           idx = idx == 8 ? 0 : idx + 1;
           cb = batches[idx];
           batch_clear(cb);
@@ -106,7 +94,7 @@ static void* run(void *arg)
       }
 
       // finish remained work
-      (*(ta->put_func.palm_execute))(ta->tree.pt, cb);
+      palm_tree_execute(ta->tree.pt, cb);
       palm_tree_flush(ta->tree.pt);
 
       for (int i = 0; i < 9; ++i)
@@ -119,7 +107,7 @@ static void* run(void *arg)
       for (int i = 0; i < keys; ++i) {
         uint64_t *key = (*alloc)(8);
         *key = rng_next(&r);
-        (*(ta->put_func.blink_put))(ta->tree.bt, key, 8, (void *)3190);
+        blink_tree_write(ta->tree.bt, key, 8, (void *)3190);
       }
     }
     break;
@@ -127,7 +115,7 @@ static void* run(void *arg)
       for (int i = 0; i < keys; ++i) {
         uint64_t *key = (*alloc)(8);
         *key = rng_next(&r);
-        (*(ta->put_func.mass_put))(ta->tree.mt, key, 8, 0);
+        mass_tree_put(ta->tree.mt, key, 8, 0);
       }
     }
     break;
@@ -136,7 +124,7 @@ static void* run(void *arg)
         char *key = (*alloc)(16);
         key[0] = 8;
         *(uint64_t *)(key + 1)= rng_next(&r);
-        (*(ta->put_func.art_put))(ta->tree.art, (const void *)(key + 1), 8, 0);
+        adaptive_radix_tree_put(ta->tree.art, (const void *)(key + 1), 8, 0);
       }
     }
     break;
@@ -154,7 +142,7 @@ static void* run(void *arg)
       for (int i = 0; i < keys; ++i) {
         uint64_t key = rng_next(&r);
         if (batch_add_read(cb, &key, 8) == -1) {
-          (*(ta->put_func.palm_execute))(ta->tree.pt, cb);
+          palm_tree_execute(ta->tree.pt, cb);
           idx = idx == 8 ? 0 : idx + 1;
           cb = batches[idx];
           for (uint32_t j = 0; j < cb->keys; ++j)
@@ -165,7 +153,7 @@ static void* run(void *arg)
       }
 
       // finish remained work
-      (*(ta->put_func.palm_execute))(ta->tree.pt, cb);
+      palm_tree_execute(ta->tree.pt, cb);
       palm_tree_flush(ta->tree.pt);
       for (int i = 0; i < 9; ++i) {
         cb = batches[i];
@@ -180,15 +168,14 @@ static void* run(void *arg)
       for (int i = 0; i < keys; ++i) {
         uint64_t key = rng_next(&r);
         uint64_t val;
-        int r = (*(ta->get_func.blink_get))(ta->tree.bt, &key, 8, (void **)&val);
-        assert(r == 1);
+        assert(blink_tree_read(ta->tree.bt, &key, 8, (void **)&val) == 1);
       }
     }
     break;
     case MASS: {
       for (int i = 0; i < keys; ++i) {
         uint64_t key = rng_next(&r);
-        void *val = (*(ta->get_func.mass_get))(ta->tree.mt, &key, 8);
+        void *val = mass_tree_get(ta->tree.mt, &key, 8);
         assert(val);
       }
     }
@@ -196,7 +183,7 @@ static void* run(void *arg)
     case ART: {
       for (int i = 0; i < keys; ++i) {
         uint64_t key = rng_next(&r);
-        void *val = (*(ta->get_func.art_get))(ta->tree.art, &key, 8);
+        void *val = adaptive_radix_tree_get(ta->tree.art, &key, 8);
         if (val == 0) {
           unsigned char *n = (unsigned char *)&key;
           for (int i = 0; i < 8; ++i) {
@@ -227,25 +214,17 @@ void benchfuck(tree_type tp, int thread_number, int thread_key_num)
   ta.keys = thread_key_num;
   if (tp == PALM) {
     ta.tree.pt = new_palm_tree(thread_number, 8 /* queue_size */);
-    ta.put_func.palm_execute = &palm_tree_execute;
-    ta.get_func.palm_execute = &palm_tree_execute;
     ta.keys *= thread_number;
     thread_number = 1;
   }
   if (tp == BLINK) {
     ta.tree.bt = new_blink_tree(thread_number);
-    ta.put_func.blink_put = &blink_tree_write;
-    ta.get_func.blink_get = &blink_tree_read;
   }
   if (tp == MASS) {
     ta.tree.mt = new_mass_tree();
-    ta.put_func.mass_put = &mass_tree_put;
-    ta.get_func.mass_get = &mass_tree_get;
   }
   if (tp == ART) {
     ta.tree.art = new_adaptive_radix_tree();
-    ta.put_func.art_put = &adaptive_radix_tree_put;
-    ta.get_func.art_get = &adaptive_radix_tree_get;
   }
 
   //unsigned int seed = time(0);
