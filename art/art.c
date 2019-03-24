@@ -238,7 +238,7 @@ static void* _adaptive_radix_tree_get(art_node *parent, art_node **ptr, const vo
 void* adaptive_radix_tree_get(adaptive_radix_tree *art, const void *key, size_t len)
 {
   void *ret;
-  while (unlikely((uint64_t)(ret =  _adaptive_radix_tree_get(art->root, &art->root, key, len, 0)) == 1))
+  while (unlikely((uint64_t)(ret = _adaptive_radix_tree_get(art->root, &art->root, key, len, 0)) == 1))
     ;
   return ret;
 }

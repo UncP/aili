@@ -62,7 +62,7 @@ mass_tree_test: test/mass_tree_test.c mass/mass_node.o mass/mass_tree.o palm/all
 art/%.o: art/%.c
 	$(ARTFLAGS) -c $^ -o $@
 
-art_test: test/art_test.c art/art_node.o art/art.o
+art_test: test/art_test.c art/art_node.o art/art.o palm/allocator.o
 	$(ARTFLAGS) -o $@ $^ -lpthread
 
 util/%.o: util/%.c

@@ -155,40 +155,52 @@ void test_adaptive_radix_tree_structure()
   {
   adaptive_radix_tree *art = new_adaptive_radix_tree();
 
-  const char *key1 = malloc(16);
+  char *key1 = malloc(16);
+  key1[0] = 5;
+  key1++;
   memcpy((void *)key1, "hello\0", 6);
-  const char *key2 = malloc(16);
+  char *key2 = malloc(16);
+  key2[0] = 6;
+  key2++;
   memcpy((void *)key2, "hello0\0", 7);
-  const char *key3 = malloc(16);
-  memcpy((void *)key3, "hello00\0", 8);
+  char *key3 = malloc(16);
+  key3[0] = 7;
+  key3++;
+  memcpy((void *)key3, "hello00", 8);
 
-  adaptive_radix_tree_put(art, key1, strlen(key1), 0);
-  adaptive_radix_tree_put(art, key2, strlen(key2), 0);
-  adaptive_radix_tree_put(art, key3, strlen(key3), 0);
+  adaptive_radix_tree_put(art, key1, 5, 0);
+  adaptive_radix_tree_put(art, key2, 6, 0);
+  adaptive_radix_tree_put(art, key3, 7, 0);
 
-  assert(adaptive_radix_tree_get(art, key1, strlen(key1)) == key1);
-  assert(adaptive_radix_tree_get(art, key2, strlen(key2)) == key2);
-  assert(adaptive_radix_tree_get(art, key3, strlen(key3)) == key3);
+  assert(adaptive_radix_tree_get(art, key1, 5) == key1);
+  assert(adaptive_radix_tree_get(art, key2, 6) == key2);
+  assert(adaptive_radix_tree_get(art, key3, 7) == key3);
 
   free_adaptive_radix_tree(art);
   }
   {
   adaptive_radix_tree *art = new_adaptive_radix_tree();
 
-  const char *key1 = malloc(16);
+  char *key1 = malloc(16);
+  key1[0] = 7;
+  key1++;
   memcpy((void *)key1, "hello00\0", 8);
-  const char *key2 = malloc(16);
+  char *key2 = malloc(16);
+  key2[0] = 6;
+  key2++;
   memcpy((void *)key2, "hello0\0", 7);
-  const char *key3 = malloc(16);
+  char *key3 = malloc(16);
+  key3[0] = 5;
+  key3++;
   memcpy((void *)key3, "hello\0", 6);
 
-  adaptive_radix_tree_put(art, key1, strlen(key1), 0);
-  adaptive_radix_tree_put(art, key2, strlen(key2), 0);
-  adaptive_radix_tree_put(art, key3, strlen(key3), 0);
+  adaptive_radix_tree_put(art, key1, 7, 0);
+  adaptive_radix_tree_put(art, key2, 6, 0);
+  adaptive_radix_tree_put(art, key3, 5, 0);
 
-  assert(adaptive_radix_tree_get(art, key1, strlen(key1)) == key1);
-  assert(adaptive_radix_tree_get(art, key2, strlen(key2)) == key2);
-  assert(adaptive_radix_tree_get(art, key3, strlen(key3)) == key3);
+  assert(adaptive_radix_tree_get(art, key1, 7) == key1);
+  assert(adaptive_radix_tree_get(art, key2, 6) == key2);
+  assert(adaptive_radix_tree_get(art, key3, 5) == key3);
 
   free_adaptive_radix_tree(art);
   }

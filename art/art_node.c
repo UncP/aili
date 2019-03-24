@@ -390,7 +390,7 @@ art_node** art_node_add_child(art_node *an, unsigned char byte, art_node *child,
     assert(0);
   }
 
-  if (*new)
+  if (new && *new)
     art_node_unlock(*new);
   return 0;
 }
