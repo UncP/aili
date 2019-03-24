@@ -255,7 +255,7 @@ static inline void art_node_set_new_node(art_node *old, art_node *new)
   __atomic_store(&old->new, &new, __ATOMIC_RELAXED);
 }
 
-inline art_node* art_node_get_new_node(art_node *old)
+static inline art_node* art_node_get_new_node(art_node *old)
 {
   art_node *new;
   __atomic_load(&old->new, &new, __ATOMIC_RELAXED);
@@ -441,9 +441,6 @@ unsigned char art_node_truncate_prefix(art_node *an, int off)
 
   debug_assert(is_locked(version));
 
-  if (off >= get_prefix_len(version)) {
-    printf("%d %d\n", off, get_prefix_len(version));
-  }
   debug_assert(off < get_prefix_len(version));
 
   // mark expand bit before truncate prefix
@@ -519,8 +516,10 @@ int art_node_lock(art_node *an)
 
 art_node* art_node_lock_force(art_node *an)
 {
-  while (art_node_lock(an))
-    an = an->new;
+  while (art_node_lock(an)) {
+    an = art_node_get_new_node(an);
+    debug_assert(an);
+  }
   return an;
 }
 

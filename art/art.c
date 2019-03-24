@@ -119,6 +119,9 @@ static int _adaptive_radix_tree_put(art_node *parent, art_node **ptr, const void
   if (p != art_node_version_get_prefix_len(v)) {
     if (unlikely(art_node_lock(an)))
       goto begin;
+    // still need to check whether prefix has been changed!
+    if (unlikely(art_node_version_compare_expand(v, art_node_get_version_unsafe(an))))
+      goto begin;
     art_node *new = art_node_expand_and_insert(an, key, len, off, p);
     parent = art_node_lock_force(parent);
     if (likely(parent)) {
