@@ -46,7 +46,7 @@ static int _adaptive_radix_tree_put(art_node *parent, art_node **ptr, const void
   begin:
   if (first)  {
     first = 0;
-  } else {
+  } else if (parent) {
     // this is not the first time we enter `begin`, so
     // we need to make sure that `ptr` is still valid because `parent` might changed
     uint64_t pv = art_node_get_version(parent);
@@ -61,6 +61,7 @@ static int _adaptive_radix_tree_put(art_node *parent, art_node **ptr, const void
   if (unlikely(an == 0)) {
     assert(parent == 0);
     art_node *leaf = (art_node *)make_leaf(key);
+    //printf("empty %d\n", ((unsigned char *)key)[0]);
     if (likely(__atomic_compare_exchange_n(ptr, &an, leaf, 0 /* weak */, __ATOMIC_RELEASE, __ATOMIC_ACQUIRE)))
       return 0;
     else
@@ -69,15 +70,43 @@ static int _adaptive_radix_tree_put(art_node *parent, art_node **ptr, const void
 
   // this is a leaf
   if (unlikely(is_leaf(an))) {
-    int r = art_node_replace_leaf_child(parent, ptr, key, len, off);
-    if (unlikely(r == -2))
-      goto begin; // `an` is changed
-    return r;
+    //printf("leaf %d\n", ((unsigned char *)key)[0]);
+    art_node *new = art_node_replace_leaf_child(an, key, len, off);
+    if (likely(new)) {
+      if (likely(parent)) {
+        if (unlikely(art_node_lock(parent))) {
+          // parent is changed, another thread might see this leaf and replaced it
+          free_art_node(new);
+          return -1;
+        } else {
+          art_node *now;
+          __atomic_load(ptr, &now, __ATOMIC_ACQUIRE);
+          if (unlikely(now != an)) {
+            // leaf has been replaced by another thread
+            art_node_unlock(parent);
+            free_art_node(new);
+            return -1;
+          }
+          __atomic_store(ptr, &new, __ATOMIC_RELEASE);
+          art_node_unlock(parent);
+          return 0;
+        }
+      } else {
+        if (likely(__atomic_compare_exchange_n(ptr, &an, new, 0 /* weak */, __ATOMIC_RELEASE, __ATOMIC_ACQUIRE))) {
+          return 0;
+        } else {
+          free_art_node(new);
+          return -1;
+        }
+      }
+    } else {
+      return 1;
+    }
   }
 
   // verify node prefix
   uint64_t v = art_node_get_stable_expand_version(an);
-  if (art_node_version_is_old(v))
+  if (unlikely(art_node_version_is_old(v)))
     goto begin;
 
   int p = art_node_prefix_compare(an, v, key, len, off);
@@ -126,6 +155,7 @@ static int _adaptive_radix_tree_put(art_node *parent, art_node **ptr, const void
 
   art_node *new = 0;
   next = art_node_add_child(an, ((unsigned char *)key)[off], (art_node *)make_leaf(key), &new);
+  //printf("insert %d\n", ((unsigned char *)key)[0]);
   if (unlikely(new)) {
     parent = art_node_lock_force(parent);
     if (parent) {
@@ -167,7 +197,7 @@ static void* _adaptive_radix_tree_get(art_node *parent, art_node **ptr, const vo
   begin:
   if (first)  {
     first = 0;
-  } else {
+  } else if (parent) {
     // this is not the first time we enter `begin`, so
     // we need to make sure that `ptr` is still valid because `parent` might changed
     uint64_t pv = art_node_get_version(parent);
@@ -188,9 +218,9 @@ static void* _adaptive_radix_tree_get(art_node *parent, art_node **ptr, const vo
       ;
     if (i == l1 && i == l2)
       return (void *)k1; // key exists
-    //art_node_print(parent);
-    //print_key(k1, l1);
-    //printf("off:%lu\n", off);
+    art_node_print(parent);
+    print_key(k1, l1);
+    printf("off:%lu\n", off);
     return 0;
   }
 
@@ -203,7 +233,7 @@ static void* _adaptive_radix_tree_get(art_node *parent, art_node **ptr, const vo
   int p = art_node_prefix_compare(an, v, key, len, off);
 
   uint64_t v1 = art_node_get_version(an);
-  if (art_node_version_is_old(v1) || art_node_version_compare_expand(v, v1)) {
+  if (unlikely(art_node_version_is_old(v1) || art_node_version_compare_expand(v, v1))) {
     assert(0);
     goto begin;
   }
@@ -224,7 +254,7 @@ static void* _adaptive_radix_tree_get(art_node *parent, art_node **ptr, const vo
 
   v1 = art_node_get_version(an);
 
-  if (art_node_version_is_old(v1)) {
+  if (unlikely(art_node_version_is_old(v1))) {
     assert(0);
     goto begin;
   }
@@ -232,13 +262,15 @@ static void* _adaptive_radix_tree_get(art_node *parent, art_node **ptr, const vo
   if (next)
     return _adaptive_radix_tree_get(an, next, key, len, off + advance);
 
+  art_node_print(an);
+  printf("off:%lu\n", off);
   return 0;
 }
 
 void* adaptive_radix_tree_get(adaptive_radix_tree *art, const void *key, size_t len)
 {
   void *ret;
-  while (unlikely((uint64_t)(ret = _adaptive_radix_tree_get(art->root, &art->root, key, len, 0)) == 1))
+  while (unlikely((uint64_t)(ret = _adaptive_radix_tree_get(0, &art->root, key, len, 0)) == 1))
     ;
   return ret;
 }

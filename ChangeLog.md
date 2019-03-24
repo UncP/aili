@@ -9,6 +9,7 @@
 5. （BUG）b link tree 判断右移时没有使用旧节点的 fence key
 6. 将 leaf 的 key 和 len 打包在一起
 7. 带有随机数生成器的用于测试所有索引的 benchmark, one benchfuck to rule them all!
+8. （BUG）替换叶子节点时没有考虑到父节点为空的情况
 
 
 

@@ -551,31 +551,17 @@ int art_node_version_is_old(uint64_t version)
   return is_old(version);
 }
 
-// return  0 for success
-// return  1 for duplicate
-// return -1 and -2 for failure
-int art_node_replace_leaf_child(art_node *parent, art_node **ptr, const void *key, size_t len, size_t off)
+art_node* art_node_replace_leaf_child(art_node *an, const void *key, size_t len, size_t off)
 {
-  if (unlikely(art_node_lock(parent)))
-    return -1;
-
-  // need to get the latest node in case it has been changed
-  art_node *an;
-  __atomic_load(ptr, &an, __ATOMIC_ACQUIRE);
-
-  if (unlikely(is_leaf(an) == 0)) {
-    art_node_unlock(parent);
-    return -2; // leaf node is already changed
-  }
+  debug_assert(is_leaf(an));
 
   const char *k1 = get_leaf_key(an), *k2 = (const char *)key;
   size_t l1 = get_leaf_len(an), l2 = len, i;
   for (i = off; i < l1 && i < l2 && k1[i] == k2[i]; ++i)
     ;
-  if (unlikely(i == l1 && i == l2)) {
-    art_node_unlock(parent);
-    return 1; // key exists
-  }
+  if (unlikely(i == l1 && i == l2))
+    return 0; // key exists
+
   art_node *new = new_art_node();
   assert(art_node_lock(new) == 0);
   // TODO: i - off might be bigger than 8
@@ -589,12 +575,7 @@ int art_node_replace_leaf_child(art_node *parent, art_node **ptr, const void *ke
   assert(art_node_add_child(new, byte, (art_node *)make_leaf(k2), 0) == 0);
   art_node_unlock(new);
 
-  // TODO: `relaxed` operation is enough
-  // replace leaf with new node
-  __atomic_store(ptr, &new, __ATOMIC_RELEASE);
-
-  art_node_unlock(parent);
-  return 0;
+  return new;
 }
 
 // require: node is locked
