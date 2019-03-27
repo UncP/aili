@@ -362,7 +362,7 @@ static void do_palm_tree_execute(palm_tree *pt, batch *b, worker *w)
   // calculate [beg, end) in a batch that current thread needs to process
   // it's possible that a worker has no key to process
   uint32_t part = (uint32_t)ceilf((float)b->keys / w->total);
-  uint32_t beg = w->id * part;
+  uint32_t beg = w->id * part > b->keys ? b->keys : w->id * part;
   uint32_t end = beg + part > b->keys ? b->keys : beg + part;
 
   // descend to leaf for each key that belongs to this worker in this batch

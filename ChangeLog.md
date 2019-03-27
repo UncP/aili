@@ -10,6 +10,8 @@
 6. 将 leaf 的 key 和 len 打包在一起
 7. 带有随机数生成器的用于测试所有索引的 benchmark, one benchfuck to rule them all!
 8. （BUG）替换叶子节点时没有考虑到父节点为空的情况
+9. （BUG）节点加锁后解决前缀冲突时没有再次进行前缀检查
+10. （BUG）Palm Worker 计算任务时出现 beg > end
 
 
 

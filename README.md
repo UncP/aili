@@ -31,7 +31,7 @@ see `ChangeLog.md` for **detail** info
 
 ./run.sh  mass   4           100   # test mass tree
 
-./run.sh  art    1           100   # test art tree, does not support multi-thread for now
+./run.sh  art    4           100   # test art tree
 ```
 
 
