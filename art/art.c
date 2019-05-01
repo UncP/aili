@@ -120,8 +120,11 @@ static int _adaptive_radix_tree_put(art_node *parent, art_node **ptr, const void
     if (unlikely(art_node_lock(an)))
       goto begin;
     // still need to check whether prefix has been changed!
-    if (unlikely(art_node_version_compare_expand(v, art_node_get_version_unsafe(an))))
+    if (unlikely(art_node_version_compare_expand(v, art_node_get_version_unsafe(an)))) {
+      art_node_unlock(an);
       goto begin;
+    }
+    debug_assert(art_node_version_is_old(art_node_get_version_unsafe(an)) == 0);
     art_node *new = art_node_expand_and_insert(an, key, len, off, p);
     parent = art_node_lock_force(parent);
     if (likely(parent)) {
@@ -158,7 +161,6 @@ static int _adaptive_radix_tree_put(art_node *parent, art_node **ptr, const void
 
   art_node *new = 0;
   next = art_node_add_child(an, ((unsigned char *)key)[off], (art_node *)make_leaf(key), &new);
-  //printf("insert %d\n", ((unsigned char *)key)[0]);
   if (unlikely(new)) {
     parent = art_node_lock_force(parent);
     if (parent) {

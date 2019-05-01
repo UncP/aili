@@ -11,7 +11,8 @@
 7. 带有随机数生成器的用于测试所有索引的 benchmark, one benchfuck to rule them all!
 8. （BUG）替换叶子节点时没有考虑到父节点为空的情况
 9. （BUG）节点加锁后解决前缀冲突时没有再次进行前缀检查
-10. （BUG）Palm Worker 计算任务时出现 beg > end
+10. （BUG）加锁后发现前缀变化重试时没有解锁
+11. （BUG）Palm Tree Worker 计算任务时出现 beg > end
 
 
 

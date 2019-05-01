@@ -247,6 +247,7 @@ void benchfuck(tree_type tp, int thread_number, int thread_key_num)
     free(t);
   }
 
+  return ;
   printf("-- read start --\n");
 
   for (int i = 0; i < thread_number; ++i) {

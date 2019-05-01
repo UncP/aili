@@ -466,10 +466,15 @@ inline int art_node_version_get_prefix_len(uint64_t version)
 
 uint64_t art_node_get_stable_expand_version(art_node *an)
 {
-  uint64_t version;
-  do {
-    version = art_node_get_version(an);
-  } while (is_expanding(version));
+  int loop = 4;
+  uint64_t version = art_node_get_version_unsafe(an);
+  while (is_expanding(version)) {
+    for (int i = 0; i < loop; ++i)
+      __asm__ volatile("pause" ::: "memory");
+    if (loop < 128)
+      loop += loop;
+    version = art_node_get_version_unsafe(an);
+  }
   return version;
 }
 
@@ -603,7 +608,14 @@ void art_node_replace_child(art_node *parent, unsigned char byte, art_node *old,
 
   art_node **child = art_node_find_child(parent, version, byte);
 
-  assert(child);
+  debug_assert(child);
+  if (*child != old) {
+    printf("%d\n", byte);
+    art_node_print(*child);
+    art_node_print(old);
+    art_node_print(new);
+    art_node_print(parent);
+  }
   debug_assert(*child == old);
 
   __atomic_store(child, &new, __ATOMIC_RELEASE);
@@ -614,15 +626,18 @@ void art_node_print(art_node *an)
 {
   uint64_t version = art_node_get_version(an);
 
-  if (an->new)
+  if (an->new) {
+    printf("has new:\n");
     art_node_print(an->new);
+  }
 
   printf("%p\n", an);
   printf("is_locked:  %u\n", !!is_locked(version));
+  printf("is_old:  %u\n", !!is_old(version));
   printf("is_expand:  %u  vexpand:  %u\n", !!is_expanding(version), get_vexpand(version));
   printf("prefix_len: %d\n", get_prefix_len(version));
   for (int i = 0; i < get_prefix_len(version); ++i) {
-    printf("%d ", (int)an->prefix[i]);
+    printf("%d ", (unsigned char)an->prefix[i]);
   }
   printf("\n");
   switch (get_type(version)) {
@@ -630,7 +645,7 @@ void art_node_print(art_node *an)
     printf("type 4\n");
     art_node4 *an4 = (art_node4 *)an;
     for (int i = 0; i < get_count(version); ++i) {
-      printf("%d ", an4->key[i]);
+      printf("%d %p\n", an4->key[i], an4->child[i]);
     }
   }
   break;

@@ -224,7 +224,7 @@ int mass_tree_put(mass_tree *mt, const void *key, uint32_t len, const void *val)
   n = find_border_mass_node(r, cur, &v);
 
   forward:
-  if (is_deleted(v)) {
+  if (unlikely(is_deleted(v))) {
     // NOTE: remove this if we ever implement `mass_tree_delete`
     assert(0);
     goto again;
