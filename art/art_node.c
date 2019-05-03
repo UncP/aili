@@ -70,6 +70,7 @@ struct art_node
   uint64_t version;
   char prefix[8];
   art_node *new; // TODO: put this in the end of node
+  art_node *parent; // TODO: put this in the end of node
 };
 
 typedef struct art_node4
@@ -77,10 +78,10 @@ typedef struct art_node4
   uint64_t version;
   char prefix[8];
   art_node *new;
+  art_node *parent;
   unsigned char key[4];
   unsigned char unused[4];
   art_node *child[4];
-  art_node *parent; // we put `parent` at last since it is not updated very often
   char meta[0];
 }art_node4;
 
@@ -89,9 +90,9 @@ typedef struct art_node16
   uint64_t version;
   char prefix[8];
   art_node *new;
+  art_node *parent;
   unsigned char key[16];
   art_node *child[16];
-  art_node *parent;
   char meta[0];
 }art_node16;
 
@@ -100,9 +101,9 @@ typedef struct art_node48
   uint64_t version;
   char prefix[8];
   art_node *new;
+  art_node *parent;
   unsigned char index[256];
   art_node *child[48];
-  art_node *parent;
   char meta[0];
 }art_node48;
 
@@ -111,8 +112,8 @@ typedef struct art_node256
   uint64_t version;
   char prefix[8];
   art_node *new;
-  art_node *child[256];
   art_node *parent;
+  art_node *child[256];
   char meta[0];
 }art_node256;
 
@@ -147,6 +148,7 @@ static inline art_node* _new_art_node(size_t size)
   #endif
   an->version = 0;
   an->new = 0;
+  an->parent = 0;
   return an;
 }
 
