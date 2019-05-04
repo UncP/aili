@@ -282,6 +282,7 @@ static art_node* art_node_grow(art_node *an)
     for (int i = 0; i < 4; ++i) {
       an16->key[i] = an4->key[i];
       an16->child[i] = an4->child[i];
+      an4->child[i]->parent = new;
     }
     an16->version = set_count(an16->version, 4);
   }
@@ -294,6 +295,7 @@ static art_node* art_node_grow(art_node *an)
     an48->version = set_prefix_len(an48->version, get_prefix_len(version));
     for (int i = 0; i < 16; ++i) {
       an48->child[i] = an16->child[i];
+      an16->child[i]->parent = new;
       an48->index[an16->key[i]] = i + 1;
     }
     an48->version = set_count(an48->version, 16);
@@ -307,8 +309,10 @@ static art_node* art_node_grow(art_node *an)
     an256->version = set_prefix_len(an256->version, get_prefix_len(version));
     for (int i = 0; i < 256; ++i) {
       int index = an48->index[i];
-      if (index)
+      if (index) {
         an256->child[i] = an48->child[index - 1];
+        an48->child[index - 1]->parent = new;
+      }
     }
   }
   break;
@@ -502,9 +506,6 @@ inline int art_node_version_compare_expand(uint64_t version1, uint64_t version2)
 // return 0 on success, 1 on failure
 int art_node_lock(art_node *an)
 {
-  if (an == 0)
-    return 0;
-
   while (1) {
     // must use `acquire` operation to avoid deadlock
     uint64_t version = art_node_get_version(an);
@@ -521,21 +522,31 @@ int art_node_lock(art_node *an)
   return 0;
 }
 
-art_node* art_node_lock_force(art_node *an)
+static inline art_node* art_node_get_parent(art_node *an)
 {
-  while (art_node_lock(an)) {
-    an = art_node_get_new_node(an);
-    debug_assert(an);
+  art_node *parent;
+  __atomic_load(&an->parent, &parent, __ATOMIC_ACQUIRE);
+  return parent;
+}
+
+art_node* art_node_get_locked_parent(art_node *an)
+{
+  art_node *parent;
+  while (1) {
+    if ((parent = art_node_get_parent(an)) == 0)
+      break;
+    if (unlikely(art_node_lock(parent)))
+      continue;
+    if (art_node_get_parent(an) == parent)
+      break;
+    art_node_unlock(parent);
   }
-  return an;
+  return parent;
 }
 
 // require: node is locked
 void art_node_unlock(art_node *an)
 {
-  if (an == 0)
-    return ;
-
   uint64_t version = an->version;
 
   debug_assert(is_locked(version));
@@ -597,6 +608,7 @@ art_node* art_node_expand_and_insert(art_node *an, const void *key, size_t len, 
   assert(art_node_add_child(new, byte, (art_node *)make_leaf(key), 0) == 0);
   byte = art_node_truncate_prefix(an, common);
   assert(art_node_add_child(new, byte, an, 0) == 0);
+  an->parent = new;
   art_node_unlock(new);
 
   return new;
@@ -621,6 +633,7 @@ void art_node_replace_child(art_node *parent, unsigned char byte, art_node *old,
   debug_assert(*child == old);
 
   __atomic_store(child, &new, __ATOMIC_RELEASE);
+  new->parent = parent;
 }
 
 #ifdef Debug

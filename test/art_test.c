@@ -88,7 +88,7 @@ static void* run(void *arg)
           slice = malloc(len);
         #endif // Allocator
         memcpy(slice, key, len);
-        assert(adaptive_radix_tree_put(art, slice, len, (const void *)3190) == 0);
+        assert(adaptive_radix_tree_put(art, slice, len) == 0);
       } else {
         void *value = adaptive_radix_tree_get(art, key, len);
         if (value == 0) {

@@ -19,4 +19,5 @@
 | [3.1.0](https://github.com/UncP/aili/tree/3.1.0) | Mass Tree remove redundant lower key |
 | [3.2.0](https://github.com/UncP/aili/tree/3.2.0) | make `mass_tree_get` more robust |
 | [4.0.0](https://github.com/UncP/aili/tree/4.0.0) | Adaptive Radix Tree |
+| [4.1.0](https://github.com/UncP/aili/tree/4.1.0) | Multi-ART |
 

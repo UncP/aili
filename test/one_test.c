@@ -124,7 +124,7 @@ static void* run(void *arg)
         char *key = (*alloc)(16);
         key[0] = 8;
         *(uint64_t *)(key + 1)= rng_next(&r);
-        adaptive_radix_tree_put(ta->tree.art, (const void *)(key + 1), 8, 0);
+        adaptive_radix_tree_put(ta->tree.art, (const void *)(key + 1), 8);
       }
     }
     break;
@@ -247,7 +247,6 @@ void benchfuck(tree_type tp, int thread_number, int thread_key_num)
     free(t);
   }
 
-  return ;
   printf("-- read start --\n");
 
   for (int i = 0; i < thread_number; ++i) {

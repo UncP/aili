@@ -45,7 +45,7 @@ int art_node_version_get_prefix_len(uint64_t version);
 int art_node_version_compare_expand(uint64_t version1, uint64_t version2);
 // int art_node_version_compare_insert(uint64_t version1, uint64_t version2);
 int art_node_lock(art_node *an);
-art_node* art_node_lock_force(art_node *an);
+art_node* art_node_get_locked_parent(art_node *an);
 void art_node_unlock(art_node *an);
 int art_node_version_is_old(uint64_t version);
 art_node* art_node_replace_leaf_child(art_node *an, const void *key, size_t len, size_t off);
