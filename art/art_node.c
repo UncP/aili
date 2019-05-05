@@ -136,7 +136,7 @@ inline uint64_t art_node_get_version_unsafe(art_node *an)
 
 inline void art_node_set_version_unsafe(art_node *an, uint64_t version)
 {
-  __atomic_store(&an->version, &version, __ATOMIC_RELAXED);
+  an->version = version;
 }
 
 static inline art_node* _new_art_node(size_t size)
@@ -282,7 +282,8 @@ static art_node* art_node_grow(art_node *an)
     for (int i = 0; i < 4; ++i) {
       an16->key[i] = an4->key[i];
       an16->child[i] = an4->child[i];
-      an4->child[i]->parent = new;
+      if (!is_leaf(an4->child[i]))
+        an4->child[i]->parent = new;
     }
     an16->version = set_count(an16->version, 4);
   }
@@ -295,7 +296,8 @@ static art_node* art_node_grow(art_node *an)
     an48->version = set_prefix_len(an48->version, get_prefix_len(version));
     for (int i = 0; i < 16; ++i) {
       an48->child[i] = an16->child[i];
-      an16->child[i]->parent = new;
+      if (!is_leaf(an16->child[i]))
+        an16->child[i]->parent = new;
       an48->index[an16->key[i]] = i + 1;
     }
     an48->version = set_count(an48->version, 16);
@@ -311,7 +313,8 @@ static art_node* art_node_grow(art_node *an)
       int index = an48->index[i];
       if (index) {
         an256->child[i] = an48->child[index - 1];
-        an48->child[index - 1]->parent = new;
+        if (!is_leaf(an48->child[index - 1]))
+          an48->child[index - 1]->parent = new;
       }
     }
   }
@@ -327,7 +330,7 @@ static art_node* art_node_grow(art_node *an)
   return new;
 }
 
-// add a child to art_node4, return 0 on success, otherwise return next layer
+// add a child to art_node, return 0 on success, otherwise return next layer
 // require: node is locked
 art_node** art_node_add_child(art_node *an, unsigned char byte, art_node *child, art_node **new)
 {
@@ -529,6 +532,11 @@ static inline art_node* art_node_get_parent(art_node *an)
   return parent;
 }
 
+inline void art_node_set_parent_unsafe(art_node *an, art_node *parent)
+{
+  an->parent = parent;
+}
+
 art_node* art_node_get_locked_parent(art_node *an)
 {
   art_node *parent;
@@ -608,7 +616,6 @@ art_node* art_node_expand_and_insert(art_node *an, const void *key, size_t len, 
   assert(art_node_add_child(new, byte, (art_node *)make_leaf(key), 0) == 0);
   byte = art_node_truncate_prefix(an, common);
   assert(art_node_add_child(new, byte, an, 0) == 0);
-  an->parent = new;
   art_node_unlock(new);
 
   return new;

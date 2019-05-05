@@ -109,6 +109,7 @@ static int _adaptive_radix_tree_put(art_node *parent, art_node **ptr, const void
     debug_assert(art_node_version_is_old(art_node_get_version_unsafe(an)) == 0);
     art_node *new = art_node_expand_and_insert(an, key, len, off, p);
     parent = art_node_get_locked_parent(an);
+    art_node_set_parent_unsafe(an, new);
     if (likely(parent)) {
       debug_assert(off);
       art_node_replace_child(parent, ((unsigned char *)key)[off - 1], an, new);
@@ -166,14 +167,15 @@ static int _adaptive_radix_tree_put(art_node *parent, art_node **ptr, const void
 // return 1 on duplication
 int adaptive_radix_tree_put(adaptive_radix_tree *art, const void *key, size_t len)
 {
+  //print_key(key, len);
+
   art_node *root = art->root;
-  if (unlikely(root == 0)) { // emptry art
+  if (unlikely(root == 0)) { // empty art
     art_node *leaf = (art_node *)make_leaf(key);
     if (__atomic_compare_exchange_n(&art->root, &root, leaf, 0 /* weak */, __ATOMIC_RELEASE, __ATOMIC_ACQUIRE))
       return 0;
     // else another thread has replaced empty root
   }
-  //print_key(key, len);
   int ret;
   // retry should be rare
   while (unlikely((ret = _adaptive_radix_tree_put(0 /* parent */, &art->root, key, len, 0 /* off */)) == -1))
