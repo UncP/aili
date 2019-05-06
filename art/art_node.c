@@ -27,8 +27,8 @@
 
 /**
  *   node version layout(64 bits)
- *                     count    prefix_len              type  old  lock insert expand vinsert   vexpand
- *   |      14      |    8     |    8    |     10     |  2  |  1  |  1  |  1  |  1  |    8    |    8    |
+ *       off               count    prefix_len              type  old  lock insert expand vinsert   vexpand
+ *   |    8    |   8    |    8     |    8    |     10     |  2  |  1  |  1  |  1  |  1  |    8    |    8    |
  *
 **/
 
@@ -37,6 +37,8 @@
 #define INSERT_BIT ((uint64_t)1 << 17)
 #define EXPAND_BIT ((uint64_t)1 << 16)
 
+#define set_offset(version, offset)  (((version) & (~(((uint64_t)0xff) << 54))) | ((uint64_t)(offset) << 54))
+#define get_offset(version)          (size_t)(((version) >> 54) & 0xff)
 #define get_prefix_len(version)      (int)(((version) >> 32) & 0xff)
 #define set_prefix_len(version, len) (((version) & (~(((uint64_t)0xff) << 32))) | (((uint64_t)(len)) << 32))
 #define get_count(version)           (int)(((version) >> 40) & 0xff)
@@ -137,6 +139,17 @@ inline uint64_t art_node_get_version_unsafe(art_node *an)
 inline void art_node_set_version_unsafe(art_node *an, uint64_t version)
 {
   an->version = version;
+}
+
+static inline void art_node_set_offset(art_node *an, size_t off)
+{
+  debug_assert(off < 256);
+  an->version = set_offset(an->version, off);
+}
+
+inline size_t art_node_version_get_offset(uint64_t version)
+{
+  return get_offset(version);
 }
 
 static inline art_node* _new_art_node(size_t size)
@@ -325,6 +338,7 @@ static art_node* art_node_grow(art_node *an)
   }
 
   assert(art_node_lock(new) == 0);
+  art_node_set_offset(new, get_offset(version));
   art_node_set_new_node(an, new);
   art_node_set_version(an, set_old(version));
   return new;
@@ -463,6 +477,8 @@ unsigned char art_node_truncate_prefix(art_node *an, int off)
     prefix[i] = prefix[j];
 
   version = set_prefix_len(version, prefix_len - off - 1);
+  off += get_offset(version) + 1;
+  version = set_offset(version, off);
   art_node_set_version_unsafe(an, version);
 
   return ret;
@@ -588,6 +604,7 @@ art_node* art_node_replace_leaf_child(art_node *an, const void *key, size_t len,
     return 0; // key exists
 
   art_node *new = new_art_node();
+  art_node_set_offset(new, off);
   assert(art_node_lock(new) == 0);
   // TODO: i - off might be bigger than 8
   assert(i - off <= 8);
@@ -609,6 +626,7 @@ art_node* art_node_expand_and_insert(art_node *an, const void *key, size_t len, 
   debug_assert(is_locked(an->version));
 
   art_node* new = new_art_node();
+  art_node_set_offset(new, off);
   assert(art_node_lock(new) == 0);
   art_node_set_prefix(new, key, off, common);
   unsigned char byte;
@@ -622,13 +640,22 @@ art_node* art_node_expand_and_insert(art_node *an, const void *key, size_t len, 
 }
 
 // require: parent is locked
-void art_node_replace_child(art_node *parent, unsigned char byte, art_node *old, art_node *new)
+void art_node_replace_child(art_node *parent, unsigned char byte, art_node *old, art_node *new, int type, const void *key, size_t off)
 {
   uint64_t version = parent->version;
   debug_assert(is_locked(version));
 
   art_node **child = art_node_find_child(parent, version, byte);
 
+  if (child == 0) {
+    printf("%d\n", type);
+    print_key(key, 8);
+    printf("%d\n", byte);
+    printf("off%lu\n", off);
+    art_node_print(old);
+    art_node_print(new);
+    art_node_print(parent);
+  }
   debug_assert(child);
   if (*child != old) {
     printf("%d\n", byte);
@@ -667,7 +694,12 @@ void art_node_print(art_node *an)
     printf("type 4\n");
     art_node4 *an4 = (art_node4 *)an;
     for (int i = 0; i < get_count(version); ++i) {
-      printf("%d %p\n", an4->key[i], an4->child[i]);
+      if (!is_leaf(an4->child[i]))
+        printf("%d %p\n", an4->key[i], an4->child[i]);
+      else {
+        printf("%d ", an4->key[i]);
+        print_key(get_leaf_key(an4->child[i]), 8);
+      }
     }
   }
   break;
@@ -675,7 +707,7 @@ void art_node_print(art_node *an)
     printf("type 16\n");
     art_node16 *an16 = (art_node16 *)an;
     for (int i = 0; i < get_count(version); ++i) {
-      printf("%d ", an16->key[i]);
+      printf("%d %p\n", an16->key[i], an16->child[i]);
     }
   }
   break;
@@ -684,7 +716,7 @@ void art_node_print(art_node *an)
     art_node48 *an48 = (art_node48 *)an;
     for (int i = 0; i < 256; ++i)
       if (an48->index[i]) {
-        printf("%d ", i);
+        printf("%d %p\n", i, an48->child[an48->index[i] - 1]);
       }
   }
   break;
@@ -693,7 +725,7 @@ void art_node_print(art_node *an)
     art_node256 *an256 = (art_node256 *)an;
     for (int i = 0; i < 256; ++i)
       if (an256->child[i]) {
-        printf("%d ", i);
+        printf("%d %p\n", i, an256->child[i]);
       }
   }
   break;

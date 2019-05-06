@@ -78,8 +78,21 @@ static int adaptive_radix_tree_replace_leaf(art_node *parent, art_node **ptr, ar
 static int _adaptive_radix_tree_put(art_node *parent, art_node **ptr, const void *key, size_t len, size_t off)
 {
   art_node *an;
+  int first = 1;
 
   begin:
+  // this is fucking ugly!
+  if (first)  {
+    first = 0;
+  } else if (parent) {
+    // this is not the first time we enter `begin`, so
+    // we need to make sure that `ptr` is still valid because `parent` might changed
+    uint64_t pv = art_node_get_version(parent);
+    if (art_node_version_is_old(pv))
+      return 1; // return 1 so that we can retry from root
+    // `ptr` is still valid, we can proceed
+  }
+
   // NOTE: __ATOMIC_RELAXED is not ok
   __atomic_load(ptr, &an, __ATOMIC_ACQUIRE);
 
@@ -88,6 +101,9 @@ static int _adaptive_radix_tree_put(art_node *parent, art_node **ptr, const void
 
   // verify node prefix
   uint64_t v = art_node_get_stable_expand_version(an);
+  if (unlikely(art_node_version_get_offset(v) != off))
+    goto begin;
+
   if (unlikely(art_node_version_is_old(v)))
     goto begin;
 
@@ -112,7 +128,7 @@ static int _adaptive_radix_tree_put(art_node *parent, art_node **ptr, const void
     art_node_set_parent_unsafe(an, new);
     if (likely(parent)) {
       debug_assert(off);
-      art_node_replace_child(parent, ((unsigned char *)key)[off - 1], an, new);
+      art_node_replace_child(parent, ((unsigned char *)key)[off - 1], an, new, 0, key, off);
       art_node_unlock(parent);
     } else { // this is root
       __atomic_store(ptr, &new, __ATOMIC_RELEASE);
@@ -148,7 +164,7 @@ static int _adaptive_radix_tree_put(art_node *parent, art_node **ptr, const void
     parent = art_node_get_locked_parent(an);
     if (likely(parent)) {
       debug_assert((int)off > p);
-      art_node_replace_child(parent, ((unsigned char *)key)[off - p - 1], an, new);
+      art_node_replace_child(parent, ((unsigned char *)key)[off - p - 1], an, new, 1, key, off);
       art_node_unlock(parent);
     } else {
       __atomic_store(ptr, &new, __ATOMIC_RELEASE);
@@ -191,6 +207,7 @@ static void* _adaptive_radix_tree_get(art_node *parent, art_node **ptr, const vo
 
   int first = 1; // is this the first time we enter `begin`
   begin:
+  // this is fucking ugly!
   if (first)  {
     first = 0;
   } else if (parent) {
@@ -217,7 +234,9 @@ static void* _adaptive_radix_tree_get(art_node *parent, art_node **ptr, const vo
   }
 
   uint64_t v = art_node_get_stable_expand_version(an);
-  if (art_node_version_is_old(v))
+  if (unlikely(art_node_version_get_offset(v) != off))
+    goto begin;
+  if (unlikely(art_node_version_is_old(v)))
     goto begin;
 
   int p = art_node_prefix_compare(an, v, key, len, off);
