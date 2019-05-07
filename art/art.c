@@ -128,7 +128,7 @@ static int _adaptive_radix_tree_put(art_node *parent, art_node **ptr, const void
     art_node_set_parent_unsafe(an, new);
     if (likely(parent)) {
       debug_assert(off);
-      art_node_replace_child(parent, ((unsigned char *)key)[off - 1], an, new, 0, key, off);
+      art_node_replace_child(parent, ((unsigned char *)key)[off - 1], an, new);
       art_node_unlock(parent);
     } else { // this is root
       __atomic_store(ptr, &new, __ATOMIC_RELEASE);
@@ -164,7 +164,7 @@ static int _adaptive_radix_tree_put(art_node *parent, art_node **ptr, const void
     parent = art_node_get_locked_parent(an);
     if (likely(parent)) {
       debug_assert((int)off > p);
-      art_node_replace_child(parent, ((unsigned char *)key)[off - p - 1], an, new, 1, key, off);
+      art_node_replace_child(parent, ((unsigned char *)key)[off - p - 1], an, new);
       art_node_unlock(parent);
     } else {
       __atomic_store(ptr, &new, __ATOMIC_RELEASE);
@@ -183,6 +183,14 @@ static int _adaptive_radix_tree_put(art_node *parent, art_node **ptr, const void
 // return 1 on duplication
 int adaptive_radix_tree_put(adaptive_radix_tree *art, const void *key, size_t len)
 {
+  const char key1[8] = {8,9,0,144,0,129,64,5};
+  const char key2[8] = {8,9,0,136,0,65,192,4};
+  const char key3[8] = {8,9,0,168,0,65,193,6};
+  if (memcmp(key, key1, 8) == 0 ||
+      memcmp(key, key2, 8) == 0 ||
+      memcmp(key, key3, 8) == 0) {
+    print_key(key, 8);
+  }
   //print_key(key, len);
 
   art_node *root = art->root;

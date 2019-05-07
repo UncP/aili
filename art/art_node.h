@@ -50,7 +50,7 @@ void art_node_set_parent_unsafe(art_node *an, art_node *parent);
 void art_node_unlock(art_node *an);
 int art_node_version_is_old(uint64_t version);
 art_node* art_node_replace_leaf_child(art_node *an, const void *key, size_t len, size_t off);
-void art_node_replace_child(art_node *parent, unsigned char byte, art_node *old, art_node *new, int type, const void *key, size_t off);
+void art_node_replace_child(art_node *parent, unsigned char byte, art_node *old, art_node *new);
 art_node* art_node_expand_and_insert(art_node *an, const void *key, size_t len, size_t off, int common);
 size_t art_node_version_get_offset(uint64_t version);
 

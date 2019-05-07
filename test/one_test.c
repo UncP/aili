@@ -202,6 +202,8 @@ static void* run(void *arg)
 
   long long after = mstime();
   printf("\033[31mtotal: %d\033[0m\n\033[32mtime: %.4f  s\033[0m\n", keys, (float)(after - before) / 1000);
+  (void)before;
+  (void)after;
 
   return (void *)ta;
 }

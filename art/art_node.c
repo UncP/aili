@@ -640,31 +640,14 @@ art_node* art_node_expand_and_insert(art_node *an, const void *key, size_t len, 
 }
 
 // require: parent is locked
-void art_node_replace_child(art_node *parent, unsigned char byte, art_node *old, art_node *new, int type, const void *key, size_t off)
+void art_node_replace_child(art_node *parent, unsigned char byte, art_node *old, art_node *new)
 {
   uint64_t version = parent->version;
   debug_assert(is_locked(version));
 
   art_node **child = art_node_find_child(parent, version, byte);
 
-  if (child == 0) {
-    printf("%d\n", type);
-    print_key(key, 8);
-    printf("%d\n", byte);
-    printf("off%lu\n", off);
-    art_node_print(old);
-    art_node_print(new);
-    art_node_print(parent);
-  }
-  debug_assert(child);
-  if (*child != old) {
-    printf("%d\n", byte);
-    art_node_print(*child);
-    art_node_print(old);
-    art_node_print(new);
-    art_node_print(parent);
-  }
-  debug_assert(*child == old);
+  debug_assert(child && *child == old);
 
   __atomic_store(child, &new, __ATOMIC_RELEASE);
   new->parent = parent;
@@ -707,7 +690,12 @@ void art_node_print(art_node *an)
     printf("type 16\n");
     art_node16 *an16 = (art_node16 *)an;
     for (int i = 0; i < get_count(version); ++i) {
-      printf("%d %p\n", an16->key[i], an16->child[i]);
+      if (!is_leaf(an16->child[i]))
+        printf("%d %p\n", an16->key[i], an16->child[i]);
+      else {
+        printf("%d ", an16->key[i]);
+        print_key(get_leaf_key(an16->child[i]), 8);
+      }
     }
   }
   break;
@@ -716,7 +704,12 @@ void art_node_print(art_node *an)
     art_node48 *an48 = (art_node48 *)an;
     for (int i = 0; i < 256; ++i)
       if (an48->index[i]) {
-        printf("%d %p\n", i, an48->child[an48->index[i] - 1]);
+        if (!is_leaf(an48->child[an48->index[i] - 1]))
+          printf("%d %p\n", i, an48->child[an48->index[i] - 1]);
+        else {
+          printf("%d ", i);
+          print_key(get_leaf_key(an48->child[an48->index[i] - 1]), 8);
+        }
       }
   }
   break;
@@ -725,7 +718,12 @@ void art_node_print(art_node *an)
     art_node256 *an256 = (art_node256 *)an;
     for (int i = 0; i < 256; ++i)
       if (an256->child[i]) {
-        printf("%d %p\n", i, an256->child[i]);
+        if (!is_leaf(an256->child[i]))
+          printf("%d %p\n", i, an256->child[i]);
+        else {
+          printf("%d ", i);
+          print_key(get_leaf_key(an256->child[i]), 8);
+        }
       }
   }
   break;
