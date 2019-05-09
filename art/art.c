@@ -89,7 +89,7 @@ static int _adaptive_radix_tree_put(art_node *parent, art_node **ptr, const void
     // we need to make sure that `ptr` is still valid because `parent` might changed
     uint64_t pv = art_node_get_version(parent);
     if (art_node_version_is_old(pv))
-      return -1; // return 1 so that we can retry from root
+      return -1; // return -1 so that we can retry from root
     // `ptr` is still valid, we can proceed
   }
 
