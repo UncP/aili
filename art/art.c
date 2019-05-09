@@ -89,7 +89,7 @@ static int _adaptive_radix_tree_put(art_node *parent, art_node **ptr, const void
     // we need to make sure that `ptr` is still valid because `parent` might changed
     uint64_t pv = art_node_get_version(parent);
     if (art_node_version_is_old(pv))
-      return 1; // return 1 so that we can retry from root
+      return -1; // return 1 so that we can retry from root
     // `ptr` is still valid, we can proceed
   }
 
@@ -183,14 +183,6 @@ static int _adaptive_radix_tree_put(art_node *parent, art_node **ptr, const void
 // return 1 on duplication
 int adaptive_radix_tree_put(adaptive_radix_tree *art, const void *key, size_t len)
 {
-  const char key1[8] = {8,9,0,144,0,129,64,5};
-  const char key2[8] = {8,9,0,136,0,65,192,4};
-  const char key3[8] = {8,9,0,168,0,65,193,6};
-  if (memcmp(key, key1, 8) == 0 ||
-      memcmp(key, key2, 8) == 0 ||
-      memcmp(key, key3, 8) == 0) {
-    print_key(key, 8);
-  }
   //print_key(key, len);
 
   art_node *root = art->root;

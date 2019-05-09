@@ -124,7 +124,7 @@ static void* run(void *arg)
         char *key = (*alloc)(16);
         key[0] = 8;
         *(uint64_t *)(key + 1)= rng_next(&r);
-        adaptive_radix_tree_put(ta->tree.art, (const void *)(key + 1), 8);
+        assert(adaptive_radix_tree_put(ta->tree.art, (const void *)(key + 1), 8) == 0);
       }
     }
     break;
