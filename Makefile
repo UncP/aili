@@ -71,7 +71,10 @@ util/%.o: util/%.c
 one_test: test/one_test.c util/rng.o $(PALM_OBJ) $(BLINK_OBJ) $(MASS_OBJ) $(ART_OBJ)
 	$(ONEFLAGS) -o $@ $^ $(LFLAGS)
 
-third_party: third_party/c_hashmap
+concurrent_test: test/concurrent_test.c $(PALM_OBJ) $(BLINK_OBJ) $(MASS_OBJ) $(ART_OBJ)
+	$(ONEFLAGS) -o $@ $^ $(LFLAGS)
+
+third_party: third_party/c_hashmap/hashmap.o
 	cd third_party/c_hashmap && $(CC) $(CFLAGS) -c hashmap.c -o hashmap.o && ar rcs libhashmap.a hashmap.o
 
 clean:

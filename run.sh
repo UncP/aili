@@ -1,6 +1,6 @@
 #! /bin/sh
 
-make thirty_party
+make third_party
                                                   # tree_name thread_num thread_key_num
 make one_test "DFLAGS+=-DTest -DDebug -DAllocator" && ./one_test  $1        $2          $3
 
