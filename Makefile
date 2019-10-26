@@ -23,7 +23,7 @@ default: lib
 
 lib:$(PALM_OBJ) $(BLINK_OBJ)
 	make third_party
-	ar rcs libaili.a $(PALM_OBJ) $(BLINK_OBJ) third_party/c_hashmap/hashmap.o
+	ar rcs libaili.a $(PALM_OBJ) $(BLINK_OBJ) $(MASS_OBJ) $(ART_OBJ) third_party/c_hashmap/hashmap.o
 
 test: node_test palm_batch_test palm_node_test palm_tree_test
 

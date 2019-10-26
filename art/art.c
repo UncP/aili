@@ -12,6 +12,7 @@
 #include <stdio.h>
 #endif
 
+#include "../palm/allocator.h"
 #include "art.h"
 #include "art_node.h"
 
@@ -22,6 +23,10 @@ struct adaptive_radix_tree
 
 adaptive_radix_tree* new_adaptive_radix_tree()
 {
+#ifdef Allocator
+  init_allocator();
+#endif
+
   adaptive_radix_tree *art = malloc(sizeof(adaptive_radix_tree));
   art->root = 0;
 

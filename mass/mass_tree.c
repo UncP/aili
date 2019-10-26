@@ -11,10 +11,15 @@
 // TODO: remove this
 #include <stdio.h>
 
+#include "../palm/allocator.h"
 #include "mass_tree.h"
 
 mass_tree* new_mass_tree()
 {
+#ifdef Allocator
+  init_allocator();
+#endif
+
   mass_tree *mt = (mass_tree *)malloc(sizeof(mass_tree));
 
   mass_node *r = new_mass_node(Border);
