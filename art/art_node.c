@@ -67,20 +67,20 @@
 #define get_vexpand(version)  ((int)((version) & 0xff))
 #define incr_vexpand(version) (((version) & ~((uint64_t)0xff)) | (((version) + 1) & 0xff)) // overflow is handled
 
+#define art_node_header \
+  uint64_t version;     \
+  char prefix[8];       \
+  art_node *new;        \
+  art_node *parent;
+
 struct art_node
 {
-  uint64_t version;
-  char prefix[8];
-  art_node *new; // TODO: put this in the end of node
-  art_node *parent; // TODO: put this in the end of node
+  art_node_header;
 };
 
 typedef struct art_node4
 {
-  uint64_t version;
-  char prefix[8];
-  art_node *new;
-  art_node *parent;
+  art_node_header;
   unsigned char key[4];
   unsigned char unused[4];
   art_node *child[4];
@@ -89,10 +89,7 @@ typedef struct art_node4
 
 typedef struct art_node16
 {
-  uint64_t version;
-  char prefix[8];
-  art_node *new;
-  art_node *parent;
+  art_node_header;
   unsigned char key[16];
   art_node *child[16];
   char meta[0];
@@ -100,10 +97,7 @@ typedef struct art_node16
 
 typedef struct art_node48
 {
-  uint64_t version;
-  char prefix[8];
-  art_node *new;
-  art_node *parent;
+  art_node_header;
   unsigned char index[256];
   art_node *child[48];
   char meta[0];

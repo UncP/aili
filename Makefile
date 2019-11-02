@@ -20,7 +20,7 @@ PALM_OBJ=palm/node.o palm/bounded_queue.o palm/worker.o palm/palm_tree.o palm/me
 BLINK_OBJ=palm/node.o palm/allocator.o blink/node.o blink/blink_tree.o blink/mapping_array.o
 MASS_OBJ=mass/mass_node.o mass/mass_tree.o
 ART_OBJ=art/art_node.o art/art.o
-HOT_OBJ=hot/hot_node.o
+HOT_OBJ=hot/hot_node.o hot/hot.o
 
 default: lib
 
@@ -74,10 +74,7 @@ hot/%.o: hot/%.c
 util/%.o: util/%.c
 	$(ONEFLAGS) -c $^ -o $@
 
-one_test: test/one_test.c util/rng.o $(PALM_OBJ) $(BLINK_OBJ) $(MASS_OBJ) $(ART_OBJ)
-	$(ONEFLAGS) -o $@ $^ $(LFLAGS)
-
-concurrent_test: test/concurrent_test.c $(PALM_OBJ) $(BLINK_OBJ) $(MASS_OBJ) $(ART_OBJ)
+one_test: test/one_test.c util/rng.o $(PALM_OBJ) $(BLINK_OBJ) $(MASS_OBJ) $(ART_OBJ) $(HOT_OBJ)
 	$(ONEFLAGS) -o $@ $^ $(LFLAGS)
 
 third_party: third_party/c_hashmap/hashmap.o
