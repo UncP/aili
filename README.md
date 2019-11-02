@@ -13,6 +13,7 @@ A library that provides various concurrent algorithms for in-memory index, aims 
 * B<sup>link</sup> Tree (`blink/`)
 * Mass Tree (`mass/`)
 * Adaptive Radix Tree (`art/`)
+* Height Optimized Trie (`hot/`) (developing)
 
 #### Version
 
