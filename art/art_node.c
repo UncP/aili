@@ -227,20 +227,20 @@ art_node** art_node_find_child(art_node *an, uint64_t version, unsigned char byt
   case node16: {
     art_node16 *an16 = (art_node16 *)an;
     debug_assert(get_count(version) < 17);
-    for (int i = 0, count = get_count(version); i < count; ++i)
-      if (an16->key[i] == byte) {
-        debug_assert(an16->child[i]);
-        return &(an16->child[i]);
-      }
-    //__m128i key = _mm_set1_epi8(byte);
-    //__m128i key2 = _mm_loadu_si128((__m128i *)an16->key);
-    //__m128i cmp = _mm_cmpeq_epi8(key, key2);
-    //int mask = (1 << get_count(version)) - 1;
-    //int bitfield = _mm_movemask_epi8(cmp) & mask;
-    //if (bitfield) {
-    //  debug_assert(an16->child[__builtin_ctz(bitfield)]);
-    //  return &(an16->child[__builtin_ctz(bitfield)]);
-    //}
+    // for (int i = 0, count = get_count(version); i < count; ++i)
+    //  if (an16->key[i] == byte) {
+    //    debug_assert(an16->child[i]);
+    //    return &(an16->child[i]);
+    //  }
+    __m128i key = _mm_set1_epi8(byte);
+    __m128i key2 = _mm_loadu_si128((__m128i *)an16->key);
+    __m128i cmp = _mm_cmpeq_epi8(key, key2);
+    int mask = (1 << get_count(version)) - 1;
+    int bitfield = _mm_movemask_epi8(cmp) & mask;
+    if (bitfield) {
+      debug_assert(an16->child[__builtin_ctz(bitfield)]);
+      return &(an16->child[__builtin_ctz(bitfield)]);
+    }
   }
   break;
   case node48: {
