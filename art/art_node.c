@@ -642,6 +642,7 @@ art_node* art_node_expand_and_insert(art_node *an, const void *key, size_t len, 
 // require: parent is locked
 void art_node_replace_child(art_node *parent, unsigned char byte, art_node *old, art_node *new)
 {
+  (void)old;
   uint64_t version = parent->version;
   debug_assert(is_locked(version));
 

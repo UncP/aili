@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-Wall -Werror -Wextra -O3 -fno-strict-aliasing
+CFLAGS=-std=c99 -D_GNU_SOURCE -Wall -Werror -Wextra -O3 -fno-strict-aliasing
 IFLAGS=-I./third_party
 LFLAGS=./third_party/c_hashmap/libhashmap.a -lpthread -lm
 PFLAGS=-DLazy #-DPrefix -DBStar
@@ -7,21 +7,24 @@ DFLAGS=
 BFLAGS=
 MFLAGS=-DTest
 AFLAGS=-DTest
+HFLAGS=-DTest
 
-PALMFLAGS=$(CC) -std=c99 $(CFLAGS) $(PFLAGS) $(IFLAGS) $(DFLAGS)
-BLINKFLAGS=$(CC) -std=gnu99 $(CFLAGS) $(BFLAGS) $(DFLAGS)
-MASSFLAGS=$(CC) -std=c99 $(CFLAGS) $(MFLAGS) $(DFLAGS)
-ARTFLAGS=$(CC) -std=c99 $(CFLAGS) $(AFLAGS) $(DFLAGS)
-ONEFLAGS=$(CC) -std=gnu99 $(CFLAGS) $(DFLAGS) $(LFLAGS)
+PALMFLAGS=$(CC) $(CFLAGS) $(PFLAGS) $(IFLAGS) $(DFLAGS)
+BLINKFLAGS=$(CC) $(CFLAGS) $(BFLAGS) $(DFLAGS)
+MASSFLAGS=$(CC) $(CFLAGS) $(MFLAGS) $(DFLAGS)
+ARTFLAGS=$(CC) $(CFLAGS) $(AFLAGS) $(DFLAGS)
+HOTFLAGS=$(CC) $(CFLAGS) $(HFLAGS) $(DFLAGS)
+ONEFLAGS=$(CC) $(CFLAGS) $(DFLAGS) $(LFLAGS)
 
 PALM_OBJ=palm/node.o palm/bounded_queue.o palm/worker.o palm/palm_tree.o palm/metric.o palm/allocator.o
 BLINK_OBJ=palm/node.o palm/allocator.o blink/node.o blink/blink_tree.o blink/mapping_array.o
 MASS_OBJ=mass/mass_node.o mass/mass_tree.o
 ART_OBJ=art/art_node.o art/art.o
+HOT_OBJ=hot/hot_node.o
 
 default: lib
 
-lib:$(PALM_OBJ) $(BLINK_OBJ)
+lib:$(PALM_OBJ) $(BLINK_OBJ) $(MASS_OBJ) $(ART_OBJ)
 	make third_party
 	ar rcs libaili.a $(PALM_OBJ) $(BLINK_OBJ) $(MASS_OBJ) $(ART_OBJ) third_party/c_hashmap/hashmap.o
 
@@ -64,6 +67,9 @@ art/%.o: art/%.c
 
 art_test: test/art_test.c art/art_node.o art/art.o palm/allocator.o
 	$(ARTFLAGS) -o $@ $^ -lpthread
+
+hot/%.o: hot/%.c
+	$(HOTFLAGS) -c $^ -o $@
 
 util/%.o: util/%.c
 	$(ONEFLAGS) -c $^ -o $@

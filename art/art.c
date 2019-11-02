@@ -232,9 +232,9 @@ static void* _adaptive_radix_tree_get(art_node *parent, art_node **ptr, const vo
       ;
     if (i == l1 && i == l2)
       return (void *)k1; // key exists
-    art_node_print(parent);
-    print_key(k1, l1);
-    printf("off:%lu\n", off);
+    // art_node_print(parent);
+    // print_key(k1, l1);
+    // printf("off:%lu\n", off);
     return 0;
   }
 
@@ -270,8 +270,8 @@ static void* _adaptive_radix_tree_get(art_node *parent, art_node **ptr, const vo
   if (next)
     return _adaptive_radix_tree_get(an, next, key, len, off + advance);
 
-  art_node_print(an);
-  printf("off:%lu\n", off);
+  // art_node_print(an);
+  // printf("off:%lu\n", off);
   return 0;
 }
 
