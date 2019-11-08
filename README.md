@@ -40,6 +40,10 @@ see `ChangeLog.md` for **detail** info
 
 ![](./benchmark.png)
 
+#### Benchmark Multi ART
+Multi ART 可以在一台96核的机器上使用64个线程跑到单机1亿tps。
+
+![](./benchmark_multi_art.png)
 
 #### Other
 
