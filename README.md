@@ -41,7 +41,7 @@ see `ChangeLog.md` for **detail** info
 ![](./benchmark.png)
 
 #### Benchmark Multi ART
-Multi ART is capable of reaching 100 million insert per second on a 96-core machine using 64 threads.
+Multi ART is capable of reaching **100 million** insert per second on a 96-core machine using 64 threads.
 
 ![](./benchmark_multi_art.png)
 
