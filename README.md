@@ -5,7 +5,7 @@
 ### the fastest in-memory index in the East
 
 
-A library that provides various concurrent algorithms for in-memory index, aims to achieve extremely FAST speed, but just for experiment and fun.
+A library that provides various concurrent algorithms for in-memory index, aims to achieve extremely FAST speed, but just for EXPERIMENT and FUN.
 
 #### Algorithms
 
