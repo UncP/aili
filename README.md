@@ -15,12 +15,6 @@ A library that provides various concurrent algorithms for in-memory index, aims 
 * Adaptive Radix Tree (`art/`)
 * Height Optimized Trie (`hot/`) (developing)
 
-#### Version
-
-see `Version.md` for **brief** info  
-see `ChangeLog.md` for **detail** info
-
-
 
 #### Have a Try
 
